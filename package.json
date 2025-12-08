@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
+    "migrate": "node scripts/migrate.js",
     "test": "echo \"No tests configured yet\" && exit 0"
   },
   "keywords": [
