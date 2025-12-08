@@ -9,7 +9,9 @@
     "migrate": "node scripts/migrate.js",
     "test": "echo \"No tests configured yet\" && exit 0",
     "test:fingerprint": "node tests/engines/fingerprint.test.js",
-    "test:fingerprint:db": "node tests/engines/fingerprint-db.test.js"
+    "test:fingerprint:db": "node tests/engines/fingerprint-db.test.js",
+    "test:crypto": "node tests/engines/crypto.test.js",
+    "generate:keypair": "node scripts/generate-keypair.js"
   },
   "keywords": [
     "audio",
