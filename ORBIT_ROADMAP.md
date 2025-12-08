@@ -1079,18 +1079,22 @@ npm run test:fingerprint:db
 
 **Prerequisites**: Sessions 1-4 complete
 
-> 🚫 **Implementation Guardrails - Keep It Standard**:
-> - ❌ **NO custom crypto algorithms** - Use TweetNaCl/libsodium standard implementations only
-> - ❌ **NO key derivation schemes** - Direct Ed25519 keypairs, no PBKDF2/Argon2 yet
-> - ❌ **NO key storage** - Just generation/signing/verification (storage is app-level concern)
-> - ❌ **NO encryption** - Signing only (Ed25519), no NaCl box/secretbox needed
-> - ❌ **NO custom CBOR extensions** - Use standard RFC 8949 types only
-> - ✅ **DO**: Use TweetNaCl exactly as documented
-> - ✅ **DO**: Use `cbor` npm package with default settings
-> - ✅ **DO**: Keep functions pure (input → output, no state)
-> - ✅ **DO**: Validate signature lengths (64 bytes) and key lengths (32/64 bytes)
+> 🎯 **Implementation Guardrails - Stick to Spec, Avoid Over-Engineering**:
 > 
-> **Why**: Crypto is hard. Use battle-tested libraries. Session 22+ adds more sophisticated crypto if needed.
+> **Build EXACTLY what ORBIT_SPECIFICATION.md §7.3 calls for:**
+> - ✅ Ed25519 signing (TweetNaCl)
+> - ✅ CBOR encoding/decoding (cbor npm package)
+> - ✅ SHA-256 hashing (Node crypto)
+> - ✅ API key generation
+> - ✅ Entry hash creation for ledger chain
+> 
+> **Don't add features NOT in the spec** (avoid work that would be redundant):
+> - ❌ Key derivation schemes (PBKDF2/Argon2) - not in spec, not needed yet
+> - ❌ Key storage systems - app-level concern, not engine concern
+> - ❌ Encryption (NaCl box/secretbox) - spec only requires signing, not encryption
+> - ❌ Custom CBOR extensions - standard RFC 8949 handles our needs
+> 
+> **Philosophy**: Build the spec as written. If we discover we need more, we'll add it in v2 enhancements or revise the spec. Don't prematurely optimize or add features "just in case."
 
 **Tasks**:
 - [ ] Create `src/engines/crypto.js`
