@@ -14,6 +14,7 @@
     "test:watermark:embed": "node tests/engines/watermark-embed.test.js",
     "test:watermark:extract": "node tests/engines/watermark-extract.test.js",
     "test:watermark": "npm run test:watermark:embed && npm run test:watermark:extract",
+    "test:audio": "node tests/utils/audio.test.js",
     "generate:keypair": "node scripts/generate-keypair.js"
   },
   "keywords": [
@@ -35,7 +36,9 @@
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "pg": "^8.16.3",
-    "tweetnacl": "^1.0.3"
+    "tweetnacl": "^1.0.3",
+    "wav-decoder": "^1.3.0",
+    "wav-encoder": "^1.3.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.11"
