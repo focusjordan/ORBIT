@@ -505,17 +505,21 @@ fpcalc -version
 - Proven robustness against compression/transcoding
 
 **How It Works**:
-1. Generate pseudo-random noise sequence from secret key
+1. Generate pseudo-random noise sequence from secret key (unique per offset)
 2. Multiply noise by payload bit value (+1 or -1)
 3. Add low-amplitude noise to audio samples
-4. To extract: Correlate audio with same noise sequence
-5. Correlation sign reveals original bit value
+4. Repeat embedding at intervals (every 30 seconds) for redundancy
+5. To extract: Correlate audio with same noise sequence at multiple offsets
+6. Correlation sign reveals original bit value
+7. Offset search enables detection in clips/snippets
 
 **Parameters**:
 - **Chip Rate**: 1000 samples per bit (tunable)
-- **Embed Strength**: 0.005 amplitude (tunable for imperceptibility)
+- **Embed Strength**: 0.005 amplitude (loudness-aware, adaptive)
+- **Repeat Interval**: 30 seconds (embeds watermark multiple times)
+- **Search Interval**: 5 seconds (offset search granularity)
 - **At 44.1kHz**: ~44 bits/second = ~5 bytes/second
-- **3-minute track**: ~900 bytes capacity
+- **3-minute track**: ~900 bytes capacity, 6 embedded instances
 
 **Watermark Payload Structure** (64-128 bytes):
 

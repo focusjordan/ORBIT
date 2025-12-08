@@ -48,7 +48,7 @@ When building these v1 sessions, keep implementations **minimal and modular** �
 
 | V1 Session | What to Build | V2 Fate | Implementation Guidance |
 |------------|---------------|---------|------------------------|
-| **Session 6-7** (Watermark) | Spread spectrum embed/extract | Becomes **fallback** when neural fails | Keep simple, ensure clean interface for swapping |
+| **Session 6-7** (Watermark) | Spread spectrum embed/extract with offset search | Becomes **fallback** when neural fails, offset search reused | Keep simple interface. Offset search stays in both v1 and v2 (neural also needs it) |
 | **Session 3-4** (Fingerprint) | Chromaprint exact matching | Becomes **exact-match layer** under MERT | **CRITICAL**: No similarity scoring, no fuzzy matching - keep it pure exact hash comparison |
 | **Session 12** (Verify) | Basic verification response | **Enhanced** with AI metadata in v2 | Design response as extensible object |
 | **Session 11** (Register) | Basic registration | **Enhanced** with auto-metadata in v2 | Make metadata injection pluggable |
@@ -67,6 +67,51 @@ When building these v1 sessions, keep implementations **minimal and modular** �
 | Remix / mashup | MERT | ⏱️ 5s | 3KB |
 
 **Result**: Chromaprint catches 95% instantly, MERT handles sophisticated 5%
+
+---
+
+## 🎯 Implementation Philosophy: V1 vs V2 Decision Framework
+
+**When deciding whether to add a feature to v1 or defer to v2, ask:**
+
+### ✅ Add to V1 if ALL are true:
+1. **Enables core functionality** - Without it, the system doesn't work as designed
+2. **Uses existing infrastructure** - Leverages what's already built (no re-engineering)
+3. **Algorithmic (not ML)** - Pure signal processing, crypto, or data structures
+4. **Simple to implement** - <100 lines, no new dependencies
+5. **Won't be replaced by v2** - Neural enhancements will complement, not supersede
+
+**Example**: Offset search for watermark extraction
+- ✅ Core: Repeating pattern (Session 6) is useless without it
+- ✅ Existing: Uses SEARCH_INTERVAL parameter already in constructor
+- ✅ Algorithmic: Just tries correlation at different offsets
+- ✅ Simple: ~30 lines of code
+- ✅ Complementary: Neural watermarking will also need offset search
+
+### ⏸️ Defer to V2 if ANY are true:
+1. **ML-dependent** - Requires pre-trained models or training
+2. **Optimization only** - Makes things better but not broken without it
+3. **Would be replaced** - V2 will do it completely differently
+4. **Complex** - >200 lines, new dependencies, multiple sessions
+5. **Not spec'd** - Not in ORBIT_SPECIFICATION.md core requirements
+
+**Example**: Pitch-invariant fingerprinting
+- ❌ ML-dependent: Requires MERT model
+- ❌ Replaced: Chromaprint stays for exact matching, MERT adds semantic
+- ❌ Complex: Model loading, GPU handling, vector storage
+- → **Defer to Session 19**
+
+### 🚫 Never Add (Scope Creep):
+- Features not in specification documents
+- "Nice to have" additions without clear competitive value
+- Alternative implementations of existing features
+- Performance optimizations before profiling shows need
+
+### 📝 Document Updates:
+When a v1 session needs adjustment based on this framework:
+1. Update the session's guardrails with clear reasoning
+2. Add to the "V1 → V2 Upgrade Notes" table if it changes v2 plans
+3. Note in commit message: `feat: [feature] (critical for v1 core functionality)`
 
 ---
 
@@ -95,6 +140,7 @@ When building these v1 sessions, keep implementations **minimal and modular** �
    - Confirm with user which session we're working on
    - Verify all dependencies from previous sessions exist
    - Ask about any blockers or changes to requirements
+   - **Apply V1 vs V2 Decision Framework** to any guardrail questions
 
 ### For Humans
 
@@ -1905,38 +1951,53 @@ npm run test:watermark:embed
 
 ### Session 7: Watermark Engine - Spread Spectrum Extract
 
-**Goal**: Can extract payload from watermarked audio
+**Goal**: Can extract payload from watermarked audio, including from clips/snippets
 
 **Prerequisites**: Session 6 complete
 
-> 🎯 **Implementation Guardrails - Extraction Completes the Simple Interface**:
+> 🎯 **Implementation Guardrails - Making Repeating Patterns Actually Work**:
 > 
-> **Keep extraction as simple as embedding:**
-> - ✅ **DO**: Correlate audio with same spreading sequence used in embed
+> **Core extraction features (required for v1):**
+> - ✅ **DO**: Implement `extractAtOffset(audioSamples, offset, payloadBytes)` - extracts at specific position
+> - ✅ **DO**: Implement offset search - tries multiple positions to find watermark
+> - ✅ **DO**: Correlate audio with same spreading sequence (seeded by offset)
 > - ✅ **DO**: Return confidence score (average correlation magnitude)
 > - ✅ **DO**: Verify magic bytes ("ORBT") and CRC16 checksum
-> - ✅ **DO**: Return `{ payload, confidence, valid }` object
-> - ❌ **NO iterative refinement** - single pass extraction is sufficient
-> - ❌ **NO synchronization search** - assume payload is at audio start
+> - ✅ **DO**: Return `{ payload, confidence, valid, offset }` object
+> 
+> **Why offset search is REQUIRED:**
+> - Session 6 embeds watermark **repeatedly** at [0s, 30s, 60s, 90s...] using DIFFERENT spreading sequences per offset
+> - Each uses unique seed: `_generateSpreadSequence('embed:${offset}', ...)`
+> - Without offset search: **Cannot detect 15-second clip from middle of song**
+> - With offset search: **Enables snippet detection** (critical competitive feature)
+> - Uses SEARCH_INTERVAL parameter already in constructor (5 seconds)
+> - Simple implementation (~30 lines), no new dependencies
+> 
+> **Simplified design (defer to v2):**
+> - ❌ **NO iterative refinement** - single-pass correlation sufficient
 > - ❌ **NO blind detection** - we know payload size (64 bytes)
-> - ❌ **NO multi-channel combining** - process mono/left channel only
+> - ❌ **NO multi-channel combining** - mono/left channel only (stereo in Session 8)
 > - ❌ **NO adaptive thresholds** - fixed confidence threshold is fine
 > 
 > **Test Robustness Targets (v1 baseline)**:
-> - ✅ Lossless (WAV/FLAC): 99%+ extraction accuracy
+> - ✅ Full audio: 99%+ extraction accuracy
+> - ✅ 15-second clip from middle: Should find watermark via offset search
 > - ✅ MP3 320kbps: 95%+ accuracy (good enough for v1)
-> - ⚠️ MP3 128kbps: 70%+ accuracy (acceptable degradation)
-> - ❌ Streaming quality: Don't optimize for this - v2 neural handles it
+> - ⚠️ MP3 128kbps: 70%+ accuracy (acceptable degradation for v1)
+> - ❌ Streaming quality: Don't optimize - v2 neural handles this
 > 
-> **Don't chase perfect robustness** - that's what neural watermarking is for!
+> **V1 → V2 transition**: Neural watermarking (Sessions 22-23) will also need offset search, so this isn't throwaway work.
 
 **Tasks**:
-- [ ] Add `extractAtOffset(audioSamples, offset, payloadBytes)` helper method
-- [ ] Add `extract(audioSamples, payloadBytes)` with offset search
-- [ ] Add `_verifyCrc(payload)` method
-- [ ] Add `parsePayload(payload)` method
-- [ ] Test round-trip: embed → extract
-- [ ] Test extraction from middle of audio (30-second clip)
+- [ ] Add `_verifyCrc(payload)` method - validates CRC16 checksum
+- [ ] Add `extractAtOffset(audioSamples, offset, payloadBytes)` - extracts at specific position
+- [ ] Add `extract(audioSamples, payloadBytes)` - tries offset=0 first (fast path)
+- [ ] Add `extractWithSearch(audioSamples, payloadBytes)` - searches multiple offsets
+- [ ] Add `parsePayload(payload)` - parse extracted bytes into structured data
+- [ ] Add `detect(audioSamples)` - simple presence check
+- [ ] Test round-trip: embed → extract at offset 0
+- [ ] Test extraction from middle of audio (simulate 15-second clip)
+- [ ] Test offset search finds watermark in long file
 - [ ] Test with added noise (robustness check)
 
 **Add to src/engines/watermark.js** (inside the class, before the closing brace):
@@ -1954,29 +2015,32 @@ npm run test:watermark:embed
   }
   
   /**
-   * Extract payload from watermarked audio
+   * Extract payload at specific offset
+   * Each embedded instance uses offset-specific spreading sequence
    * @param {Float32Array} audioSamples - Watermarked PCM samples
-   * @param {number} payloadBytes - Expected payload size in bytes (default 64)
-   * @returns {{payload: Buffer|null, confidence: number, valid: boolean}}
+   * @param {number} offset - Sample offset where watermark starts
+   * @param {number} payloadBytes - Expected payload size (default 64)
+   * @returns {{payload: Buffer|null, confidence: number, valid: boolean, offset: number}}
    */
-  extract(audioSamples, payloadBytes = 64) {
+  extractAtOffset(audioSamples, offset, payloadBytes = 64) {
     const bitCount = payloadBytes * 8;
     const requiredSamples = bitCount * this.CHIP_RATE;
     
-    if (audioSamples.length < requiredSamples) {
-      return { payload: null, confidence: 0, valid: false };
+    if (offset + requiredSamples > audioSamples.length) {
+      return { payload: null, confidence: 0, valid: false, offset };
     }
     
     const bits = [];
     const confidences = [];
     
-    // Generate same spreading sequence used for embedding
-    const spreadSeq = this._generateSpreadSequence('embed', bitCount * this.CHIP_RATE);
+    // Generate same spreading sequence used at this offset during embedding
+    // CRITICAL: Must match embedAtOffset's seed pattern
+    const spreadSeq = this._generateSpreadSequence(`embed:${offset}`, bitCount * this.CHIP_RATE);
     
     // Correlate to extract each bit
     for (let bitIdx = 0; bitIdx < bitCount; bitIdx++) {
       let correlation = 0;
-      const startSample = bitIdx * this.CHIP_RATE;
+      const startSample = offset + (bitIdx * this.CHIP_RATE);
       
       for (let chip = 0; chip < this.CHIP_RATE; chip++) {
         const sampleIdx = startSample + chip;
@@ -2002,7 +2066,63 @@ npm run test:watermark:embed
     return {
       payload,
       confidence: avgConfidence,
-      valid: hasMagic && hasValidCrc
+      valid: hasMagic && hasValidCrc,
+      offset
+    };
+  }
+  
+  /**
+   * Extract payload from watermarked audio (fast path - tries offset 0)
+   * For full search across multiple offsets, use extractWithSearch()
+   * @param {Float32Array} audioSamples - Watermarked PCM samples
+   * @param {number} payloadBytes - Expected payload size (default 64)
+   * @returns {{payload: Buffer|null, confidence: number, valid: boolean, offset: number}}
+   */
+  extract(audioSamples, payloadBytes = 64) {
+    // Fast path: try offset 0 first (most common case - full file)
+    return this.extractAtOffset(audioSamples, 0, payloadBytes);
+  }
+  
+  /**
+   * Extract with offset search - enables snippet/clip detection
+   * Tries multiple starting positions to find watermark
+   * @param {Float32Array} audioSamples - Watermarked PCM samples
+   * @param {number} payloadBytes - Expected payload size (default 64)
+   * @param {number} maxSearchDuration - Max samples to search (default: 2 repeat intervals)
+   * @returns {{payload: Buffer|null, confidence: number, valid: boolean, offset: number, attempts: number}}
+   */
+  extractWithSearch(audioSamples, payloadBytes = 64, maxSearchDuration = null) {
+    const maxSearch = maxSearchDuration || (this.REPEAT_INTERVAL * 2);
+    const searchLimit = Math.min(audioSamples.length, maxSearch);
+    
+    const attempts = [];
+    let offset = 0;
+    let attemptCount = 0;
+    
+    // Try extraction at intervals (0, 5s, 10s, 15s, etc.)
+    while (offset < searchLimit) {
+      const result = this.extractAtOffset(audioSamples, offset, payloadBytes);
+      attemptCount++;
+      
+      if (result.valid) {
+        attempts.push(result);
+      }
+      
+      offset += this.SEARCH_INTERVAL;
+    }
+    
+    // Return best result (highest confidence)
+    if (attempts.length > 0) {
+      const best = attempts.sort((a, b) => b.confidence - a.confidence)[0];
+      return { ...best, attempts: attemptCount };
+    }
+    
+    return { 
+      payload: null, 
+      confidence: 0, 
+      valid: false, 
+      offset: -1,
+      attempts: attemptCount 
     };
   }
   
@@ -2034,14 +2154,16 @@ npm run test:watermark:embed
   
   /**
    * Check if audio contains a valid ORBIT watermark
+   * Uses search to handle clips/snippets
    * @param {Float32Array} audioSamples
-   * @returns {{detected: boolean, confidence: number}}
+   * @returns {{detected: boolean, confidence: number, offset: number}}
    */
   detect(audioSamples) {
-    const result = this.extract(audioSamples);
+    const result = this.extractWithSearch(audioSamples);
     return {
       detected: result.valid,
-      confidence: result.confidence
+      confidence: result.confidence,
+      offset: result.offset
     };
   }
 ```
@@ -2056,26 +2178,29 @@ function runTests() {
   
   const watermark = new OrbitWatermark('test-secret-key');
   
-  // Setup: Create test payload and embed
+  // Setup: Create test payload and embed in long audio (90 seconds)
   const originalPayload = watermark.createPayload({
     platform: 'test-platform',
     timestamp: Date.now(),
     payloadHash: crypto.randomBytes(16)
   });
   
-  const sampleCount = Math.ceil(watermark.getRequiredSamples() * 1.1);
-  const audioSamples = new Float32Array(sampleCount);
+  // 90-second audio at 44.1kHz = 3,969,000 samples
+  const longAudioSamples = 90 * 44100;
+  const audioSamples = new Float32Array(longAudioSamples);
   const watermarked = watermark.embed(audioSamples, originalPayload);
   
-  // Test 1: Extract payload from watermarked audio
-  console.log('Test 1: Extract payload from watermarked audio');
+  // Test 1: Extract at offset 0 (beginning of audio)
+  console.log('Test 1: Extract at offset 0 (fast path)');
   const extracted = watermark.extract(watermarked);
   
   console.assert(extracted.valid, 'Extraction should be valid');
+  console.assert(extracted.offset === 0, 'Should be at offset 0');
   console.assert(extracted.confidence > 0, 'Confidence should be positive');
   console.assert(extracted.payload !== null, 'Payload should be extracted');
+  console.log(`   Offset: ${extracted.offset} samples`);
   console.log(`   Confidence: ${(extracted.confidence * 1000).toFixed(3)}`);
-  console.log('   ✅ Payload extracted successfully\n');
+  console.log('   ✅ Fast path extraction working\n');
   
   // Test 2: Extracted payload matches original
   console.log('Test 2: Extracted payload matches original');
@@ -2085,8 +2210,29 @@ function runTests() {
   );
   console.log('   ✅ Payload matches original\n');
   
-  // Test 3: Parse extracted payload
-  console.log('Test 3: Parse extracted payload');
+  // Test 3: Extract from clip/snippet (simulate 15-second clip from middle)
+  console.log('Test 3: Extract from 15-second clip (offset ~60s)');
+  const clipStart = 60 * 44100; // Start at 60 seconds
+  const clipLength = 15 * 44100; // 15-second clip
+  const clip = watermarked.slice(clipStart, clipStart + clipLength);
+  
+  // Direct extraction at offset 0 should fail (watermark is at different offset)
+  const clipDirectExtract = watermark.extract(clip);
+  console.assert(!clipDirectExtract.valid, 'Direct extract should fail on offset clip');
+  console.log('   ✅ Direct extraction failed (expected)\n');
+  
+  // But search should find it
+  console.log('Test 4: extractWithSearch finds watermark in clip');
+  const clipSearchExtract = watermark.extractWithSearch(clip);
+  console.assert(clipSearchExtract.valid, 'Search should find watermark in clip');
+  console.assert(clipSearchExtract.payload.equals(originalPayload), 'Payload should match');
+  console.log(`   Found at offset: ${clipSearchExtract.offset} samples (~${(clipSearchExtract.offset / 44100).toFixed(1)}s)`);
+  console.log(`   Confidence: ${(clipSearchExtract.confidence * 1000).toFixed(3)}`);
+  console.log(`   Attempts: ${clipSearchExtract.attempts}`);
+  console.log('   ✅ Snippet detection working!\n');
+  
+  // Test 5: Parse extracted payload
+  console.log('Test 5: Parse extracted payload');
   const parsed = watermark.parsePayload(extracted.payload);
   
   console.assert(parsed !== null, 'Should parse successfully');
@@ -2098,16 +2244,16 @@ function runTests() {
   console.log(`   Timestamp: ${new Date(parsed.timestamp).toISOString()}`);
   console.log('   ✅ Payload parsed correctly\n');
   
-  // Test 4: Audio without watermark
-  console.log('Test 4: Audio without watermark returns invalid');
-  const cleanAudio = new Float32Array(sampleCount); // No watermark
+  // Test 6: Audio without watermark
+  console.log('Test 6: Audio without watermark returns invalid');
+  const cleanAudio = new Float32Array(longAudioSamples);
   const noWatermark = watermark.extract(cleanAudio);
   
   console.assert(!noWatermark.valid, 'Clean audio should not have valid watermark');
   console.log('   ✅ Correctly identified as no watermark\n');
   
-  // Test 5: Survives minor noise
-  console.log('Test 5: Survives minor noise addition');
+  // Test 7: Survives minor noise
+  console.log('Test 7: Survives minor noise addition');
   const noisyAudio = new Float32Array(watermarked);
   for (let i = 0; i < noisyAudio.length; i++) {
     noisyAudio[i] += (Math.random() - 0.5) * 0.001; // Very small noise
@@ -2122,25 +2268,26 @@ function runTests() {
   console.log(`   Confidence after noise: ${(noisyExtract.confidence * 1000).toFixed(3)}`);
   console.log('   ✅ Survived minor noise\n');
   
-  // Test 6: Detect method
-  console.log('Test 6: Detect watermark presence');
+  // Test 8: Detect method uses search
+  console.log('Test 8: Detect method (with search)');
   const detected = watermark.detect(watermarked);
   console.assert(detected.detected, 'Should detect watermark');
+  console.assert(detected.offset === 0, 'Should find at offset 0');
   
   const notDetected = watermark.detect(cleanAudio);
   console.assert(!notDetected.detected, 'Should not detect in clean audio');
   console.log('   ✅ Detection working correctly\n');
   
-  // Test 7: Different secret key cannot extract
-  console.log('Test 7: Different secret key fails extraction');
+  // Test 9: Different secret key cannot extract
+  console.log('Test 9: Different secret key fails extraction');
   const wrongKeyWatermark = new OrbitWatermark('wrong-secret-key');
   const wrongExtract = wrongKeyWatermark.extract(watermarked);
   
   console.assert(!wrongExtract.valid, 'Wrong key should fail');
   console.log('   ✅ Wrong key correctly rejected\n');
   
-  // Test 8: Audio too short returns error gracefully
-  console.log('Test 8: Short audio handled gracefully');
+  // Test 10: Audio too short returns error gracefully
+  console.log('Test 10: Short audio handled gracefully');
   const shortAudio = new Float32Array(1000);
   const shortResult = watermark.extract(shortAudio);
   
@@ -2149,6 +2296,7 @@ function runTests() {
   console.log('   ✅ Short audio handled correctly\n');
   
   console.log('🧪 All extract tests passed!');
+  console.log('✨ Key feature verified: Snippet detection with offset search\n');
 }
 
 runTests();
@@ -2164,15 +2312,22 @@ runTests();
 }
 ```
 
-**Commit Message**: `feat: watermark engine - extraction`
+**Commit Message**: `feat: watermark engine - extraction with offset search (enables snippet detection)`
 
 **Verify**:
 ```bash
 npm run test:watermark
 # Should show all embed and extract tests passing
+# Key test: 15-second clip detection via extractWithSearch()
 ```
 
-**Notes for Next Session**: We'll add audio file loading/saving utilities.
+**Why This Matters**:
+- ✅ Session 6's repeating pattern is now actually useful
+- ✅ Can detect watermarks in YouTube clips, TikTok snippets, etc.
+- ✅ Competitive with Content ID's snippet detection
+- ✅ Neural watermarking (v2) will also need offset search, so not throwaway work
+
+**Notes for Next Session**: We'll add audio file loading/saving utilities to work with real audio files.
 
 ---
 

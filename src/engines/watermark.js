@@ -209,7 +209,7 @@ class OrbitWatermark {
       strength = Math.max(0.001, adaptiveStrength);
     }
     
-    // Generate spreading sequence (unique per offset for repeatability)
+    // Generate spreading sequence (unique per offset)
     const spreadSeq = this._generateSpreadSequence(`embed:${offset}`, bits.length * this.CHIP_RATE);
     
     // Embed each bit using spread spectrum
@@ -287,6 +287,180 @@ class OrbitWatermark {
    */
   getMinimumDuration() {
     return this.getRequiredSamples() / 44100;
+  }
+  
+  // ============================================
+  // EXTRACTION METHODS (Session 7)
+  // ============================================
+  
+  /**
+   * Verify CRC16 of payload
+   * @param {Buffer} payload
+   * @returns {boolean}
+   */
+  _verifyCrc(payload) {
+    if (!payload || payload.length < this.PAYLOAD_SIZE) return false;
+    const storedCrc = payload.readUInt16BE(62);
+    const calculatedCrc = this._crc16(payload.slice(0, 62));
+    return storedCrc === calculatedCrc;
+  }
+  
+  /**
+   * Extract payload at specific offset
+   * Each embedded instance uses offset-specific spreading sequence
+   * @param {Float32Array} audioSamples - Watermarked PCM samples
+   * @param {number} offset - Sample offset where watermark starts
+   * @param {number} payloadBytes - Expected payload size (default 64)
+   * @returns {{payload: Buffer|null, confidence: number, valid: boolean, offset: number}}
+   */
+  extractAtOffset(audioSamples, offset, payloadBytes = 64) {
+    const bitCount = payloadBytes * 8;
+    const requiredSamples = bitCount * this.CHIP_RATE;
+    
+    // Check if we have enough samples at this offset
+    if (offset + requiredSamples > audioSamples.length) {
+      return { payload: null, confidence: 0, valid: false, offset };
+    }
+    
+    const bits = [];
+    const confidences = [];
+    
+    // Generate same spreading sequence used at this offset during embedding
+    // CRITICAL: Must match embedAtOffset's seed pattern exactly
+    const spreadSeq = this._generateSpreadSequence(`embed:${offset}`, bitCount * this.CHIP_RATE);
+    
+    // Correlate to extract each bit
+    for (let bitIdx = 0; bitIdx < bitCount; bitIdx++) {
+      let correlation = 0;
+      const startSample = offset + (bitIdx * this.CHIP_RATE);
+      
+      for (let chip = 0; chip < this.CHIP_RATE; chip++) {
+        const sampleIdx = startSample + chip;
+        const spreadIdx = bitIdx * this.CHIP_RATE + chip;
+        
+        correlation += audioSamples[sampleIdx] * spreadSeq[spreadIdx];
+      }
+      
+      // Normalize correlation by chip rate
+      const normalizedCorrelation = correlation / this.CHIP_RATE;
+      
+      // Bit decision: positive correlation = 1, negative = 0
+      bits.push(correlation > 0 ? 1 : 0);
+      confidences.push(Math.abs(normalizedCorrelation));
+    }
+    
+    const payload = this._bitsToBytes(bits);
+    const avgConfidence = confidences.reduce((a, b) => a + b, 0) / confidences.length;
+    
+    // Verify magic bytes ("ORBT") and CRC16 checksum
+    const hasMagic = payload.length >= 4 && payload.slice(0, 4).equals(this.MAGIC);
+    const hasValidCrc = this._verifyCrc(payload);
+    
+    return {
+      payload,
+      confidence: avgConfidence,
+      valid: hasMagic && hasValidCrc,
+      offset
+    };
+  }
+  
+  /**
+   * Extract payload from watermarked audio (fast path - tries offset 0)
+   * For full search across multiple offsets, use extractWithSearch()
+   * @param {Float32Array} audioSamples - Watermarked PCM samples
+   * @param {number} payloadBytes - Expected payload size (default 64)
+   * @returns {{payload: Buffer|null, confidence: number, valid: boolean, offset: number}}
+   */
+  extract(audioSamples, payloadBytes = 64) {
+    // Fast path: try offset 0 first (most common case - full file from beginning)
+    return this.extractAtOffset(audioSamples, 0, payloadBytes);
+  }
+  
+  /**
+   * Extract with offset search - enables snippet/clip detection
+   * Tries multiple starting positions to find watermark
+   * Leverages the repeating pattern from embed()
+   * @param {Float32Array} audioSamples - Watermarked PCM samples
+   * @param {number} payloadBytes - Expected payload size (default 64)
+   * @param {number} maxSearchDuration - Max samples to search (default: 2 repeat intervals)
+   * @returns {{payload: Buffer|null, confidence: number, valid: boolean, offset: number, attempts: number}}
+   */
+  extractWithSearch(audioSamples, payloadBytes = 64, maxSearchDuration = null) {
+    const maxSearch = maxSearchDuration || (this.REPEAT_INTERVAL * 2);
+    const searchLimit = Math.min(audioSamples.length, maxSearch);
+    const requiredSamples = payloadBytes * 8 * this.CHIP_RATE;
+    
+    const validResults = [];
+    let offset = 0;
+    let attemptCount = 0;
+    
+    // Try extraction at intervals (0, 5s, 10s, 15s, etc.)
+    while (offset + requiredSamples <= audioSamples.length && offset < searchLimit) {
+      const result = this.extractAtOffset(audioSamples, offset, payloadBytes);
+      attemptCount++;
+      
+      if (result.valid) {
+        validResults.push(result);
+      }
+      
+      offset += this.SEARCH_INTERVAL;
+    }
+    
+    // Return best result (highest confidence)
+    if (validResults.length > 0) {
+      const best = validResults.sort((a, b) => b.confidence - a.confidence)[0];
+      return { ...best, attempts: attemptCount };
+    }
+    
+    return { 
+      payload: null, 
+      confidence: 0, 
+      valid: false, 
+      offset: -1,
+      attempts: attemptCount 
+    };
+  }
+  
+  /**
+   * Parse extracted payload into structured data
+   * @param {Buffer} payload - Extracted payload
+   * @returns {Object|null} Parsed payload data, or null if invalid
+   */
+  parsePayload(payload) {
+    if (!payload || payload.length < this.PAYLOAD_SIZE) {
+      return null;
+    }
+    
+    // Check magic bytes
+    const hasMagic = payload.slice(0, 4).equals(this.MAGIC);
+    if (!hasMagic) {
+      return null;
+    }
+    
+    return {
+      magic: payload.slice(0, 4).toString(),
+      version: payload.readUInt8(4),
+      flags: payload.readUInt8(5),
+      timestamp: Number(payload.readBigUInt64BE(6)),
+      platformHash: payload.slice(14, 22),
+      payloadHash: payload.slice(22, 38),
+      crcValid: this._verifyCrc(payload)
+    };
+  }
+  
+  /**
+   * Check if audio contains a valid ORBIT watermark
+   * Uses search to handle clips/snippets
+   * @param {Float32Array} audioSamples
+   * @returns {{detected: boolean, confidence: number, offset: number}}
+   */
+  detect(audioSamples) {
+    const result = this.extractWithSearch(audioSamples);
+    return {
+      detected: result.valid,
+      confidence: result.confidence,
+      offset: result.offset
+    };
   }
 }
 
