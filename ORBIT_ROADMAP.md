@@ -26,6 +26,35 @@
 
 ---
 
+## 🔗 Enhancement → Session Cross-Reference
+
+This table maps `ORBIT_ENHANCEMENTS.md` sections to their implementing sessions.
+
+| Enhancement Section | What It Adds | Implementing Session(s) | Supersedes |
+|---------------------|--------------|------------------------|------------|
+| §1 Neural Watermarking - SilentCipher | 99%+ extraction accuracy on compressed audio | Session 22 | Session 6-7 (spread spectrum becomes fallback) |
+| §1 Neural Watermarking - WMCodec | Codec-aware fallback watermark | Session 23 | — (additive) |
+| §2 Neural Fingerprinting (MERT) | Pitch/speed invariant matching, similarity search | Session 19 | Session 3-4 (Chromaprint becomes exact-match only) |
+| §3 Zero-Shot CLAP Classification | Auto-extract genre, mood, instruments | Session 20 | — (new capability) |
+| §3 Auto-Metadata Pipeline | BPM, key, combined AI metadata | Session 21 | — (new capability) |
+| §4 Content Relationship Detection | Detect covers, remixes, mashups | Session 24 | — (new capability) |
+| §5 Enhanced V2 Verify Response | Rich verification with AI metadata | Session 25 | Session 12 (v1 verify enhanced) |
+| §7 `POST /orbit/v2/similar` | Find similar-sounding tracks | Session 26 | — (new endpoint) |
+| §7 `POST /orbit/v2/analyze` | Standalone audio analysis | Session 26 | — (new endpoint) |
+
+### ⚠️ V1 → V2 Upgrade Notes
+
+When building these v1 sessions, keep implementations **minimal and modular** — they'll be enhanced or become fallbacks in v2:
+
+| V1 Session | What to Build | V2 Fate | Implementation Guidance |
+|------------|---------------|---------|------------------------|
+| **Session 6-7** (Watermark) | Spread spectrum embed/extract | Becomes **fallback** when neural fails | Keep simple, ensure clean interface for swapping |
+| **Session 3-4** (Fingerprint) | Chromaprint exact matching | Becomes **exact-match layer** under MERT | Don't over-optimize; MERT adds semantic layer |
+| **Session 12** (Verify) | Basic verification response | **Enhanced** with AI metadata in v2 | Design response as extensible object |
+| **Session 11** (Register) | Basic registration | **Enhanced** with auto-metadata in v2 | Make metadata injection pluggable |
+
+---
+
 ## 🔄 Session Start Protocol
 
 **Run this checklist at the beginning of every session:**
@@ -512,6 +541,8 @@ npm run migrate
 **Prerequisites**:
 - Session 2 complete
 - Chromaprint installed: `brew install chromaprint` (macOS) or `apt install libchromaprint-tools` (Linux)
+
+> ⚠️ **V2 Note**: Chromaprint provides **exact-match detection** only. In Session 19, MERT adds semantic fingerprinting that survives pitch/speed changes and enables similarity search. Chromaprint remains valuable for fast exact-duplicate detection.
 
 **Verify Chromaprint Installed**:
 ```bash
@@ -1291,6 +1322,8 @@ npm run generate:keypair
 **Goal**: Can embed a payload into audio samples
 
 **Prerequisites**: Session 5 complete
+
+> ⚠️ **V2 Note**: This spread spectrum implementation becomes a **fallback** in Sessions 22-23 when neural watermarking (SilentCipher/WMCodec) is added. Keep the interface clean and simple — don't over-optimize.
 
 **Tasks**:
 - [ ] Create `src/engines/watermark.js`
@@ -2297,6 +2330,8 @@ curl localhost:4000/orbit/v1/info
 
 **Prerequisites**: Session 10 complete
 
+> ⚠️ **V2 Note**: In Session 21, registration is enhanced with auto-metadata extraction (genre, mood, BPM, key via CLAP/MERT). Design the metadata handling to be **extensible** — use a modular approach so AI metadata can be injected into the pipeline later.
+
 **Tasks**:
 - [ ] Create `src/api/handlers/register.js`
 - [ ] Accept audio (base64) + metadata in request body
@@ -2325,6 +2360,8 @@ curl localhost:4000/orbit/v1/info
 **Goal**: `POST /orbit/v1/verify` fully working
 
 **Prerequisites**: Session 11 complete
+
+> ⚠️ **V2 Note**: Session 25 enhances verification with AI-extracted metadata, content relationship detection, and confidence scores. Design the response object to be **extensible** — use a structure that can accommodate additional sections without breaking v1 clients.
 
 **Tasks**:
 - [ ] Create `src/api/handlers/verify.js`
@@ -2718,29 +2755,35 @@ npm install essentia.js  # Or use Python subprocess
 
 ---
 
-### Session 26: Similarity Search Endpoint
+### Session 26: V2 Search & Analysis Endpoints
 
-**Goal**: `POST /orbit/v2/similar` for finding similar tracks
+**Goal**: `POST /orbit/v2/similar` and `POST /orbit/v2/analyze` endpoints
 
 **Prerequisites**: Session 25 complete
 
 **Tasks**:
 - [ ] Create `src/api/v2/routes.js` for v2 endpoints
-- [ ] Implement `POST /orbit/v2/similar` handler
-- [ ] Accept audio, threshold, limit parameters
-- [ ] Generate MERT embedding for query audio
-- [ ] Query pgvector for similar embeddings
-- [ ] Return similar works with relationship types
-- [ ] Include query audio's extracted metadata
-- [ ] Add to API documentation
+- [ ] **Similarity Search (`POST /orbit/v2/similar`)**:
+  - [ ] Accept audio, threshold, limit, include_derivatives parameters
+  - [ ] Generate MERT embedding for query audio
+  - [ ] Query pgvector for similar embeddings
+  - [ ] Return similar works with relationship types and similarity scores
+  - [ ] Include query audio's extracted metadata
+- [ ] **Standalone Analysis (`POST /orbit/v2/analyze`)**:
+  - [ ] Accept audio and optional `include` array (genre, mood, bpm, key, instruments, vocals)
+  - [ ] Run CLAP + MERT analysis without registration
+  - [ ] Return analysis results with confidence scores
+  - [ ] Return embeddings and fingerprint hash
+  - [ ] Useful for pre-registration analysis or third-party tools
+- [ ] Add both endpoints to API documentation
 
-**Key Implementation**: See `ORBIT_ENHANCEMENTS.md` Section 7 (similarity endpoint)
+**Key Implementation**: See `ORBIT_ENHANCEMENTS.md` Section 7 (both endpoints)
 
-**Commit Message**: `feat: similarity search endpoint`
+**Commit Message**: `feat: v2 similarity search and analysis endpoints`
 
 **Verify**:
-- Upload track → get list of similar registered tracks
-- Results include similarity scores and relationship types
+- `/similar`: Upload track → get list of similar registered tracks with scores
+- `/analyze`: Upload track → get full AI metadata without registration
 
 ---
 
