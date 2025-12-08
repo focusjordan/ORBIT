@@ -5,7 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync, execSync } = require('child_process');
 const os = require('os');
 const wavDecoder = require('wav-decoder');
 const wavEncoder = require('wav-encoder');
@@ -45,15 +45,17 @@ class AudioUtils {
     let convertedFile = null;
     
     try {
-      // Convert to WAV if needed
+      // Convert to WAV if needed (using execFileSync to avoid command injection)
       if (shouldConvert) {
         convertedFile = path.join(os.tmpdir(), `orbit-${Date.now()}-converted.wav`);
         
         try {
-          execSync(
-            `ffmpeg -i "${audioPath}" -ar ${targetSampleRate} -ac 1 -y "${convertedFile}"`,
-            { stdio: 'pipe', timeout: 60000 }
-          );
+          execFileSync('ffmpeg', [
+            '-i', audioPath,
+            '-ar', String(targetSampleRate),
+            '-ac', '1',
+            '-y', convertedFile
+          ], { stdio: 'pipe', timeout: 60000 });
           wavPath = convertedFile;
         } catch (error) {
           throw new Error(
@@ -66,17 +68,21 @@ class AudioUtils {
       const wavBuffer = fs.readFileSync(wavPath);
       const audioData = await wavDecoder.decode(wavBuffer);
       
-      // Convert to mono if stereo
+      // Convert to mono (handles any number of channels)
       let samples;
-      if (audioData.channelData.length === 1) {
+      const channelCount = audioData.channelData.length;
+      if (channelCount === 1) {
         samples = audioData.channelData[0];
       } else {
-        // Average channels to mono
-        const left = audioData.channelData[0];
-        const right = audioData.channelData[1];
-        samples = new Float32Array(left.length);
-        for (let i = 0; i < left.length; i++) {
-          samples[i] = (left[i] + right[i]) / 2;
+        // Average all channels to mono
+        const sampleLength = audioData.channelData[0].length;
+        samples = new Float32Array(sampleLength);
+        for (let i = 0; i < sampleLength; i++) {
+          let sum = 0;
+          for (let ch = 0; ch < channelCount; ch++) {
+            sum += audioData.channelData[ch][i];
+          }
+          samples[i] = sum / channelCount;
         }
       }
       
@@ -128,10 +134,12 @@ class AudioUtils {
     const { sampleRate = 44100, channels = 1 } = options;
     
     try {
-      execSync(
-        `ffmpeg -i "${inputPath}" -ar ${sampleRate} -ac ${channels} -y "${outputPath}"`,
-        { stdio: 'pipe', timeout: 60000 }
-      );
+      execFileSync('ffmpeg', [
+        '-i', inputPath,
+        '-ar', String(sampleRate),
+        '-ac', String(channels),
+        '-y', outputPath
+      ], { stdio: 'pipe', timeout: 60000 });
     } catch (error) {
       throw new Error('FFmpeg conversion failed: ' + error.message);
     }
@@ -144,10 +152,12 @@ class AudioUtils {
    */
   static getAudioInfo(filePath) {
     try {
-      const result = execSync(
-        `ffprobe -v quiet -print_format json -show_format "${filePath}"`,
-        { encoding: 'utf8', timeout: 30000 }
-      );
+      const result = execFileSync('ffprobe', [
+        '-v', 'quiet',
+        '-print_format', 'json',
+        '-show_format',
+        filePath
+      ], { encoding: 'utf8', timeout: 30000 });
       
       const info = JSON.parse(result);
       return {
