@@ -102,6 +102,26 @@ class OrbitFingerprint {
     }
     return hash1.equals(hash2);
   }
+  
+  /**
+   * Find matching registrations in database (EXACT match only)
+   * @param {Buffer} hash - Fingerprint hash to search for
+   * @param {Object} queries - Database queries module
+   * @returns {Promise<Array>} Matching registrations
+   */
+  static async findMatches(hash, queries) {
+    return await queries.findByFingerprint(hash);
+  }
+  
+  /**
+   * Check if fingerprint already exists in database
+   * @param {Buffer} hash - Fingerprint hash
+   * @param {Object} queries - Database queries module
+   * @returns {Promise<boolean>}
+   */
+  static async exists(hash, queries) {
+    return await queries.fingerprintExists(hash);
+  }
 }
 
 module.exports = OrbitFingerprint;

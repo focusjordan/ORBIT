@@ -8,7 +8,8 @@
     "dev": "nodemon src/index.js",
     "migrate": "node scripts/migrate.js",
     "test": "echo \"No tests configured yet\" && exit 0",
-    "test:fingerprint": "node tests/engines/fingerprint.test.js"
+    "test:fingerprint": "node tests/engines/fingerprint.test.js",
+    "test:fingerprint:db": "node tests/engines/fingerprint-db.test.js"
   },
   "keywords": [
     "audio",
