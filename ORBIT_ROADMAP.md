@@ -19,9 +19,10 @@
 | Phase 4 | 18-24 | Neural Enhancements (v2) | ⬜ Not Started |
 | Phase 5 | 25-28 | Polish & SDK | ⬜ Not Started |
 
-**Current Session**: Session 1 ✅ Complete  
+**Current Session**: Ready for Session 2  
 **Last Commit**: `chore: initial project setup`  
-**Last Updated**: December 8, 2025
+**Last Updated**: December 8, 2025  
+**Prerequisites Met**: ✅ Docker Desktop installed and running
 
 ---
 
@@ -2867,6 +2868,33 @@ apt-get install libchromaprint-tools ffmpeg postgresql-16
 ## 📝 Session Notes
 
 _Use this section to track notes, blockers, or decisions made during implementation:_
+
+### Session 1 Notes (December 8, 2025)
+
+**Completed:**
+- Initialized Node.js project with package.json
+- Created full folder structure (src/, tests/, scripts/, sdk/)
+- Created .gitignore, .env.example, README.md
+- Created Express server with /health and /orbit/v1/info endpoints
+- Installed dependencies: express, pg, dotenv, cbor, tweetnacl, nodemon
+- Set up GitHub repository and pushed initial commit
+- Installed GitHub CLI (`gh`) for authentication
+- Installed Docker Desktop for Session 2
+
+**Issues Encountered:**
+- npm cache had root-owned files (fixed with full permissions)
+- Git created `master` branch while GitHub had `main` (resolved by force-pushing to main and deleting master)
+- Docker install needed sudo password in terminal
+
+**Decisions Made:**
+- Using Docker for PostgreSQL (scalable, isolated, reproducible)
+- Using `main` branch (modern convention)
+
+**Carry Forward:**
+- Docker Desktop ready for Session 2
+- Next: Create docker-compose.yml with PostgreSQL + pgvector
+
+---
 
 ### Session Notes Template:
 ```
