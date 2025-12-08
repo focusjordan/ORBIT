@@ -19,10 +19,10 @@
 | Phase 4 | 18-24 | Neural Enhancements (v2) | ⬜ Not Started |
 | Phase 5 | 25-28 | Polish & SDK | ⬜ Not Started |
 
-**Current Session**: Ready for Session 4  
-**Last Commit**: `feat: fingerprint engine with Chromaprint` (413ce93)  
+**Current Session**: Ready for Session 5  
+**Last Commit**: `feat: fingerprint database lookup` (fb36ddc)  
 **Last Updated**: December 8, 2025  
-**Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Fingerprint engine working
+**Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Fingerprint engine working, ✅ Database lookup integrated
 
 ---
 
@@ -113,7 +113,7 @@ Update this section as you complete sessions:
 Session 1:  ✅ Complete
 Session 2:  ✅ Complete
 Session 3:  ✅ Complete
-Session 4:  ⬜ Not Started
+Session 4:  ✅ Complete
 Session 5:  ⬜ Not Started
 Session 6:  ⬜ Not Started
 Session 7:  ⬜ Not Started
@@ -3107,6 +3107,49 @@ _Use this section to track notes, blockers, or decisions made during implementat
 - ✅ Guardrails respected: no similarity features, no fuzzy matching
 - ✅ Session 4 guardrails documented in roadmap (lines 833-842)
 - ✅ Ready for database integration with same simplicity approach
+
+---
+
+### Session 4 Notes (December 8, 2025)
+
+**Completed:**
+- Created src/ledger/queries.js with 6 database query functions
+- Extended OrbitFingerprint class with findMatches() and exists() methods
+- Created comprehensive integration test suite (8 tests, all passing)
+- Verified multi-platform duplicate support (same hash, different platforms)
+- Fixed test cleanup edge case (guaranteed cleanup in finally block)
+
+**Test Results:**
+- ✅ Test 1: Generate fingerprint (32-byte SHA-256)
+- ✅ Test 2: Verify not exists before insert
+- ✅ Test 3: Insert registration (returns ID + created_at)
+- ✅ Test 4: Verify exists after insert
+- ✅ Test 5: Find matches (1 result returned)
+- ✅ Test 6: Get registration by ID (full record retrieved)
+- ✅ Test 7: Reject duplicate (same hash + same platform = unique constraint)
+- ✅ Test 8: Allow duplicate (same hash + different platform = success, 2 results found)
+
+**Design Decisions:**
+- Kept all queries using exact match only (`WHERE fingerprint_hash = $1`)
+- No similarity thresholds or fuzzy matching (reserved for Session 19)
+- Query layer handles all SQL, fingerprint engine just wraps it
+- Multi-platform support via UNIQUE constraint on (fingerprint_hash, origin_platform)
+
+**Issues Encountered:**
+- Initial test tried to use 'ohnrshyp' platform which didn't exist (fixed by creating test-platform-2)
+- Found edge case where second registration could leak if test failed mid-execution (fixed by moving cleanup to finally block)
+
+**Carry Forward:**
+- Database fully connected to fingerprint engine
+- Can now: generate → store → lookup with exact matching
+- Next: Session 5 will add Ed25519 signing and CBOR encoding for cryptographic verification
+
+**Bug Review:**
+- ✅ SQL injection: Safe (parameterized queries)
+- ✅ Resource leaks: Safe (temp files cleaned in finally)
+- ✅ Memory exhaustion: Safe (10MB buffer limits)
+- ✅ Error handling: Robust (clear error messages)
+- ✅ Test isolation: Perfect (all data cleaned up)
 
 ---
 
