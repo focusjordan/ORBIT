@@ -11,6 +11,7 @@
     "test:fingerprint": "node tests/engines/fingerprint.test.js",
     "test:fingerprint:db": "node tests/engines/fingerprint-db.test.js",
     "test:crypto": "node tests/engines/crypto.test.js",
+    "test:watermark:embed": "node tests/engines/watermark-embed.test.js",
     "generate:keypair": "node scripts/generate-keypair.js"
   },
   "keywords": [
