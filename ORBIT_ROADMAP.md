@@ -1079,6 +1079,19 @@ npm run test:fingerprint:db
 
 **Prerequisites**: Sessions 1-4 complete
 
+> 🚫 **Implementation Guardrails - Keep It Standard**:
+> - ❌ **NO custom crypto algorithms** - Use TweetNaCl/libsodium standard implementations only
+> - ❌ **NO key derivation schemes** - Direct Ed25519 keypairs, no PBKDF2/Argon2 yet
+> - ❌ **NO key storage** - Just generation/signing/verification (storage is app-level concern)
+> - ❌ **NO encryption** - Signing only (Ed25519), no NaCl box/secretbox needed
+> - ❌ **NO custom CBOR extensions** - Use standard RFC 8949 types only
+> - ✅ **DO**: Use TweetNaCl exactly as documented
+> - ✅ **DO**: Use `cbor` npm package with default settings
+> - ✅ **DO**: Keep functions pure (input → output, no state)
+> - ✅ **DO**: Validate signature lengths (64 bytes) and key lengths (32/64 bytes)
+> 
+> **Why**: Crypto is hard. Use battle-tested libraries. Session 22+ adds more sophisticated crypto if needed.
+
 **Tasks**:
 - [ ] Create `src/engines/crypto.js`
 - [ ] Implement `generateKeypair()`
@@ -3180,7 +3193,7 @@ _Use this section to track notes, blockers, or decisions made during implementat
 - Making architectural decisions (add to notes)
 - Changing dependencies (update install commands)
 
-**Last Updated**: December 8, 2025 - Session 3 Complete
+**Last Updated**: December 8, 2025 - Session 4 Complete
 
 ---
 

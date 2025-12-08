@@ -6,6 +6,7 @@
 **Complements**: `ORBIT_SPECIFICATION.md`  
 **Created**: December 8, 2025  
 **Status**: Research Complete, Ready for Integration  
+**Implementation Note**: v1 core system (Sessions 1-17) in progress. v2 ML enhancements (Sessions 18+) scheduled after v1 completion.  
 
 ---
 
