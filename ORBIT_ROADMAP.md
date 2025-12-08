@@ -12,17 +12,17 @@
 
 | Phase | Sessions | Focus | Status |
 |-------|----------|-------|--------|
-| Phase 0 | 1-2 | Project Setup | 🟡 In Progress |
-| Phase 1 | 3-8 | Core Engines (v1) | ⬜ Not Started |
+| Phase 0 | 1-2 | Project Setup | ✅ Complete |
+| Phase 1 | 3-8 | Core Engines (v1) | 🟡 Ready to Start |
 | Phase 2 | 9-14 | API Layer (v1) | ⬜ Not Started |
 | Phase 3 | 15-17 | Ohnrshyp Integration | ⬜ Not Started |
 | Phase 4 | 18-24 | Neural Enhancements (v2) | ⬜ Not Started |
 | Phase 5 | 25-28 | Polish & SDK | ⬜ Not Started |
 
-**Current Session**: Ready for Session 2  
-**Last Commit**: `chore: initial project setup`  
+**Current Session**: Ready for Session 3  
+**Last Commit**: `feat: database setup with PostgreSQL and full B2B metadata schema`  
 **Last Updated**: December 8, 2025  
-**Prerequisites Met**: ✅ Docker Desktop installed and running
+**Prerequisites Met**: ✅ PostgreSQL running, ✅ pgvector installed, ✅ Full B2B schema deployed
 
 ---
 
@@ -96,7 +96,7 @@ Update this section as you complete sessions:
 
 ```
 Session 1:  ✅ Complete
-Session 2:  ⬜ Not Started
+Session 2:  ✅ Complete
 Session 3:  ⬜ Not Started
 Session 4:  ⬜ Not Started
 Session 5:  ⬜ Not Started
@@ -2970,6 +2970,45 @@ _Use this section to track notes, blockers, or decisions made during implementat
 
 ---
 
+### Session 2 Notes (December 8, 2025)
+
+**Completed:**
+- Created docker-compose.yml with PostgreSQL 16 + pgvector
+- Created src/config/database.js with connection pool and graceful shutdown
+- Created scripts/migrate.js with complete schema (49 columns in orbit_registrations)
+- Deployed full B2B metadata schema (ISRC, UPC, p_line, c_line, contributors, territories)
+- Installed 3 extensions: uuid-ossp, pgcrypto, vector (v0.8.1)
+- Created 5 tables: platforms, registrations, transfers, merkle_roots, api_usage
+- Added npm run migrate script to package.json
+- Successfully ran migration and verified all tables/extensions
+- Tested database connection from Node.js
+
+**Issues Encountered:**
+- Docker credential helper error with Google OAuth (exit status 1, error code -50)
+- Docker trying to authenticate for public image when credentials corrupted
+- Obsolete `version` field warning in docker-compose.yml
+
+**Solutions Applied:**
+- Ran `docker logout` to remove corrupted credentials (public images don't need auth)
+- Removed `version: '3.8'` from docker-compose.yml (obsolete in modern Docker Compose)
+- Container started successfully after logout
+
+**Decisions Made:**
+- Using PostgreSQL 16 with pgvector (not MongoDB) for ACID transactions and vector search
+- Deferring vector index creation until data exists (IVFFlat needs tuning based on data size)
+- Using JSONB for flexible arrays (territories, featured_artists, composers, etc.)
+- Implementing 49-column schema exceeding DDEX ERN requirements for future-proofing
+- Container name: orbit_postgres for clear identification
+- Database credentials: orbit/orbit (development only)
+
+**Carry Forward:**
+- PostgreSQL container running and healthy (port 5432)
+- Full B2B metadata schema ready for Session 3
+- Next: Install Chromaprint for fingerprint engine (Session 3)
+- Vector embeddings columns ready for Session 19+ (MERT/CLAP integration)
+
+---
+
 ### Session Notes Template:
 ```
 ## Session X Notes (Date)
@@ -2997,7 +3036,7 @@ _Use this section to track notes, blockers, or decisions made during implementat
 - Making architectural decisions (add to notes)
 - Changing dependencies (update install commands)
 
-**Last Updated**: _Update this date when modifying the roadmap_
+**Last Updated**: December 8, 2025 - Session 2 Complete
 
 ---
 
