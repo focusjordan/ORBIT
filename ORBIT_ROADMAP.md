@@ -1420,45 +1420,56 @@ npm run generate:keypair
 
 > ⚠️ **V2 Note**: This spread spectrum implementation becomes a **fallback** in Sessions 22-23 when neural watermarking (SilentCipher/WMCodec) is added. Keep the interface clean and simple — don't over-optimize.
 
-> 🎯 **Implementation Guardrails - Build for Simplicity, Not Perfection**:
+> 🎯 **Implementation Guardrails - Simple AND Production-Ready Can Co-Exist**:
 > 
-> **This is v1 - it will be superseded by neural watermarking. Build the spec, nothing more:**
+> **This is v1 - it will be superseded by neural watermarking. Build the spec plus ONE safety feature:**
 > - ✅ **DO**: Implement the exact spread spectrum algorithm from ORBIT_SPECIFICATION.md §7.2
 > - ✅ **DO**: Fixed 64-byte payload structure (magic + version + timestamp + hashes + CRC)
 > - ✅ **DO**: Simple HMAC-based spreading sequence (deterministic, no optimization needed)
-> - ✅ **DO**: Basic robustness (survives high-quality MP3, not extreme compression)
-> - ❌ **NO adaptive embed strength** - fixed 0.005 amplitude is fine
-> - ❌ **NO perceptual masking** - neural watermark will handle that in Session 22
+> - ✅ **DO**: Basic loudness-aware embed strength (~20 lines, prevents audibility in quiet audio)
+> - ✅ **DO**: Basic robustness testing (survives 320kbps MP3 = B2B validation)
+> - ❌ **NO complex perceptual masking** - loudness normalization is sufficient for v1
 > - ❌ **NO error correction codes** (Reed-Solomon, etc.) - CRC16 checksum is sufficient
 > - ❌ **NO multi-frequency embedding** - single spreading sequence is enough
-> - ❌ **NO synchronization markers** - not needed for our use case
-> - ❌ **NO psychoacoustic modeling** - keep it pure signal processing
+> - ❌ **NO synchronization markers** - assume complete audio files (document limitation)
+> - ❌ **NO full psychoacoustic modeling** - simple RMS-based scaling is enough
 > 
-> **Why These Restrictions**:
+> **Why These Restrictions (and the ONE Exception)**:
 > - Sessions 22-23 will replace this with SilentCipher (psychoacoustic-aware, 99%+ accuracy)
 > - Spread spectrum becomes a **fallback** for when neural extraction fails
-> - Time spent optimizing v1 is wasted - neural is categorically superior
-> - Clean interface matters more than performance for fallback code
+> - Time spent on complex optimization is wasted - neural is categorically superior
+> - **BUT** basic loudness normalization ensures v1 legitimately validates B2B transfers
+> - Clean interface + production-ready fallback = best of both worlds
 > 
-> **What "Clean Interface" Means**:
+> **What "Clean Interface + Production-Ready" Means**:
 > ```javascript
-> // Good: Simple, swappable interface
+> // Good: Simple, swappable interface with basic safety
 > class OrbitWatermark {
 >   constructor(secretKey, options) { }
->   embed(audioSamples, payload) { }      // Returns watermarked samples
->   extract(audioSamples) { }              // Returns { payload, confidence, valid }
+>   
+>   embed(audioSamples, payload) {
+>     // Basic loudness-aware embedding (~20 lines)
+>     const rms = this._calculateRMS(audioSamples);
+>     const safeStrength = Math.min(this.EMBED_STRENGTH, rms * 0.1);
+>     // ... spread spectrum with safeStrength
+>     return watermarkedSamples;
+>   }
+>   
+>   extract(audioSamples) {
+>     // Returns { payload, confidence, valid }
+>   }
 > }
 > 
 > // In v2, we can easily wrap/replace:
 > class OrbitWatermarkV2 {
 >   constructor() {
->     this.neural = new SilentCipher();    // Primary
->     this.fallback = new OrbitWatermark(); // Your v1 code
+>     this.neural = new SilentCipher();    // Primary (99%+ accuracy)
+>     this.fallback = new OrbitWatermark(); // Your v1 code (95% at 320k)
 >   }
 >   extract(audio) {
 >     const result = this.neural.extract(audio);
 >     if (result.confidence < 0.8) {
->       return this.fallback.extract(audio); // Use your v1 as backup
+>       return this.fallback.extract(audio); // Production-ready fallback
 >     }
 >     return result;
 >   }
@@ -1471,9 +1482,10 @@ npm run generate:keypair
 - [ ] Implement `_generateSpreadSequence(seed, length)`
 - [ ] Implement `_bytesToBits()` / `_bitsToBytes()`
 - [ ] Implement `_crc16()` for checksum
+- [ ] Implement `_calculateRMS(audioSamples)` for loudness measurement
 - [ ] Implement `createPayload(data)` with magic bytes and CRC
-- [ ] Implement `embed(audioSamples, payload)`
-- [ ] Test embedding into audio samples
+- [ ] Implement `embed(audioSamples, payload)` with loudness-aware strength
+- [ ] Test embedding into audio samples (quiet and loud passages)
 
 **src/engines/watermark.js**:
 ```javascript
@@ -1500,6 +1512,16 @@ class OrbitWatermark {
     this.MAGIC = Buffer.from('ORBT');                // Magic bytes
     this.VERSION = 1;
     this.PAYLOAD_SIZE = 64;                          // Fixed payload size in bytes
+  }
+  
+  /**
+   * Calculate RMS (Root Mean Square) loudness of audio
+   * @param {Float32Array} samples - Audio samples
+   * @returns {number} RMS value (0-1 range)
+   */
+  _calculateRMS(samples) {
+    const sumSquares = samples.reduce((sum, sample) => sum + sample * sample, 0);
+    return Math.sqrt(sumSquares / samples.length);
   }
   
   /**
@@ -1656,10 +1678,14 @@ class OrbitWatermark {
     
     const output = new Float32Array(audioSamples);
     
+    // Calculate RMS loudness for safety (prevents audibility in quiet audio)
+    const rms = this._calculateRMS(audioSamples);
+    const safeStrength = Math.min(this.EMBED_STRENGTH, rms * 0.1);
+    
     // Generate spreading sequence
     const spreadSeq = this._generateSpreadSequence('embed', bits.length * this.CHIP_RATE);
     
-    // Embed each bit using spread spectrum
+    // Embed each bit using spread spectrum with loudness-aware strength
     for (let bitIdx = 0; bitIdx < bits.length; bitIdx++) {
       const bitValue = bits[bitIdx] ? 1 : -1;
       const startSample = bitIdx * this.CHIP_RATE;
@@ -1668,8 +1694,8 @@ class OrbitWatermark {
         const sampleIdx = startSample + chip;
         const spreadIdx = bitIdx * this.CHIP_RATE + chip;
         
-        // Add spread value to sample
-        output[sampleIdx] += spreadSeq[spreadIdx] * bitValue * this.EMBED_STRENGTH;
+        // Add spread value to sample with safe strength
+        output[sampleIdx] += spreadSeq[spreadIdx] * bitValue * safeStrength;
         
         // Clip to valid range
         output[sampleIdx] = Math.max(-1, Math.min(1, output[sampleIdx]));
