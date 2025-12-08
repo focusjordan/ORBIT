@@ -49,9 +49,24 @@ When building these v1 sessions, keep implementations **minimal and modular** �
 | V1 Session | What to Build | V2 Fate | Implementation Guidance |
 |------------|---------------|---------|------------------------|
 | **Session 6-7** (Watermark) | Spread spectrum embed/extract | Becomes **fallback** when neural fails | Keep simple, ensure clean interface for swapping |
-| **Session 3-4** (Fingerprint) | Chromaprint exact matching | Becomes **exact-match layer** under MERT | Don't over-optimize; MERT adds semantic layer |
+| **Session 3-4** (Fingerprint) | Chromaprint exact matching | Becomes **exact-match layer** under MERT | **CRITICAL**: No similarity scoring, no fuzzy matching - keep it pure exact hash comparison |
 | **Session 12** (Verify) | Basic verification response | **Enhanced** with AI metadata in v2 | Design response as extensible object |
 | **Session 11** (Register) | Basic registration | **Enhanced** with auto-metadata in v2 | Make metadata injection pluggable |
+
+### 🎯 Chromaprint + MERT: Dual Fingerprint Architecture
+
+**Why Both Are Needed**:
+
+| Use Case | Tool | Speed | Storage |
+|----------|------|-------|---------|
+| Exact duplicate (same MP3) | Chromaprint | ⚡ 1s | 32 bytes |
+| Transcoded (MP3→FLAC) | Chromaprint | ⚡ 1s | 32 bytes |
+| Pitch shifted (+2 semitones) | MERT | ⏱️ 5s | 3KB |
+| Time stretched (110% speed) | MERT | ⏱️ 5s | 3KB |
+| Cover version | MERT | ⏱️ 5s | 3KB |
+| Remix / mashup | MERT | ⏱️ 5s | 3KB |
+
+**Result**: Chromaprint catches 95% instantly, MERT handles sophisticated 5%
 
 ---
 
@@ -575,6 +590,17 @@ npm run migrate
 
 > ⚠️ **V2 Note**: Chromaprint provides **exact-match detection** only. In Session 19, MERT adds semantic fingerprinting that survives pitch/speed changes and enables similarity search. Chromaprint remains valuable for fast exact-duplicate detection.
 
+> 🚫 **Implementation Guardrails - What NOT to Build**:
+> - ❌ **NO similarity scoring** - MERT handles this in Session 19
+> - ❌ **NO fuzzy matching** - Keep it exact binary comparison only
+> - ❌ **NO transformation detection** - Pitch/speed handled by MERT
+> - ❌ **NO complex algorithms** - Chromaprint output → SHA-256 hash → done
+> - ✅ **DO**: Simple wrapper around fpcalc with error handling
+> - ✅ **DO**: Direct hash comparison (hash1.equals(hash2))
+> - ✅ **DO**: Database lookup by exact hash match
+> 
+> **Why**: Chromaprint's strength is **speed and simplicity**. MERT will add intelligence in Session 19. Keeping this clean ensures easy integration later.
+
 **Verify Chromaprint Installed**:
 ```bash
 fpcalc -version
@@ -803,6 +829,17 @@ npm run test:fingerprint
 **Goal**: Can store and find fingerprints in database
 
 **Prerequisites**: Sessions 2-3 complete
+
+> 🚫 **Implementation Guardrails - Keep It Simple**:
+> - ❌ **NO similarity queries** - Use exact `WHERE fingerprint_hash = $1` only
+> - ❌ **NO threshold-based matching** - Binary exists/doesn't exist
+> - ❌ **NO fuzzy search** - Wait for Session 19 (MERT + pgvector)
+> - ❌ **NO Levenshtein/edit distance** - Not needed for hash comparison
+> - ✅ **DO**: Direct hash equality check in PostgreSQL
+> - ✅ **DO**: Return all exact matches (same hash, different platforms okay)
+> - ✅ **DO**: Simple `EXISTS` queries for duplicate detection
+> 
+> **Why**: Vector similarity search comes in Session 19. Keep database queries simple and fast.
 
 **Tasks**:
 - [ ] Create `src/ledger/queries.js` with fingerprint queries
@@ -2598,6 +2635,29 @@ npm install @xenova/transformers
 **Goal**: Generate semantic embeddings with MERT
 
 **Prerequisites**: Session 18 complete
+
+> 🔗 **Building on Chromaprint (Sessions 3-4)**:
+> 
+> This session **enhances** the fingerprint system, not replaces it:
+> 
+> **Chromaprint (v1)** - Fast exact-match layer:
+> - ✅ Handles 95% of duplicates in ~1 second
+> - ✅ Direct hash comparison: `fingerprint_hash = $1`
+> - ✅ 32-byte storage footprint
+> - ✅ Perfect for: Same file, transcoded versions, minor edits
+> 
+> **MERT (v2)** - Semantic intelligence layer:
+> - ✅ Handles edge cases: pitch shift, speed change, covers, remixes
+> - ✅ Vector similarity: `1 - (mert_embedding <=> $1) > 0.85`
+> - ✅ 768-dim vector (3KB storage)
+> - ✅ Perfect for: "Find similar songs", derivative detection
+> 
+> **Combined Strategy**:
+> 1. Try Chromaprint exact match first (fast path)
+> 2. If no match, try MERT similarity (thorough path)
+> 3. Result: Best of both worlds - speed + intelligence
+> 
+> **Implementation**: Both columns exist in `orbit_registrations` schema from Session 2.
 
 **Tasks**:
 - [ ] Create `src/ml/mert.js`
