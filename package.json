@@ -1,0 +1,35 @@
+{
+  "name": "orbit",
+  "version": "1.0.0",
+  "description": "Origin-Based Identity & Rights Transfer Protocol - Audio provenance and metadata transfer system",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "echo \"No tests configured yet\" && exit 0"
+  },
+  "keywords": [
+    "audio",
+    "watermark",
+    "fingerprint",
+    "provenance",
+    "metadata",
+    "music",
+    "b2b"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "cbor": "^10.0.11",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "pg": "^8.16.3",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}
