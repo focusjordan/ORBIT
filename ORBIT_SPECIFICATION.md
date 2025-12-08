@@ -247,32 +247,78 @@ These goals were explicitly stated during design:
 
 ### Metadata Fields Supported
 
+These fields align with DDEX ERN standards and DSP requirements (Spotify, Apple Music, etc.).
+
 **Core (Required)**:
-- ISRC (International Standard Recording Code)
-- UPC (Universal Product Code)
-- Title
-- Artist
-- Duration (milliseconds)
-- Bitrate
-- Sample Rate
-- Channels
-- Format
+| Field | Type | Description |
+|-------|------|-------------|
+| `isrc` | String | International Standard Recording Code |
+| `upc` | String | Universal Product Code (release-level) |
+| `title` | String | Track title |
+| `artist` | String | Primary artist name |
+| `duration_ms` | Integer | Duration in milliseconds |
+| `p_line` | String | ℗ Sound recording copyright (e.g., "2024 Label Name") |
+| `c_line` | String | © Composition copyright (e.g., "2024 Publisher") |
+| `primary_genre` | String | Primary genre classification |
+| `language` | String | ISO 639-1 language code (e.g., "en", "es") |
+
+**Technical (Auto-extracted)**:
+| Field | Type | Description |
+|-------|------|-------------|
+| `bitrate` | Integer | Audio bitrate in kbps |
+| `sample_rate` | Integer | Sample rate in Hz (e.g., 44100) |
+| `channels` | Integer | Number of audio channels (1=mono, 2=stereo) |
+| `format` | String | File format (flac, wav, mp3, aac) |
 
 **Ownership**:
-- Owner ID (UUID)
-- Origin Platform
-- Origin Timestamp
-- Origin Signature
+| Field | Type | Description |
+|-------|------|-------------|
+| `owner_id` | UUID | Unique identifier of the registering owner |
+| `origin_platform` | String | Platform ID where first registered |
+| `origin_timestamp` | Timestamp | When originally registered |
+| `origin_signature` | Bytes | Ed25519 signature (64 bytes) |
 
 **Extended (Optional)**:
-- Album Title
-- Track Number
-- Genre
-- Release Date
-- Label
-- Writers
-- Producers
-- Explicit Flag
+| Field | Type | Description |
+|-------|------|-------------|
+| `album_title` | String | Album/EP name |
+| `track_number` | Integer | Position on album |
+| `secondary_genre` | String | Additional genre |
+| `release_date` | String | Original release date (ISO 8601) |
+| `original_release_date` | String | For re-releases/remasters |
+| `label` | String | Record label name |
+| `catalog_number` | String | Label catalog ID |
+| `version` | String | Track version ("Live", "Acoustic", "Remix", etc.) |
+| `parental_advisory` | String | "explicit", "clean", or "none" |
+
+**Contributors (Optional Arrays)**:
+| Field | Type | Description |
+|-------|------|-------------|
+| `featured_artists` | Array | Featured artist names |
+| `composers` | Array | Music composers |
+| `lyricists` | Array | Lyric writers |
+| `writers` | Array | Songwriters (if not splitting composer/lyricist) |
+| `producers` | Array | Producers |
+| `remixer` | String | Remixer name (if applicable) |
+| `recording_location` | String | Studio or recording location |
+| `recording_year` | Integer | Year of recording |
+
+**Rights & Distribution (Optional)**:
+| Field | Type | Description |
+|-------|------|-------------|
+| `iswc` | String | International Standard Musical Work Code (composition) |
+| `territories` | Array | ISO 3166-1 alpha-2 country codes for availability |
+| `preview_start_ms` | Integer | Start time for 30-second preview |
+
+**AI-Extracted (v2, Auto-populated)**:
+| Field | Type | Description |
+|-------|------|-------------|
+| `ai_genre` | Array | AI-detected genres with confidence scores |
+| `ai_mood` | Array | AI-detected moods with confidence scores |
+| `ai_bpm` | Object | `{value: 120, confidence: 0.95}` |
+| `ai_key` | Object | `{value: "A minor", confidence: 0.88}` |
+| `ai_instruments` | Array | Detected instruments with confidence |
+| `ai_vocals` | Object | `{present: true, confidence: 0.92}` |
 
 ---
 
@@ -515,21 +561,46 @@ fpcalc -version
 **Payload Encoding**:
 
 ```javascript
-// CBOR-encoded ORBIT payload
+// CBOR-encoded ORBIT payload (full example)
 {
   _v: 1,                              // Protocol version
   _t: 'registration',                 // Message type
   
-  // Core metadata
+  // Core metadata (required)
   isrc: 'USRC12345678',
   upc: '012345678901',
-  title: 'Track Title',
-  artist: 'Artist Name',
-  duration: 234567,                   // Milliseconds
+  title: 'Midnight Drive',
+  artist: 'The Neon Collective',
+  duration_ms: 234567,
+  p_line: '2024 Neon Records',
+  c_line: '2024 Neon Publishing',
+  primary_genre: 'Electronic',
+  language: 'en',
+  
+  // Technical (auto-extracted)
   bitrate: 320,
   sample_rate: 44100,
   channels: 2,
   format: 'flac',
+  
+  // Extended (optional, included if provided)
+  album_title: 'Night Visions',
+  track_number: 3,
+  secondary_genre: 'Synthwave',
+  release_date: '2024-12-15',
+  label: 'Neon Records',
+  version: null,                      // Not a remix/live version
+  parental_advisory: 'none',
+  
+  // Contributors
+  featured_artists: ['Guest Singer'],
+  composers: ['J. Smith', 'A. Jones'],
+  lyricists: ['J. Smith'],
+  producers: ['M. Producer'],
+  
+  // Rights
+  territories: ['US', 'GB', 'DE', 'FR', 'WW'],  // WW = worldwide
+  preview_start_ms: 45000,
   
   // Ownership
   owner_id: <16-byte UUID>,
@@ -539,11 +610,21 @@ fpcalc -version
   // Fingerprint
   fingerprint: <32-byte hash>,
   
-  // Signature (added last)
+  // AI-extracted (v2, added automatically)
+  ai: {
+    genre: [{label: 'electronic', confidence: 0.92}],
+    mood: [{label: 'energetic', confidence: 0.85}],
+    bpm: {value: 120, confidence: 0.97},
+    key: {value: 'A minor', confidence: 0.88},
+    instruments: [{label: 'synthesizer', confidence: 0.94}],
+    vocals: {present: true, confidence: 0.91}
+  },
+  
+  // Signature (added last, signs everything above)
   signature: <64-byte Ed25519 signature>
 }
 
-// Encoded size: ~400 bytes (vs ~6KB DDEX XML)
+// Encoded size: ~600-800 bytes with full metadata (vs ~6KB+ DDEX XML)
 ```
 
 ---
@@ -598,24 +679,45 @@ Register new audio with ORBIT.
 {
   audio: <binary>,              // Raw audio file bytes
   metadata: {
-    isrc: "USRC12345678",       // Optional
-    upc: "012345678901",        // Optional
-    title: "Track Name",        // Required
-    artist: "Artist Name",      // Required
-    duration: 234567,           // Required (ms)
-    bitrate: 320,               // Optional
-    sample_rate: 44100,         // Optional
-    channels: 2,                // Optional
-    format: "flac",             // Required
+    // Core (required)
+    title: "Track Name",
+    artist: "Artist Name",
+    duration_ms: 234567,
+    p_line: "2024 Label Name",
+    c_line: "2024 Publisher Name",
+    primary_genre: "Electronic",
+    language: "en",
+    
+    // Identifiers (recommended)
+    isrc: "USRC12345678",
+    upc: "012345678901",
+    
+    // Technical (auto-extracted if not provided)
+    bitrate: 320,
+    sample_rate: 44100,
+    channels: 2,
+    format: "flac",
+    
     // Extended (all optional)
     album_title: "Album Name",
     track_number: 1,
-    genre: "Electronic",
+    secondary_genre: "Synthwave",
     release_date: "2024-12-08",
     label: "Independent",
+    catalog_number: "NEON-001",
+    version: null,              // "Live", "Acoustic", "Remix", etc.
+    parental_advisory: "none",  // "explicit", "clean", "none"
+    
+    // Contributors (optional)
+    featured_artists: ["Featured Artist"],
+    composers: ["Composer 1"],
+    lyricists: ["Lyricist 1"],
     writers: ["Writer 1"],
     producers: ["Producer 1"],
-    explicit: false
+    
+    // Rights (optional)
+    territories: ["US", "GB", "WW"],
+    preview_start_ms: 30000
   },
   owner_id: <uuid>              // Owner's user ID
 }
@@ -818,13 +920,42 @@ CREATE TABLE orbit_registrations (
   title VARCHAR(512) NOT NULL,
   artist VARCHAR(512) NOT NULL,
   duration_ms INTEGER NOT NULL,
+  p_line VARCHAR(256),                    -- ℗ Sound recording copyright
+  c_line VARCHAR(256),                    -- © Composition copyright
+  primary_genre VARCHAR(64),
+  language VARCHAR(8),                    -- ISO 639-1 code
+  
+  -- Technical metadata
   bitrate INTEGER,
   sample_rate INTEGER,
   channels SMALLINT,
   format VARCHAR(8),
   
-  -- Extended metadata (CBOR blob)
-  extended_metadata BYTEA,
+  -- Extended metadata
+  album_title VARCHAR(512),
+  track_number SMALLINT,
+  secondary_genre VARCHAR(64),
+  release_date DATE,
+  original_release_date DATE,
+  label VARCHAR(256),
+  catalog_number VARCHAR(64),
+  version VARCHAR(64),                    -- "Live", "Acoustic", "Remix", etc.
+  parental_advisory VARCHAR(16),          -- "explicit", "clean", "none"
+  
+  -- Contributors (JSONB for flexibility)
+  featured_artists JSONB,                 -- ["Artist 1", "Artist 2"]
+  composers JSONB,                        -- ["Composer 1"]
+  lyricists JSONB,                        -- ["Lyricist 1"]
+  writers JSONB,                          -- ["Writer 1"]
+  producers JSONB,                        -- ["Producer 1"]
+  remixer VARCHAR(256),
+  recording_location VARCHAR(256),
+  recording_year SMALLINT,
+  
+  -- Rights & Distribution
+  iswc VARCHAR(15),                       -- T-123.456.789-C format
+  territories JSONB,                      -- ["US", "GB", "DE", ...]
+  preview_start_ms INTEGER,
   
   -- Ownership
   owner_id UUID NOT NULL,
@@ -832,21 +963,26 @@ CREATE TABLE orbit_registrations (
   origin_timestamp TIMESTAMPTZ NOT NULL,
   origin_signature BYTEA NOT NULL,        -- Ed25519 signature (64 bytes)
   
-  -- Full CBOR payload
+  -- Full CBOR payload (contains all metadata for verification)
   payload_cbor BYTEA NOT NULL,
   
   -- Chain integrity
   prev_entry_hash BYTEA,                  -- Hash of previous entry (for chain)
   entry_hash BYTEA NOT NULL,              -- Hash of this entry
   
-  -- ML embeddings (optional, for similarity search)
+  -- ML embeddings (v2, for similarity search)
   audio_embedding vector(512),            -- CLAP embedding
   metadata_embedding vector(384),         -- Sentence transformer embedding
+  mert_embedding vector(768),             -- MERT semantic fingerprint
+  
+  -- AI-extracted metadata (v2, JSONB for flexibility)
+  ai_metadata JSONB,                      -- {genre: [...], mood: [...], bpm: {...}, ...}
   
   created_at TIMESTAMPTZ DEFAULT NOW(),
   
   -- Constraints
-  CONSTRAINT unique_fingerprint_platform UNIQUE (fingerprint_hash, origin_platform)
+  CONSTRAINT unique_fingerprint_platform UNIQUE (fingerprint_hash, origin_platform),
+  CONSTRAINT valid_parental_advisory CHECK (parental_advisory IN ('explicit', 'clean', 'none') OR parental_advisory IS NULL)
 );
 
 -- Indexes for fast lookup

@@ -356,7 +356,7 @@ CREATE TABLE IF NOT EXISTS orbit_platforms (
   CONSTRAINT valid_tier CHECK (tier IN ('basic', 'partner', 'full', 'enterprise'))
 );
 
--- Audio registrations
+-- Audio registrations (full B2B metadata schema)
 CREATE TABLE IF NOT EXISTS orbit_registrations (
   id BIGSERIAL PRIMARY KEY,
   
@@ -367,19 +367,48 @@ CREATE TABLE IF NOT EXISTS orbit_registrations (
   -- Watermark reference
   watermark_hash BYTEA NOT NULL,
   
-  -- Core metadata
+  -- Core metadata (indexed for search)
   isrc VARCHAR(12),
   upc VARCHAR(14),
   title VARCHAR(512) NOT NULL,
   artist VARCHAR(512) NOT NULL,
   duration_ms INTEGER NOT NULL,
+  p_line VARCHAR(256),                    -- ℗ Sound recording copyright
+  c_line VARCHAR(256),                    -- © Composition copyright
+  primary_genre VARCHAR(64),
+  language VARCHAR(8),                    -- ISO 639-1
+  
+  -- Technical metadata
   bitrate INTEGER,
   sample_rate INTEGER,
   channels SMALLINT,
   format VARCHAR(8),
   
-  -- Extended metadata (CBOR blob)
-  extended_metadata BYTEA,
+  -- Extended metadata
+  album_title VARCHAR(512),
+  track_number SMALLINT,
+  secondary_genre VARCHAR(64),
+  release_date DATE,
+  original_release_date DATE,
+  label VARCHAR(256),
+  catalog_number VARCHAR(64),
+  version VARCHAR(64),                    -- "Live", "Remix", etc.
+  parental_advisory VARCHAR(16),          -- "explicit", "clean", "none"
+  
+  -- Contributors (JSONB arrays)
+  featured_artists JSONB,
+  composers JSONB,
+  lyricists JSONB,
+  writers JSONB,
+  producers JSONB,
+  remixer VARCHAR(256),
+  recording_location VARCHAR(256),
+  recording_year SMALLINT,
+  
+  -- Rights & Distribution
+  iswc VARCHAR(15),
+  territories JSONB,                      -- ["US", "GB", "WW", ...]
+  preview_start_ms INTEGER,
   
   -- Ownership
   owner_id UUID NOT NULL,
@@ -394,17 +423,19 @@ CREATE TABLE IF NOT EXISTS orbit_registrations (
   prev_entry_hash BYTEA,
   entry_hash BYTEA NOT NULL,
   
-  -- ML embeddings (optional)
-  audio_embedding vector(512),
-  metadata_embedding vector(384),
-  mert_embedding vector(768),
+  -- ML embeddings (v2)
+  audio_embedding vector(512),            -- CLAP
+  metadata_embedding vector(384),         -- Sentence transformer
+  mert_embedding vector(768),             -- MERT semantic fingerprint
   
   -- AI-extracted metadata (v2)
   ai_metadata JSONB,
   
   created_at TIMESTAMPTZ DEFAULT NOW(),
   
-  CONSTRAINT unique_fingerprint_platform UNIQUE (fingerprint_hash, origin_platform)
+  -- Constraints
+  CONSTRAINT unique_fingerprint_platform UNIQUE (fingerprint_hash, origin_platform),
+  CONSTRAINT valid_parental_advisory CHECK (parental_advisory IN ('explicit', 'clean', 'none') OR parental_advisory IS NULL)
 );
 
 -- Indexes for fast lookup
