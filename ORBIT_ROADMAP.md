@@ -1422,41 +1422,57 @@ npm run generate:keypair
 
 > 🎯 **Implementation Guardrails - Simple AND Production-Ready Can Co-Exist**:
 > 
-> **This is v1 - it will be superseded by neural watermarking. Build the spec plus ONE safety feature:**
+> **This is v1 - it will be superseded by neural watermarking. Build the spec plus TWO critical features:**
 > - ✅ **DO**: Implement the exact spread spectrum algorithm from ORBIT_SPECIFICATION.md §7.2
 > - ✅ **DO**: Fixed 64-byte payload structure (magic + version + timestamp + hashes + CRC)
 > - ✅ **DO**: Simple HMAC-based spreading sequence (deterministic, no optimization needed)
 > - ✅ **DO**: Basic loudness-aware embed strength (~20 lines, prevents audibility in quiet audio)
+> - ✅ **DO**: Repeating watermark pattern (~50 lines, enables snippet detection)
 > - ✅ **DO**: Basic robustness testing (survives 320kbps MP3 = B2B validation)
 > - ❌ **NO complex perceptual masking** - loudness normalization is sufficient for v1
 > - ❌ **NO error correction codes** (Reed-Solomon, etc.) - CRC16 checksum is sufficient
 > - ❌ **NO multi-frequency embedding** - single spreading sequence is enough
-> - ❌ **NO synchronization markers** - assume complete audio files (document limitation)
+> - ❌ **NO correlation-based sync** - simple repeating pattern + search is sufficient
+> - ❌ **NO Barker codes** - magic bytes + CRC validation is sufficient
+> - ❌ **NO frequency-domain sync** - MERT (v2) handles time-stretch cases
 > - ❌ **NO full psychoacoustic modeling** - simple RMS-based scaling is enough
 > 
-> **Why These Restrictions (and the ONE Exception)**:
+> **Why These Restrictions (and the TWO Critical Exceptions)**:
 > - Sessions 22-23 will replace this with SilentCipher (psychoacoustic-aware, 99%+ accuracy)
 > - Spread spectrum becomes a **fallback** for when neural extraction fails
 > - Time spent on complex optimization is wasted - neural is categorically superior
-> - **BUT** basic loudness normalization ensures v1 legitimately validates B2B transfers
+> - **BUT** loudness normalization ensures v1 is imperceptible in quiet audio
+> - **AND** repeating pattern enables snippet detection (social media, radio, previews)
+> - These make v1 competitive with Content ID for real-world use cases
 > - Clean interface + production-ready fallback = best of both worlds
 > 
 > **What "Clean Interface + Production-Ready" Means**:
 > ```javascript
-> // Good: Simple, swappable interface with basic safety
+> // Good: Simple, swappable interface with critical features
 > class OrbitWatermark {
->   constructor(secretKey, options) { }
+>   constructor(secretKey, options) {
+>     this.REPEAT_INTERVAL = options.repeatInterval || 30 * 44100; // 30s
+>   }
 >   
 >   embed(audioSamples, payload) {
->     // Basic loudness-aware embedding (~20 lines)
+>     // Loudness-aware + repeating pattern (~50 lines total)
 >     const rms = this._calculateRMS(audioSamples);
 >     const safeStrength = Math.min(this.EMBED_STRENGTH, rms * 0.1);
->     // ... spread spectrum with safeStrength
->     return watermarkedSamples;
+>     
+>     // Embed every 30 seconds (enables snippet detection)
+>     for (let offset = 0; offset < audioSamples.length; offset += this.REPEAT_INTERVAL) {
+>       this.embedAtOffset(audioSamples, offset, payload, safeStrength);
+>     }
+>     return audioSamples;
 >   }
 >   
 >   extract(audioSamples) {
->     // Returns { payload, confidence, valid }
+>     // Try extraction every 5 seconds until found
+>     for (let offset = 0; offset < audioSamples.length; offset += 5 * 44100) {
+>       const result = this.extractAtOffset(audioSamples, offset);
+>       if (result.valid) return result;
+>     }
+>     return { payload: null, valid: false };
 >   }
 > }
 > 
@@ -1478,14 +1494,16 @@ npm run generate:keypair
 
 **Tasks**:
 - [ ] Create `src/engines/watermark.js`
-- [ ] Implement `OrbitWatermark` class constructor
+- [ ] Implement `OrbitWatermark` class constructor (with REPEAT_INTERVAL option)
 - [ ] Implement `_generateSpreadSequence(seed, length)`
 - [ ] Implement `_bytesToBits()` / `_bitsToBytes()`
 - [ ] Implement `_crc16()` for checksum
 - [ ] Implement `_calculateRMS(audioSamples)` for loudness measurement
 - [ ] Implement `createPayload(data)` with magic bytes and CRC
-- [ ] Implement `embed(audioSamples, payload)` with loudness-aware strength
+- [ ] Implement `embed(audioSamples, payload)` with loudness-aware strength + repeating pattern
+- [ ] Implement `embedAtOffset(audioSamples, offset, payload)` helper
 - [ ] Test embedding into audio samples (quiet and loud passages)
+- [ ] Test repeating pattern (verify watermark embeds every 30 seconds)
 
 **src/engines/watermark.js**:
 ```javascript
@@ -1509,6 +1527,8 @@ class OrbitWatermark {
     this.secretKey = secretKey;
     this.CHIP_RATE = options.chipRate || 1000;       // Samples per bit
     this.EMBED_STRENGTH = options.strength || 0.005; // Amplitude
+    this.REPEAT_INTERVAL = options.repeatInterval || 30 * 44100; // Repeat every 30 seconds
+    this.SEARCH_INTERVAL = options.searchInterval || 5 * 44100;  // Search every 5 seconds
     this.MAGIC = Buffer.from('ORBT');                // Magic bytes
     this.VERSION = 1;
     this.PAYLOAD_SIZE = 64;                          // Fixed payload size in bytes
@@ -1661,13 +1681,58 @@ class OrbitWatermark {
    * @param {Buffer} payload - Binary payload to embed (64 bytes)
    * @returns {Float32Array} Watermarked audio samples
    */
+  /**
+   * Helper: Embed watermark at specific offset
+   * @param {Float32Array} audioSamples - Audio samples (modified in place)
+   * @param {number} offset - Sample offset to start embedding
+   * @param {Buffer} payload - Payload to embed
+   * @param {number} strength - Embed strength (optional, calculated if not provided)
+   */
+  embedAtOffset(audioSamples, offset, payload, strength = null) {
+    const bits = this._bytesToBits(payload);
+    const requiredSamples = bits.length * this.CHIP_RATE;
+    
+    if (offset + requiredSamples > audioSamples.length) {
+      return; // Not enough space at this offset, skip
+    }
+    
+    // Calculate embed strength if not provided
+    if (strength === null) {
+      const segment = audioSamples.slice(offset, offset + requiredSamples);
+      const rms = this._calculateRMS(segment);
+      strength = Math.min(this.EMBED_STRENGTH, rms * 0.1);
+    }
+    
+    // Generate spreading sequence
+    const spreadSeq = this._generateSpreadSequence(`embed:${offset}`, bits.length * this.CHIP_RATE);
+    
+    // Embed each bit using spread spectrum
+    for (let bitIdx = 0; bitIdx < bits.length; bitIdx++) {
+      const bitValue = bits[bitIdx] ? 1 : -1;
+      const startSample = offset + (bitIdx * this.CHIP_RATE);
+      
+      for (let chip = 0; chip < this.CHIP_RATE; chip++) {
+        const sampleIdx = startSample + chip;
+        const spreadIdx = bitIdx * this.CHIP_RATE + chip;
+        
+        audioSamples[sampleIdx] += spreadSeq[spreadIdx] * bitValue * strength;
+        audioSamples[sampleIdx] = Math.max(-1, Math.min(1, audioSamples[sampleIdx]));
+      }
+    }
+  }
+  
+  /**
+   * Embed payload into audio samples with repeating pattern
+   * @param {Float32Array} audioSamples - PCM audio samples (mono, normalized -1 to 1)
+   * @param {Buffer} payload - Binary payload to embed (64 bytes)
+   * @returns {Float32Array} Watermarked audio samples
+   */
   embed(audioSamples, payload) {
     if (payload.length !== this.PAYLOAD_SIZE) {
       throw new Error(`Payload must be ${this.PAYLOAD_SIZE} bytes`);
     }
     
-    const bits = this._bytesToBits(payload);
-    const requiredSamples = bits.length * this.CHIP_RATE;
+    const requiredSamples = this.PAYLOAD_SIZE * 8 * this.CHIP_RATE;
     
     if (audioSamples.length < requiredSamples) {
       throw new Error(
@@ -1678,29 +1743,21 @@ class OrbitWatermark {
     
     const output = new Float32Array(audioSamples);
     
-    // Calculate RMS loudness for safety (prevents audibility in quiet audio)
+    // Calculate overall RMS for consistent strength across repeats
     const rms = this._calculateRMS(audioSamples);
     const safeStrength = Math.min(this.EMBED_STRENGTH, rms * 0.1);
     
-    // Generate spreading sequence
-    const spreadSeq = this._generateSpreadSequence('embed', bits.length * this.CHIP_RATE);
+    // Embed watermark at start, then every REPEAT_INTERVAL samples
+    let offset = 0;
+    let embedCount = 0;
     
-    // Embed each bit using spread spectrum with loudness-aware strength
-    for (let bitIdx = 0; bitIdx < bits.length; bitIdx++) {
-      const bitValue = bits[bitIdx] ? 1 : -1;
-      const startSample = bitIdx * this.CHIP_RATE;
-      
-      for (let chip = 0; chip < this.CHIP_RATE; chip++) {
-        const sampleIdx = startSample + chip;
-        const spreadIdx = bitIdx * this.CHIP_RATE + chip;
-        
-        // Add spread value to sample with safe strength
-        output[sampleIdx] += spreadSeq[spreadIdx] * bitValue * safeStrength;
-        
-        // Clip to valid range
-        output[sampleIdx] = Math.max(-1, Math.min(1, output[sampleIdx]));
-      }
+    while (offset + requiredSamples <= audioSamples.length) {
+      this.embedAtOffset(output, offset, payload, safeStrength);
+      embedCount++;
+      offset += this.REPEAT_INTERVAL;
     }
+    
+    console.log(`Embedded ${embedCount} watermark instance(s) across ${(audioSamples.length / 44100).toFixed(1)}s audio`);
     
     return output;
   }
@@ -1832,9 +1889,17 @@ runTests();
 ```bash
 npm run test:watermark:embed
 # Should show all tests passing
+# Should show multiple watermark instances embedded (e.g., "Embedded 6 instance(s) across 180.0s audio")
 ```
 
-**Notes for Next Session**: We'll add the extraction capability to recover the payload.
+**✅ Session 6 Achievements**:
+- ✅ Spread spectrum watermarking working
+- ✅ Loudness-aware embedding (imperceptible in quiet audio)
+- ✅ Repeating pattern every 30 seconds (enables snippet detection)
+- ✅ Production-ready for B2B transfers
+- ✅ Competitive with Content ID for 30+ second clips
+
+**Notes for Next Session**: We'll add the extraction capability with offset search to recover the payload from anywhere in the audio.
 
 ---
 
@@ -1866,10 +1931,12 @@ npm run test:watermark:embed
 > **Don't chase perfect robustness** - that's what neural watermarking is for!
 
 **Tasks**:
-- [ ] Add `extract(audioSamples, payloadBytes)` method
+- [ ] Add `extractAtOffset(audioSamples, offset, payloadBytes)` helper method
+- [ ] Add `extract(audioSamples, payloadBytes)` with offset search
 - [ ] Add `_verifyCrc(payload)` method
 - [ ] Add `parsePayload(payload)` method
 - [ ] Test round-trip: embed → extract
+- [ ] Test extraction from middle of audio (30-second clip)
 - [ ] Test with added noise (robustness check)
 
 **Add to src/engines/watermark.js** (inside the class, before the closing brace):
