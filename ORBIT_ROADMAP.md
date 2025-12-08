@@ -1398,6 +1398,16 @@ npm run generate:keypair
 # Should output a keypair and API key
 ```
 
+**✅ Session 5 Completion Status**:
+- ✅ All 10 crypto tests passing
+- ✅ Keypair generation utility working
+- ✅ Ed25519 signing/verification validated
+- ✅ CBOR round-trip tested (33 bytes)
+- ✅ Entry hash chain working
+- ✅ Edge cases (null/undefined) handled
+- ✅ Bug found and fixed (null input handling)
+- ✅ Previous tests still pass (no regressions)
+
 **Notes for Next Session**: We'll build the watermark engine for embedding payloads.
 
 ---
@@ -1409,6 +1419,51 @@ npm run generate:keypair
 **Prerequisites**: Session 5 complete
 
 > ⚠️ **V2 Note**: This spread spectrum implementation becomes a **fallback** in Sessions 22-23 when neural watermarking (SilentCipher/WMCodec) is added. Keep the interface clean and simple — don't over-optimize.
+
+> 🎯 **Implementation Guardrails - Build for Simplicity, Not Perfection**:
+> 
+> **This is v1 - it will be superseded by neural watermarking. Build the spec, nothing more:**
+> - ✅ **DO**: Implement the exact spread spectrum algorithm from ORBIT_SPECIFICATION.md §7.2
+> - ✅ **DO**: Fixed 64-byte payload structure (magic + version + timestamp + hashes + CRC)
+> - ✅ **DO**: Simple HMAC-based spreading sequence (deterministic, no optimization needed)
+> - ✅ **DO**: Basic robustness (survives high-quality MP3, not extreme compression)
+> - ❌ **NO adaptive embed strength** - fixed 0.005 amplitude is fine
+> - ❌ **NO perceptual masking** - neural watermark will handle that in Session 22
+> - ❌ **NO error correction codes** (Reed-Solomon, etc.) - CRC16 checksum is sufficient
+> - ❌ **NO multi-frequency embedding** - single spreading sequence is enough
+> - ❌ **NO synchronization markers** - not needed for our use case
+> - ❌ **NO psychoacoustic modeling** - keep it pure signal processing
+> 
+> **Why These Restrictions**:
+> - Sessions 22-23 will replace this with SilentCipher (psychoacoustic-aware, 99%+ accuracy)
+> - Spread spectrum becomes a **fallback** for when neural extraction fails
+> - Time spent optimizing v1 is wasted - neural is categorically superior
+> - Clean interface matters more than performance for fallback code
+> 
+> **What "Clean Interface" Means**:
+> ```javascript
+> // Good: Simple, swappable interface
+> class OrbitWatermark {
+>   constructor(secretKey, options) { }
+>   embed(audioSamples, payload) { }      // Returns watermarked samples
+>   extract(audioSamples) { }              // Returns { payload, confidence, valid }
+> }
+> 
+> // In v2, we can easily wrap/replace:
+> class OrbitWatermarkV2 {
+>   constructor() {
+>     this.neural = new SilentCipher();    // Primary
+>     this.fallback = new OrbitWatermark(); // Your v1 code
+>   }
+>   extract(audio) {
+>     const result = this.neural.extract(audio);
+>     if (result.confidence < 0.8) {
+>       return this.fallback.extract(audio); // Use your v1 as backup
+>     }
+>     return result;
+>   }
+> }
+> ```
 
 **Tasks**:
 - [ ] Create `src/engines/watermark.js`
@@ -1762,6 +1817,27 @@ npm run test:watermark:embed
 **Goal**: Can extract payload from watermarked audio
 
 **Prerequisites**: Session 6 complete
+
+> 🎯 **Implementation Guardrails - Extraction Completes the Simple Interface**:
+> 
+> **Keep extraction as simple as embedding:**
+> - ✅ **DO**: Correlate audio with same spreading sequence used in embed
+> - ✅ **DO**: Return confidence score (average correlation magnitude)
+> - ✅ **DO**: Verify magic bytes ("ORBT") and CRC16 checksum
+> - ✅ **DO**: Return `{ payload, confidence, valid }` object
+> - ❌ **NO iterative refinement** - single pass extraction is sufficient
+> - ❌ **NO synchronization search** - assume payload is at audio start
+> - ❌ **NO blind detection** - we know payload size (64 bytes)
+> - ❌ **NO multi-channel combining** - process mono/left channel only
+> - ❌ **NO adaptive thresholds** - fixed confidence threshold is fine
+> 
+> **Test Robustness Targets (v1 baseline)**:
+> - ✅ Lossless (WAV/FLAC): 99%+ extraction accuracy
+> - ✅ MP3 320kbps: 95%+ accuracy (good enough for v1)
+> - ⚠️ MP3 128kbps: 70%+ accuracy (acceptable degradation)
+> - ❌ Streaming quality: Don't optimize for this - v2 neural handles it
+> 
+> **Don't chase perfect robustness** - that's what neural watermarking is for!
 
 **Tasks**:
 - [ ] Add `extract(audioSamples, payloadBytes)` method
