@@ -183,6 +183,35 @@ class AudioUtils {
       return false;
     }
   }
+  
+  /**
+   * Convenience: Decode audio buffer to mono samples at 44.1kHz
+   * @param {Buffer} audioBuffer - Audio data (any format)
+   * @returns {Promise<Float32Array>}
+   */
+  static async decodeAudioToSamples(audioBuffer) {
+    const { samples } = await AudioUtils.loadAudioSamples(audioBuffer, {
+      targetSampleRate: 44100
+    });
+    return samples;
+  }
+  
+  /**
+   * Convenience: Encode samples to WAV buffer
+   * @param {Float32Array} samples - Audio samples
+   * @param {number} sampleRate - Sample rate (default: 44100)
+   * @param {number} channels - Number of channels (default: 1 for mono)
+   * @returns {Promise<Buffer>}
+   */
+  static async encodeSamplesToWav(samples, sampleRate = 44100, channels = 1) {
+    const audioData = {
+      sampleRate,
+      channelData: channels === 1 ? [samples] : [samples, samples]
+    };
+    
+    const wavBuffer = await wavEncoder.encode(audioData);
+    return Buffer.from(wavBuffer);
+  }
 }
 
 module.exports = AudioUtils;
