@@ -15,7 +15,9 @@
     "test:watermark:extract": "node tests/engines/watermark-extract.test.js",
     "test:watermark": "npm run test:watermark:embed && npm run test:watermark:extract",
     "test:audio": "node tests/utils/audio.test.js",
-    "generate:keypair": "node scripts/generate-keypair.js"
+    "test:auth": "node tests/api/auth.test.js",
+    "generate:keypair": "node scripts/generate-keypair.js",
+    "seed:platform": "node scripts/seed-platform.js"
   },
   "keywords": [
     "audio",

@@ -10,6 +10,71 @@
 const { pool } = require('../config/database');
 
 const queries = {
+  // ============================================================================
+  // Platform Queries (Session 10)
+  // ============================================================================
+  
+  /**
+   * Get platform by ID
+   * @param {string} platformId - Platform ID
+   * @returns {Promise<Object|undefined>} Platform data including public_key
+   */
+  getPlatform: async (platformId) => {
+    const result = await pool.query(
+      `SELECT id, name, public_key, api_key_hash, webhook_url, tier, is_active, created_at
+       FROM orbit_platforms
+       WHERE id = $1`,
+      [platformId]
+    );
+    return result.rows[0];
+  },
+  
+  /**
+   * Check if platform exists and is active
+   * @param {string} platformId - Platform ID
+   * @returns {Promise<boolean>}
+   */
+  platformIsActive: async (platformId) => {
+    const result = await pool.query(
+      `SELECT EXISTS(
+        SELECT 1 FROM orbit_platforms WHERE id = $1 AND is_active = true
+      ) as exists`,
+      [platformId]
+    );
+    return result.rows[0].exists;
+  },
+  
+  /**
+   * Insert a new platform
+   * @param {Object} data - Platform data
+   * @returns {Promise<{id: string, created_at: Date}>}
+   */
+  insertPlatform: async (data) => {
+    const result = await pool.query(
+      `INSERT INTO orbit_platforms (id, name, public_key, api_key_hash, webhook_url, tier)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name,
+         public_key = EXCLUDED.public_key,
+         api_key_hash = EXCLUDED.api_key_hash,
+         webhook_url = EXCLUDED.webhook_url,
+         tier = EXCLUDED.tier
+       RETURNING id, created_at`,
+      [
+        data.id,
+        data.name,
+        data.public_key,
+        data.api_key_hash,
+        data.webhook_url || null,
+        data.tier || 'basic'
+      ]
+    );
+    return result.rows[0];
+  },
+  
+  // ============================================================================
+  // Registration Queries
+  // ============================================================================
   /**
    * Find registrations by exact fingerprint hash match
    * @param {Buffer} fingerprintHash - 32-byte SHA-256 hash
@@ -88,25 +153,16 @@ const queries = {
   },
   
   /**
-   * Create or get test platform (for testing only)
-   * @returns {Promise<Object>} Platform data
+   * Get all active platforms (for debugging)
+   * @returns {Promise<Array>}
    */
-  ensureTestPlatform: async () => {
-    const testPlatform = {
-      id: 'test-platform',
-      name: 'Test Platform',
-      public_key: Buffer.alloc(32).fill(1),
-      api_key_hash: Buffer.alloc(32).fill(2)
-    };
-    
-    await pool.query(
-      `INSERT INTO orbit_platforms (id, name, public_key, api_key_hash)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (id) DO NOTHING`,
-      [testPlatform.id, testPlatform.name, testPlatform.public_key, testPlatform.api_key_hash]
+  listPlatforms: async () => {
+    const result = await pool.query(
+      `SELECT id, name, tier, is_active, created_at
+       FROM orbit_platforms
+       ORDER BY created_at DESC`
     );
-    
-    return testPlatform;
+    return result.rows;
   },
   
   /**

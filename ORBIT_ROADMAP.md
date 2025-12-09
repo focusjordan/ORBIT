@@ -19,10 +19,10 @@
 | Phase 4 | 18-24 | Neural Enhancements (v2) | ⬜ Not Started |
 | Phase 5 | 25-28 | Polish & SDK | ⬜ Not Started |
 
-**Current Session**: Ready for Session 10  
-**Last Commit**: `feat: express server with CBOR middleware (Session 9)`  
+**Current Session**: Ready for Session 11  
+**Last Commit**: `feat: platform authentication middleware (Session 10)`  
 **Last Updated**: December 9, 2025  
-**Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Fingerprint engine working, ✅ Database lookup integrated, ✅ Crypto engine complete, ✅ Watermark embedding working, ✅ Express server running, ✅ CBOR middleware complete
+**Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Fingerprint engine working, ✅ Database lookup integrated, ✅ Crypto engine complete, ✅ Watermark embedding working, ✅ Express server running, ✅ CBOR middleware complete, ✅ Platform authentication working
 
 ---
 
@@ -165,7 +165,7 @@ Session 6:  ✅ Complete - Watermark embedding (spread spectrum)
 Session 7:  ✅ Complete - Watermark extraction with offset search
 Session 8:  ✅ Complete - Audio file utilities
 Session 9:  ✅ Complete - Express server with CBOR middleware
-Session 10: ⬜ Not Started
+Session 10: ✅ Complete - Platform authentication middleware
 Session 11: ⬜ Not Started
 Session 12: ⬜ Not Started
 Session 13: ⬜ Not Started
@@ -2707,29 +2707,29 @@ curl localhost:4000/orbit/v1/info
 
 ---
 
-### Session 10: Platform Authentication Middleware
+### Session 10: Platform Authentication Middleware ✅
 
 **Goal**: Can authenticate API requests with platform ID + signature
 
 **Prerequisites**: Session 9 complete
 
 **Tasks**:
-- [ ] Create `src/api/middleware/auth.js`
-- [ ] Implement platform lookup from `X-ORBIT-Platform` header
-- [ ] Verify Ed25519 signature from `X-ORBIT-Signature` header
-- [ ] Attach platform info to `req.platform` if valid
-- [ ] Return 401 on invalid/missing auth
-- [ ] Create script to seed a test platform in database
-- [ ] Test authenticated vs unauthenticated requests
+- [x] Create `src/api/middleware/auth.js`
+- [x] Implement platform lookup from `X-ORBIT-Platform` header
+- [x] Verify Ed25519 signature from `X-ORBIT-Signature` header
+- [x] Attach platform info to `req.platform` if valid
+- [x] Return 401 on invalid/missing auth
+- [x] Create script to seed a test platform in database
+- [x] Test authenticated vs unauthenticated requests
 
 **Key Implementation**: Uses `OrbitCrypto.verify()` from Session 5
 
 **Commit Message**: `feat: platform authentication middleware`
 
 **Verify**:
-- Request without headers → 401
-- Request with valid signature → 200
-- Request with bad signature → 401
+- ✅ Request without headers → 401
+- ✅ Request with valid signature → 200
+- ✅ Request with bad signature → 401
 
 ---
 
@@ -3699,6 +3699,59 @@ _Use this section to track notes, blockers, or decisions made during implementat
 
 ---
 
+### Session 10 Notes (December 9, 2025)
+
+**Completed:**
+- Created `src/api/middleware/auth.js` - Platform authentication with Ed25519 signature verification
+- Updated `src/ledger/queries.js` - Added platform lookup queries (getPlatform, platformIsActive, insertPlatform, listPlatforms)
+- Created `scripts/seed-platform.js` - Platform seeding with real Ed25519 keypairs
+- Created `tests/api/auth.test.js` - Comprehensive authentication test suite
+- Updated `src/api/routes.js` - Added auth middleware to all protected endpoints
+- Updated `package.json` - Added `test:auth` and `seed:platform` scripts
+- Updated `.gitignore` - Added credentials file pattern for security
+
+**Test Results (8/8 passed):**
+- ✅ Test 1: Request without auth headers → 401 `missing_platform`
+- ✅ Test 2: Request with platform but no signature → 401 `missing_signature`
+- ✅ Test 3: Request with unknown platform → 401 `unknown_platform`
+- ✅ Test 4: Request with invalid signature → 401 `invalid_signature`
+- ✅ Test 5: Request with valid signature → 200 (authenticated, platform info attached)
+- ✅ Test 6: Request with tampered body → 401 `invalid_signature`
+- ✅ Test 7: Protected endpoint (register) without auth → 401 (requires auth)
+- ✅ Test 8: Optional auth endpoint (verify) without auth → 501 (allows anonymous)
+
+**Implementation Details:**
+- Two middleware modes: `platformAuth` (required) and `optionalAuth` (optional)
+- Signature verification uses CBOR-encoded request body
+- Platform info attached to `req.platform` with id, name, tier, publicKey
+- Credentials saved to `.[platform-id]-credentials.json` (gitignored)
+
+**Spec Alignment Confirmed:**
+- ✅ Uses `X-ORBIT-Platform` and `X-ORBIT-Signature` headers per ORBIT_SPECIFICATION.md §8
+- ✅ Uses `OrbitCrypto.verify()` from Session 5 crypto engine
+- ✅ Platform lookup from `orbit_platforms` table per schema §9
+- ✅ Protected endpoints: register, transfer, accept (require auth)
+- ✅ Optional auth endpoints: verify, chain (allow anonymous)
+
+**Files Created:**
+- `src/api/middleware/auth.js` (134 lines) - Authentication middleware
+- `scripts/seed-platform.js` (96 lines) - Platform seeding script
+- `tests/api/auth.test.js` (207 lines) - Authentication test suite
+
+**Files Updated:**
+- `src/ledger/queries.js` - Added 4 platform query methods
+- `src/api/routes.js` - Added auth middleware to 6 endpoints
+- `package.json` - Added 2 npm scripts
+- `.gitignore` - Added credentials pattern
+
+**Carry Forward:**
+- Platform authentication fully functional
+- Test platform can be seeded with real Ed25519 keypairs
+- Auth middleware integrated with all API routes
+- Ready for register endpoint (Session 11)
+
+---
+
 ### Session Notes Template:
 ```
 ## Session X Notes (Date)
@@ -3726,7 +3779,7 @@ _Use this section to track notes, blockers, or decisions made during implementat
 - Making architectural decisions (add to notes)
 - Changing dependencies (update install commands)
 
-**Last Updated**: December 9, 2025 - Session 9 Complete
+**Last Updated**: December 9, 2025 - Session 10 Complete
 
 ---
 

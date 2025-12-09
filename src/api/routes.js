@@ -14,6 +14,7 @@
 
 const express = require('express');
 const config = require('../config');
+const { platformAuth, optionalAuth } = require('./middleware/auth');
 
 const router = express.Router();
 
@@ -41,6 +42,24 @@ router.get('/info', (req, res) => {
 });
 
 // ============================================================================
+// Authentication Test Endpoint (Session 10)
+// ============================================================================
+
+/**
+ * POST /orbit/v1/auth-test
+ * Test authentication - returns platform info if auth succeeds
+ * Used for verifying keypair setup and signature generation
+ */
+router.post('/auth-test', platformAuth, (req, res) => {
+  res.orbit({
+    authenticated: true,
+    platform: req.platform,
+    message: 'Authentication successful!',
+    body_received: req.body,
+  });
+});
+
+// ============================================================================
 // Placeholder Routes - Handlers to be implemented in Sessions 11-14
 // ============================================================================
 
@@ -48,8 +67,9 @@ router.get('/info', (req, res) => {
  * POST /orbit/v1/register
  * Register new audio with ORBIT
  * Handler: Session 11
+ * Auth: Required (platformAuth)
  */
-router.post('/register', (req, res) => {
+router.post('/register', platformAuth, (req, res) => {
   res.orbitError(
     'not_implemented',
     'Registration endpoint not yet implemented. Coming in Session 11.',
@@ -61,8 +81,9 @@ router.post('/register', (req, res) => {
  * POST /orbit/v1/verify
  * Verify audio provenance and extract metadata
  * Handler: Session 12
+ * Auth: Optional (verification works for anyone, platform context optional)
  */
-router.post('/verify', (req, res) => {
+router.post('/verify', optionalAuth, (req, res) => {
   res.orbitError(
     'not_implemented',
     'Verification endpoint not yet implemented. Coming in Session 12.',
@@ -74,8 +95,9 @@ router.post('/verify', (req, res) => {
  * POST /orbit/v1/transfer
  * Initiate B2B transfer to another platform
  * Handler: Session 13
+ * Auth: Required (sender must be authenticated)
  */
-router.post('/transfer', (req, res) => {
+router.post('/transfer', platformAuth, (req, res) => {
   res.orbitError(
     'not_implemented',
     'Transfer endpoint not yet implemented. Coming in Session 13.',
@@ -87,8 +109,9 @@ router.post('/transfer', (req, res) => {
  * POST /orbit/v1/accept
  * Accept incoming transfer from another platform
  * Handler: Session 13
+ * Auth: Required (recipient must be authenticated)
  */
-router.post('/accept', (req, res) => {
+router.post('/accept', platformAuth, (req, res) => {
   res.orbitError(
     'not_implemented',
     'Accept endpoint not yet implemented. Coming in Session 13.',
@@ -100,8 +123,9 @@ router.post('/accept', (req, res) => {
  * GET /orbit/v1/chain/:fingerprint
  * Get full custody chain for a fingerprint
  * Handler: Session 14
+ * Auth: Optional (public lookup, but platform context may show more details)
  */
-router.get('/chain/:fingerprint', (req, res) => {
+router.get('/chain/:fingerprint', optionalAuth, (req, res) => {
   res.orbitError(
     'not_implemented',
     'Chain lookup endpoint not yet implemented. Coming in Session 14.',
