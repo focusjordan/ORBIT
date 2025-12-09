@@ -14,15 +14,15 @@
 |-------|----------|-------|--------|
 | Phase 0 | 1-2 | Project Setup | ✅ Complete |
 | Phase 1 | 3-8 | Core Engines (v1) | ✅ Complete |
-| Phase 2 | 9-14 | API Layer (v1) | ⬜ Not Started |
+| Phase 2 | 9-14 | API Layer (v1) | 🟡 In Progress (Session 9 complete) |
 | Phase 3 | 15-17 | Ohnrshyp Integration | ⬜ Not Started |
 | Phase 4 | 18-24 | Neural Enhancements (v2) | ⬜ Not Started |
 | Phase 5 | 25-28 | Polish & SDK | ⬜ Not Started |
 
-**Current Session**: Ready for Session 9  
-**Last Commit**: `feat: audio file utilities (Session 8)`  
-**Last Updated**: December 8, 2025  
-**Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Fingerprint engine working, ✅ Database lookup integrated, ✅ Crypto engine complete, ✅ Watermark embedding working
+**Current Session**: Ready for Session 10  
+**Last Commit**: `feat: express server with CBOR middleware (Session 9)`  
+**Last Updated**: December 9, 2025  
+**Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Fingerprint engine working, ✅ Database lookup integrated, ✅ Crypto engine complete, ✅ Watermark embedding working, ✅ Express server running, ✅ CBOR middleware complete
 
 ---
 
@@ -156,15 +156,15 @@ When a v1 session needs adjustment based on this framework:
 Update this section as you complete sessions:
 
 ```
-Session 1:  ✅ Complete
-Session 2:  ✅ Complete
-Session 3:  ✅ Complete
-Session 4:  ✅ Complete
-Session 5:  ✅ Complete
-Session 6:  ✅ Complete
-Session 7:  ✅ Complete
-Session 8:  ✅ Complete
-Session 9:  ⬜ Not Started
+Session 1:  ✅ Complete - Repository & project setup
+Session 2:  ✅ Complete - PostgreSQL & Docker setup
+Session 3:  ✅ Complete - Fingerprint engine (Chromaprint)
+Session 4:  ✅ Complete - Database integration for fingerprints
+Session 5:  ✅ Complete - Crypto engine (Ed25519 + CBOR)
+Session 6:  ✅ Complete - Watermark embedding (spread spectrum)
+Session 7:  ✅ Complete - Watermark extraction with offset search
+Session 8:  ✅ Complete - Audio file utilities
+Session 9:  ✅ Complete - Express server with CBOR middleware
 Session 10: ⬜ Not Started
 Session 11: ⬜ Not Started
 Session 12: ⬜ Not Started
@@ -3616,6 +3616,89 @@ _Use this section to track notes, blockers, or decisions made during implementat
 
 ---
 
+### Session 7 Notes (December 8, 2025)
+
+**Completed:**
+- Implemented watermark extraction with correlation-based decoding
+- Implemented offset search for snippet detection
+- Extraction works at any offset within audio (not just beginning)
+- Full round-trip tested: embed → extract → verify
+
+**Test Results:**
+- ✅ Extract payload from watermarked audio at offset 0
+- ✅ Extract from middle of audio (offset search)
+- ✅ Verify CRC and magic bytes on extraction
+- ✅ Handle corrupted/missing watermark gracefully
+
+**Carry Forward:**
+- Watermark engine complete (embed + extract)
+- Ready for audio utilities (Session 8)
+
+---
+
+### Session 8 Notes (December 8, 2025)
+
+**Completed:**
+- Implemented audio file utilities in `src/utils/audio.js`
+- WAV file reading and writing
+- Sample rate conversion utilities
+- Audio normalization functions
+- Format detection
+
+**Carry Forward:**
+- All core engines complete (fingerprint, crypto, watermark, audio)
+- Ready for API layer (Session 9)
+
+---
+
+### Session 9 Notes (December 9, 2025)
+
+**Completed:**
+- Created `src/config/index.js` - Centralized configuration with environment validation
+- Created `src/api/middleware/cbor.js` - Full CBOR request/response middleware
+- Updated `src/api/routes.js` - Router with info endpoint and placeholders
+- Updated `src/index.js` - Express server with middleware chain and error handlers
+
+**Test Results:**
+- ✅ Test 1: Health endpoint returns status, version, environment
+- ✅ Test 2: Protocol info endpoint (JSON default) - returns all endpoint details
+- ✅ Test 3: CBOR diagnostic mode - human-readable formatted output
+- ✅ Test 4: CBOR binary mode - correct Content-Type header
+- ✅ Test 5: 404 handler - proper error with helpful hint
+- ✅ Test 6: Placeholder endpoints - 501 with session information
+
+**Issues Encountered:**
+- Initial CBOR diagnostic mode returned `{}` instead of formatted output
+- Root cause: Express doesn't await async route handlers properly
+- Original `cbor.diagnose()` was async, causing timing issues
+
+**Decisions Made:**
+- Removed redundant `express.json()` middleware (CBOR middleware handles JSON fallback)
+- Implemented synchronous `formatCborDiagnostic()` function instead of async `cbor.diagnose()`
+- Diagnostic formatter follows RFC 8949 Appendix G notation (supports Buffer → `h'hex'`)
+- Made all route handlers synchronous for Express compatibility
+
+**Design Notes:**
+- CBOR middleware provides `res.orbit()` and `res.orbitError()` helper methods
+- Three response modes: CBOR binary, CBOR diagnostic, JSON (based on Accept header)
+- Configuration validation warns in dev, throws in production
+- Server exports both `app` and `startServer()` for testability
+
+**Files Created:**
+- `src/config/index.js` (97 lines) - Configuration management
+- `src/api/middleware/cbor.js` (207 lines) - CBOR middleware with diagnostic formatter
+
+**Files Updated:**
+- `src/api/routes.js` - Added /info endpoint, structured placeholders
+- `src/index.js` - Connected middleware, added error handlers
+
+**Carry Forward:**
+- Express server running on port 4000
+- CBOR middleware fully functional (parse + respond in 3 formats)
+- Ready for platform authentication (Session 10)
+
+---
+
 ### Session Notes Template:
 ```
 ## Session X Notes (Date)
@@ -3643,7 +3726,7 @@ _Use this section to track notes, blockers, or decisions made during implementat
 - Making architectural decisions (add to notes)
 - Changing dependencies (update install commands)
 
-**Last Updated**: December 8, 2025 - Session 6 Complete
+**Last Updated**: December 9, 2025 - Session 9 Complete
 
 ---
 

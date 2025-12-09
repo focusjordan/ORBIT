@@ -1,0 +1,207 @@
+/**
+ * ORBIT CBOR Middleware
+ * 
+ * Handles CBOR request parsing and response encoding.
+ * Falls back to JSON for debugging and testing convenience.
+ * 
+ * Per ORBIT_SPECIFICATION.md Section 8:
+ * - All requests and responses use Content-Type: application/cbor
+ * - For debugging, Accept: application/cbor-diagnostic returns human-readable CBOR
+ */
+
+const cbor = require('cbor');
+const config = require('../../config');
+
+const { contentTypes } = config.api;
+
+/**
+ * Format data in CBOR diagnostic notation (synchronous)
+ * Per RFC 8949 Appendix G, CBOR diagnostic notation is human-readable
+ * 
+ * For JSON-compatible data, it's similar to JSON with these differences:
+ * - Binary data shown as h'hexstring' (e.g., h'a1b2c3')
+ * - Byte strings shown as b64'base64string'
+ * 
+ * @param {any} data - Data to format
+ * @param {number} indent - Current indentation level
+ * @returns {string} CBOR diagnostic notation
+ */
+function formatCborDiagnostic(data, indent = 0) {
+  const spaces = '  '.repeat(indent);
+  const nextSpaces = '  '.repeat(indent + 1);
+  
+  if (data === null) return 'null';
+  if (data === undefined) return 'undefined';
+  
+  if (Buffer.isBuffer(data)) {
+    // Binary data in CBOR diagnostic notation: h'hexstring'
+    return `h'${data.toString('hex')}'`;
+  }
+  
+  if (Array.isArray(data)) {
+    if (data.length === 0) return '[]';
+    const items = data.map(item => `${nextSpaces}${formatCborDiagnostic(item, indent + 1)}`);
+    return `[\n${items.join(',\n')}\n${spaces}]`;
+  }
+  
+  if (typeof data === 'object') {
+    const keys = Object.keys(data);
+    if (keys.length === 0) return '{}';
+    const pairs = keys.map(key => {
+      const value = formatCborDiagnostic(data[key], indent + 1);
+      return `${nextSpaces}"${key}": ${value}`;
+    });
+    return `{\n${pairs.join(',\n')}\n${spaces}}`;
+  }
+  
+  if (typeof data === 'string') {
+    return JSON.stringify(data);
+  }
+  
+  if (typeof data === 'number' || typeof data === 'boolean') {
+    return String(data);
+  }
+  
+  return String(data);
+}
+
+/**
+ * CBOR body parser middleware
+ * Parses incoming request bodies as CBOR or JSON
+ */
+function cborBodyParser(req, res, next) {
+  const contentType = req.get('Content-Type') || '';
+  
+  // Skip if no body expected
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'DELETE') {
+    return next();
+  }
+  
+  // Collect raw body
+  const chunks = [];
+  
+  req.on('data', chunk => {
+    chunks.push(chunk);
+  });
+  
+  req.on('end', async () => {
+    const rawBody = Buffer.concat(chunks);
+    
+    // Empty body is fine for some requests
+    if (rawBody.length === 0) {
+      req.body = {};
+      return next();
+    }
+    
+    try {
+      // Parse based on content type
+      if (contentType.includes(contentTypes.cbor)) {
+        // Parse CBOR
+        req.body = await cbor.decodeFirst(rawBody);
+        req.bodyFormat = 'cbor';
+      } else if (contentType.includes(contentTypes.json)) {
+        // Parse JSON (for debugging/testing)
+        req.body = JSON.parse(rawBody.toString('utf8'));
+        req.bodyFormat = 'json';
+      } else {
+        // Default: try CBOR first, fall back to JSON
+        try {
+          req.body = await cbor.decodeFirst(rawBody);
+          req.bodyFormat = 'cbor';
+        } catch {
+          try {
+            req.body = JSON.parse(rawBody.toString('utf8'));
+            req.bodyFormat = 'json';
+          } catch {
+            return res.status(400).json({
+              error: 'Invalid request body',
+              message: 'Body must be valid CBOR or JSON',
+            });
+          }
+        }
+      }
+      
+      next();
+    } catch (error) {
+      return res.status(400).json({
+        error: 'Parse error',
+        message: error.message,
+      });
+    }
+  });
+  
+  req.on('error', (error) => {
+    return res.status(400).json({
+      error: 'Request error',
+      message: error.message,
+    });
+  });
+}
+
+/**
+ * CBOR response helper
+ * Adds res.cbor() method for sending CBOR responses
+ */
+function cborResponseHelper(req, res, next) {
+  /**
+   * Send response as CBOR or JSON based on Accept header
+   * @param {Object} data - Response data
+   * @param {number} status - HTTP status code (default 200)
+   */
+  res.orbit = function(data, status = 200) {
+    const accept = req.get('Accept') || '';
+    
+    // Check what format client accepts
+    if (accept.includes(contentTypes.cborDiagnostic)) {
+      // Diagnostic mode: human-readable CBOR representation
+      // Using synchronous formatting to avoid Express async timing issues
+      const diagnostic = formatCborDiagnostic(data);
+      res
+        .status(status)
+        .set('Content-Type', contentTypes.cborDiagnostic)
+        .send(diagnostic);
+    } else if (accept.includes(contentTypes.cbor)) {
+      // Standard CBOR binary
+      res
+        .status(status)
+        .set('Content-Type', contentTypes.cbor)
+        .send(cbor.encode(data));
+    } else {
+      // Default to JSON for easier debugging/testing
+      res
+        .status(status)
+        .set('Content-Type', contentTypes.json)
+        .json(data);
+    }
+  };
+  
+  /**
+   * Send error response
+   * @param {string} error - Error type
+   * @param {string} message - Error message
+   * @param {number} status - HTTP status code (default 400)
+   */
+  res.orbitError = function(error, message, status = 400) {
+    res.orbit({ error, message }, status);
+  };
+  
+  next();
+}
+
+/**
+ * Combined CBOR middleware
+ * Apply both body parsing and response helpers
+ */
+function cborMiddleware(req, res, next) {
+  // Add response helper first
+  cborResponseHelper(req, res, () => {
+    // Then parse body
+    cborBodyParser(req, res, next);
+  });
+}
+
+module.exports = {
+  cborBodyParser,
+  cborResponseHelper,
+  cborMiddleware,
+};
