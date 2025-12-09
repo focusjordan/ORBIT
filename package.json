@@ -17,6 +17,7 @@
     "test:audio": "node tests/utils/audio.test.js",
     "test:auth": "node tests/api/auth.test.js",
     "test:register": "node tests/api/register.test.js",
+    "test:register:full": "node tests/api/register-full-metadata.test.js",
     "generate:keypair": "node scripts/generate-keypair.js",
     "seed:platform": "node scripts/seed-platform.js"
   },
