@@ -87,11 +87,15 @@ async function platformAuth(req, res, next) {
       );
     }
     
-    // Get the data that was signed (the request body)
+    // Get the data that was signed (the request body or parsed metadata)
+    // For multipart requests, the metadata is in req.parsedMetadata
+    // For CBOR/JSON requests, it's in req.body
     // For GET requests with no body, sign an empty object
-    const dataToVerify = req.body && Object.keys(req.body).length > 0 
-      ? req.body 
-      : {};
+    const dataToVerify = req.parsedMetadata 
+      ? req.parsedMetadata
+      : (req.body && Object.keys(req.body).length > 0 
+        ? req.body 
+        : {});
     
     // Verify the signature
     const isValid = OrbitCrypto.verify(
@@ -152,3 +156,4 @@ module.exports = {
   platformAuth,
   optionalAuth,
 };
+

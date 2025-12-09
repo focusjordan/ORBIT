@@ -29,6 +29,10 @@ const config = {
     // Platform ID for this ORBIT instance
     platformId: process.env.ORBIT_PLATFORM_ID || 'orbit-dev',
     
+    // Ed25519 private key for this ORBIT node (base64-encoded 64-byte keypair)
+    // Used to sign ORBIT payloads created by this node
+    privateKey: process.env.ORBIT_PRIVATE_KEY || null,
+    
     // Protocol version
     version: '1.0.0',
     
@@ -74,6 +78,11 @@ function validateConfig() {
   // Check for default secret key
   if (config.orbit.secretKey === 'development-secret-key-change-in-production') {
     warnings.push('ORBIT_SECRET_KEY is using default value - set a secure key for production');
+  }
+  
+  // Check for ORBIT node private key
+  if (!config.orbit.privateKey) {
+    warnings.push('ORBIT_PRIVATE_KEY not set - this node cannot sign payloads');
   }
   
   // Check for database URL

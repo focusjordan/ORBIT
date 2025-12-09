@@ -77,6 +77,11 @@ function cborBodyParser(req, res, next) {
     return next();
   }
   
+  // Skip multipart requests (handled by multer middleware)
+  if (contentType.includes('multipart/form-data')) {
+    return next();
+  }
+  
   // Collect raw body
   const chunks = [];
   
@@ -87,6 +92,8 @@ function cborBodyParser(req, res, next) {
   req.on('end', async () => {
     const rawBody = Buffer.concat(chunks);
     
+    console.log(`[CBOR] Received body: ${rawBody.length} bytes, Content-Type: ${contentType}`);
+    
     // Empty body is fine for some requests
     if (rawBody.length === 0) {
       req.body = {};
@@ -96,8 +103,13 @@ function cborBodyParser(req, res, next) {
     try {
       // Parse based on content type
       if (contentType.includes(contentTypes.cbor)) {
-        // Parse CBOR
-        req.body = await cbor.decodeFirst(rawBody);
+        // Parse CBOR with increased buffer size (highWaterMark) for large payloads
+        // Default is 16KB, but audio files can be 200KB+
+        console.log(`[CBOR] Attempting to decode ${rawBody.length} bytes as CBOR...`);
+        req.body = cbor.decodeFirstSync(rawBody, {
+          highWaterMark: 1024 * 1024 * 10 // 10MB buffer
+        });
+        console.log(`[CBOR] Successfully decoded CBOR`);
         req.bodyFormat = 'cbor';
       } else if (contentType.includes(contentTypes.json)) {
         // Parse JSON (for debugging/testing)
@@ -106,7 +118,9 @@ function cborBodyParser(req, res, next) {
       } else {
         // Default: try CBOR first, fall back to JSON
         try {
-          req.body = await cbor.decodeFirst(rawBody);
+          req.body = cbor.decodeFirstSync(rawBody, {
+            highWaterMark: 1024 * 1024 * 10 // 10MB buffer
+          });
           req.bodyFormat = 'cbor';
         } catch {
           try {
@@ -181,8 +195,12 @@ function cborResponseHelper(req, res, next) {
    * @param {string} message - Error message
    * @param {number} status - HTTP status code (default 400)
    */
-  res.orbitError = function(error, message, status = 400) {
-    res.orbit({ error, message }, status);
+  res.orbitError = function(error, message, status = 400, details = null) {
+    const response = { error, message };
+    if (details) {
+      response.details = details;
+    }
+    res.orbit(response, status);
   };
   
   next();

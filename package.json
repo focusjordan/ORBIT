@@ -16,6 +16,7 @@
     "test:watermark": "npm run test:watermark:embed && npm run test:watermark:extract",
     "test:audio": "node tests/utils/audio.test.js",
     "test:auth": "node tests/api/auth.test.js",
+    "test:register": "node tests/api/register.test.js",
     "generate:keypair": "node scripts/generate-keypair.js",
     "seed:platform": "node scripts/seed-platform.js"
   },
@@ -37,12 +38,14 @@
     "cbor": "^10.0.11",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "multer": "^2.0.2",
     "pg": "^8.16.3",
     "tweetnacl": "^1.0.3",
     "wav-decoder": "^1.3.0",
     "wav-encoder": "^1.3.0"
   },
   "devDependencies": {
+    "form-data": "^4.0.5",
     "nodemon": "^3.1.11"
   }
 }

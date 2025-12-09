@@ -15,6 +15,10 @@
 const express = require('express');
 const config = require('../config');
 const { platformAuth, optionalAuth } = require('./middleware/auth');
+const { registerUpload, parseCborMetadata } = require('./middleware/multipart');
+
+// Import handlers
+const registerHandler = require('./handlers/register');
 
 const router = express.Router();
 
@@ -32,7 +36,7 @@ router.get('/info', (req, res) => {
     version: config.orbit.version,
     description: config.orbit.description,
     endpoints: [
-      { method: 'POST', path: '/orbit/v1/register', description: 'Register new audio', status: 'pending' },
+      { method: 'POST', path: '/orbit/v1/register', description: 'Register new audio', status: 'active' },
       { method: 'POST', path: '/orbit/v1/verify', description: 'Verify audio provenance', status: 'pending' },
       { method: 'POST', path: '/orbit/v1/transfer', description: 'Initiate B2B transfer', status: 'pending' },
       { method: 'POST', path: '/orbit/v1/accept', description: 'Accept incoming transfer', status: 'pending' },
@@ -66,16 +70,25 @@ router.post('/auth-test', platformAuth, (req, res) => {
 /**
  * POST /orbit/v1/register
  * Register new audio with ORBIT
- * Handler: Session 11
+ * Handler: Session 11 ✅
  * Auth: Required (platformAuth)
+ * Format: multipart/form-data (metadata as CBOR + audio as binary)
+ * 
+ * Note: Uses multipart instead of pure CBOR due to cbor library
+ * limitations with payloads >200KB. Metadata still uses CBOR.
+ * 
+ * Middleware order:
+ * 1. registerUpload: Parse multipart (metadata + audio files)
+ * 2. parseCborMetadata: Decode CBOR metadata → req.parsedMetadata
+ * 3. platformAuth: Verify signature using req.parsedMetadata
+ * 4. registerHandler: Process registration
  */
-router.post('/register', platformAuth, (req, res) => {
-  res.orbitError(
-    'not_implemented',
-    'Registration endpoint not yet implemented. Coming in Session 11.',
-    501
-  );
-});
+router.post('/register', 
+  registerUpload,        // 1. Parse multipart (metadata + audio)
+  parseCborMetadata,     // 2. Decode CBOR metadata → req.parsedMetadata
+  platformAuth,          // 3. Authenticate platform (uses req.parsedMetadata)
+  registerHandler        // 4. Process registration
+);
 
 /**
  * POST /orbit/v1/verify

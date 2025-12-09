@@ -107,7 +107,7 @@ const queries = {
   },
   
   /**
-   * Insert a new registration
+   * Insert a new registration with full metadata support
    * @param {Object} data - Registration data
    * @returns {Promise<{id: number, created_at: Date}>}
    */
@@ -115,24 +115,67 @@ const queries = {
     const result = await pool.query(
       `INSERT INTO orbit_registrations (
         fingerprint_hash, fingerprint_raw, watermark_hash,
-        title, artist, duration_ms, format,
+        isrc, upc, title, artist, duration_ms,
+        p_line, c_line, primary_genre, language,
+        bitrate, sample_rate, channels, format,
+        album_title, track_number, secondary_genre, release_date, original_release_date,
+        label, catalog_number, version, parental_advisory,
+        featured_artists, composers, lyricists, writers, producers,
+        remixer, recording_location, recording_year,
+        iswc, territories, preview_start_ms,
         owner_id, origin_platform, origin_timestamp, origin_signature,
-        payload_cbor, entry_hash
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        payload_cbor, prev_entry_hash, entry_hash
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+        $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+        $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
+        $41, $42, $43
+      )
       RETURNING id, created_at`,
       [
         data.fingerprint_hash,
         data.fingerprint_raw,
         data.watermark_hash,
+        data.isrc || null,
+        data.upc || null,
         data.title,
         data.artist,
         data.duration_ms,
-        data.format,
+        data.p_line || null,
+        data.c_line || null,
+        data.primary_genre || null,
+        data.language || null,
+        data.bitrate || null,
+        data.sample_rate || null,
+        data.channels || null,
+        data.format || null,
+        data.album_title || null,
+        data.track_number || null,
+        data.secondary_genre || null,
+        data.release_date || null,
+        data.original_release_date || null,
+        data.label || null,
+        data.catalog_number || null,
+        data.version || null,
+        data.parental_advisory || null,
+        data.featured_artists ? JSON.stringify(data.featured_artists) : null,
+        data.composers ? JSON.stringify(data.composers) : null,
+        data.lyricists ? JSON.stringify(data.lyricists) : null,
+        data.writers ? JSON.stringify(data.writers) : null,
+        data.producers ? JSON.stringify(data.producers) : null,
+        data.remixer || null,
+        data.recording_location || null,
+        data.recording_year || null,
+        data.iswc || null,
+        data.territories ? JSON.stringify(data.territories) : null,
+        data.preview_start_ms || null,
         data.owner_id,
         data.origin_platform,
         data.origin_timestamp,
         data.origin_signature,
         data.payload_cbor,
+        data.prev_entry_hash || null,
         data.entry_hash
       ]
     );
