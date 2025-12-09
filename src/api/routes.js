@@ -19,6 +19,7 @@ const { registerUpload, parseCborMetadata } = require('./middleware/multipart');
 
 // Import handlers
 const registerHandler = require('./handlers/register');
+const verifyHandler = require('./handlers/verify');
 
 const router = express.Router();
 
@@ -37,7 +38,7 @@ router.get('/info', (req, res) => {
     description: config.orbit.description,
     endpoints: [
       { method: 'POST', path: '/orbit/v1/register', description: 'Register new audio', status: 'active' },
-      { method: 'POST', path: '/orbit/v1/verify', description: 'Verify audio provenance', status: 'pending' },
+      { method: 'POST', path: '/orbit/v1/verify', description: 'Verify audio provenance', status: 'active' },
       { method: 'POST', path: '/orbit/v1/transfer', description: 'Initiate B2B transfer', status: 'pending' },
       { method: 'POST', path: '/orbit/v1/accept', description: 'Accept incoming transfer', status: 'pending' },
       { method: 'GET', path: '/orbit/v1/chain/:fingerprint', description: 'Get full custody chain', status: 'pending' },
@@ -93,16 +94,14 @@ router.post('/register',
 /**
  * POST /orbit/v1/verify
  * Verify audio provenance and extract metadata
- * Handler: Session 12
+ * Handler: Session 12 ✅
  * Auth: Optional (verification works for anyone, platform context optional)
+ * 
+ * Request: CBOR/JSON with base64-encoded audio
+ * Response: Complete provenance information including fingerprint match,
+ *           watermark validation, signature verification, and metadata
  */
-router.post('/verify', optionalAuth, (req, res) => {
-  res.orbitError(
-    'not_implemented',
-    'Verification endpoint not yet implemented. Coming in Session 12.',
-    501
-  );
-});
+router.post('/verify', optionalAuth, verifyHandler);
 
 /**
  * POST /orbit/v1/transfer
