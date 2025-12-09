@@ -660,9 +660,11 @@ fpcalc -version
 
 ### Content Type
 
-All requests and responses use `Content-Type: application/cbor`
+**Default**: All requests and responses use `Content-Type: application/cbor`
 
 For debugging, `Accept: application/cbor-diagnostic` returns human-readable CBOR.
+
+**Exception**: `POST /orbit/v1/register` uses `multipart/form-data` with CBOR-encoded metadata + raw binary audio. See endpoint documentation for details.
 
 ### Authentication
 
@@ -675,15 +677,50 @@ Headers:
 
 ### Endpoints
 
-#### POST /orbit/v1/register
+**Implementation Status** (as of December 9, 2025):
+- ✅ `POST /orbit/v1/register` - Fully implemented with multipart/CBOR architecture
+- ⬜ `POST /orbit/v1/verify` - Planned for Session 12
+- ⬜ `POST /orbit/v1/transfer` - Planned for Session 13
+- ⬜ `POST /orbit/v1/accept` - Planned for Session 13
+- ⬜ `GET /orbit/v1/chain/:fingerprint` - Planned for Session 14
+
+---
+
+#### POST /orbit/v1/register ✅ Implemented
 
 Register new audio with ORBIT.
 
-**Request**:
+> **Implementation Note**: Uses `multipart/form-data` instead of pure CBOR due to `cbor` library limitations with large payloads (>200KB). Metadata is still CBOR-encoded (maintaining protocol efficiency), while audio is sent as raw binary (optimal for large files). This architectural decision separates structured protocol data from bulk binary data.
+
+**Request** (multipart/form-data):
+```
+Content-Type: multipart/form-data; boundary=----...
+X-ORBIT-Platform: <platform_id>
+X-ORBIT-Signature: <base64_ed25519_signature_of_metadata>
+
+------...
+Content-Disposition: form-data; name="metadata"; filename="metadata.cbor"
+Content-Type: application/cbor
+
+<CBOR-encoded metadata object>
+------...
+Content-Disposition: form-data; name="audio"; filename="audio.mp3"
+Content-Type: audio/mpeg
+
+<raw binary audio data>
+------...--
+```
+
+**Metadata Structure** (CBOR-encoded):
 ```cbor
 {
-  audio: <binary>,              // Raw audio file bytes
-  metadata: {
+  // Owner
+  owner_id: <uuid>,
+  
+  // Core (required)
+  title: "Track Name",
+  artist: "Artist Name",
+  duration_ms: 234567,
     // Core (required)
     title: "Track Name",
     artist: "Artist Name",

@@ -14,15 +14,15 @@
 |-------|----------|-------|--------|
 | Phase 0 | 1-2 | Project Setup | ✅ Complete |
 | Phase 1 | 3-8 | Core Engines (v1) | ✅ Complete |
-| Phase 2 | 9-14 | API Layer (v1) | 🟡 In Progress (Session 9 complete) |
+| Phase 2 | 9-14 | API Layer (v1) | 🟡 In Progress (Session 11 complete) |
 | Phase 3 | 15-17 | Ohnrshyp Integration | ⬜ Not Started |
 | Phase 4 | 18-24 | Neural Enhancements (v2) | ⬜ Not Started |
 | Phase 5 | 25-28 | Polish & SDK | ⬜ Not Started |
 
-**Current Session**: Ready for Session 11  
-**Last Commit**: `feat: platform authentication middleware (Session 10)`  
+**Current Session**: Ready for Session 12  
+**Last Commit**: `test: add comprehensive full metadata registration test`  
 **Last Updated**: December 9, 2025  
-**Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Fingerprint engine working, ✅ Database lookup integrated, ✅ Crypto engine complete, ✅ Watermark embedding working, ✅ Express server running, ✅ CBOR middleware complete, ✅ Platform authentication working
+**Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Fingerprint engine working, ✅ Database lookup integrated, ✅ Crypto engine complete, ✅ Watermark embedding working, ✅ Express server running, ✅ CBOR middleware complete, ✅ Platform authentication working, ✅ Register endpoint complete with full 43-field schema
 
 ---
 
@@ -166,7 +166,7 @@ Session 7:  ✅ Complete - Watermark extraction with offset search
 Session 8:  ✅ Complete - Audio file utilities
 Session 9:  ✅ Complete - Express server with CBOR middleware
 Session 10: ✅ Complete - Platform authentication middleware
-Session 11: ⬜ Not Started
+Session 11: ✅ Complete
 Session 12: ⬜ Not Started
 Session 13: ⬜ Not Started
 Session 14: ⬜ Not Started
@@ -2733,34 +2733,74 @@ curl localhost:4000/orbit/v1/info
 
 ---
 
-### Session 11: Register Endpoint
+### Session 11: Register Endpoint ✅
 
 **Goal**: `POST /orbit/v1/register` fully working
 
 **Prerequisites**: Session 10 complete
 
+**Status**: ✅ Complete (December 9, 2025)
+
 > ⚠️ **V2 Note**: In Session 21, registration is enhanced with auto-metadata extraction (genre, mood, BPM, key via CLAP/MERT). Design the metadata handling to be **extensible** — use a modular approach so AI metadata can be injected into the pipeline later.
 
 **Tasks**:
-- [ ] Create `src/api/handlers/register.js`
-- [ ] Accept audio (base64) + metadata in request body
-- [ ] Generate fingerprint using `OrbitFingerprint`
-- [ ] Check for duplicate via fingerprint lookup
-- [ ] Create CBOR payload with all metadata
-- [ ] Sign payload with platform key
-- [ ] Create watermark payload and embed into audio
-- [ ] Insert registration into database with entry hash
-- [ ] Return registration ID, fingerprint hash, watermarked audio
+- [x] Create `src/api/handlers/register.js`
+- [x] Accept audio + metadata in request body
+- [x] Generate fingerprint using `OrbitFingerprint`
+- [x] Check for duplicate via fingerprint lookup
+- [x] Create CBOR payload with all metadata
+- [x] Sign payload with ORBIT node's private key
+- [x] Create watermark payload and embed into audio
+- [x] Insert registration into database with entry hash
+- [x] Return registration ID, fingerprint hash, watermarked audio
+- [x] **NEW**: Multipart middleware for large audio files
+- [x] **NEW**: Full 43-field database schema validation
+- [x] **NEW**: CBOR metadata + raw binary audio separation
 
 **Key Implementation**: See `ORBIT_SPECIFICATION.md` Section 10 (register.js example)
 
-**Commit Message**: `feat: register endpoint`
+**Architectural Decision - Multipart over Pure CBOR**:
 
-**Verify**:
+During implementation, discovered that the `cbor` npm package (v10.x) has a limitation with payloads >200-300KB. Since base64-encoded audio (~320KB for test file) exceeded this, we pivoted from pure CBOR to **multipart/form-data**:
+
+- **CBOR still used** for metadata (protocol integrity maintained)
+- **Binary audio** sent as raw bytes (more efficient)
+- **Separation of concerns**: Structured protocol data vs bulk binary data
+- **Architecture**: `multipart(metadata: CBOR blob, audio: binary)` instead of `CBOR(metadata + base64_audio)`
+
+This design is actually **superior** to pure CBOR for this use case:
+- Faster (no base64 encoding overhead)
+- More scalable (streaming binary data)
+- Cleaner separation (protocol vs payload)
+- CBOR retained for its purpose (efficient structured data)
+
+**Files Created**:
+- `src/api/handlers/register.js` - Complete registration flow
+- `src/api/middleware/multipart.js` - Multipart + CBOR parsing
+- `tests/api/register.test.js` - Basic registration test
+- `tests/api/register-full-metadata.test.js` - All 36 user fields validated
+
+**Commit Messages**: 
+- `feat: POST /orbit/v1/register endpoint (Session 11)`
+- `test: add comprehensive full metadata registration test`
+
+**Tests Passing**:
 ```bash
-# Create test request with audio + metadata
-# Should return registration_id, fingerprint_hash, watermarked_audio
+npm run test:register        # ✅ Basic registration + duplicate detection
+npm run test:register:full   # ✅ All 43 fields (36 user + 7 system)
 ```
+
+**Verified**:
+- ✅ Multipart upload (CBOR metadata + binary audio)
+- ✅ Platform authentication with Ed25519 signatures
+- ✅ Audio fingerprinting and duplicate detection
+- ✅ CBOR payload construction and signing
+- ✅ Spread spectrum watermark embedding
+- ✅ Database insertion with full schema (43 fields)
+- ✅ Watermarked audio returned (3.5MB WAV)
+- ✅ JSONB arrays (contributors, territories)
+- ✅ Extended metadata (version, recording info, catalog number)
+- ✅ Preview start timestamp support
 
 ---
 
