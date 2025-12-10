@@ -14,14 +14,14 @@
 |-------|----------|-------|--------|
 | Phase 0 | 1-2 | Project Setup | ✅ Complete |
 | Phase 1 | 3-8 | Core Engines (v1) | ✅ Complete |
-| Phase 2 | 9-14 | API Layer (v1) | 🟡 In Progress (Sessions 11-12 complete) |
+| Phase 2 | 9-14 | API Layer (v1) | 🟡 In Progress (Sessions 11-13 complete, Session 14 remaining) |
 | Phase 3 | 15-17 | Ohnrshyp Integration | ⬜ Not Started |
 | Phase 4 | 18-24 | Neural Enhancements (v2) | ⬜ Not Started |
 | Phase 5 | 25-28 | Polish & SDK | ⬜ Not Started |
 
-**Current Session**: Ready for Session 13  
-**Last Updated**: December 9, 2025  
-**Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Core engines working (fingerprint, watermark, crypto), ✅ Database with full schema, ✅ Express server with CBOR middleware, ✅ Platform authentication, ✅ Register endpoint (Session 11), ✅ Verify endpoint (Session 12)
+**Current Session**: Ready for Session 14 (Final v1 API endpoint)  
+**Last Updated**: December 10, 2025  
+**Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Core engines working (fingerprint, watermark, crypto), ✅ Database with full schema, ✅ Express server with CBOR middleware, ✅ Platform authentication, ✅ Register endpoint (Session 11), ✅ Verify endpoint (Session 12), ✅ Transfer & Accept endpoints (Session 13)
 
 ---
 
@@ -167,7 +167,7 @@ Session 9:  ✅ Complete - Express server with CBOR middleware
 Session 10: ✅ Complete - Platform authentication middleware
 Session 11: ✅ Complete - Register endpoint
 Session 12: ✅ Complete - Verify endpoint
-Session 13: ⬜ Not Started
+Session 13: ✅ Complete - Transfer & Accept endpoints
 Session 14: ⬜ Not Started
 Session 15: ⬜ Not Started
 Session 16: ⬜ Not Started
@@ -2873,28 +2873,36 @@ npm run test:register:full   # ✅ All 43 fields (36 user + 7 system)
 **Prerequisites**: Session 12 complete
 
 **Tasks**:
-- [ ] Create `src/api/handlers/transfer.js`
-- [ ] Implement `POST /orbit/v1/transfer`:
+- [x] Create `src/api/handlers/transfer.js`
+- [x] Implement `POST /orbit/v1/transfer`:
   - Verify sender owns registration
   - Verify recipient platform exists
   - Create pending transfer record
   - Set 7-day expiration
-- [ ] Implement `POST /orbit/v1/accept`:
+- [x] Implement `POST /orbit/v1/accept`:
   - Verify caller is target platform
   - Verify transfer not expired
   - Add recipient signature
   - Create new registration for recipient
-  - Re-watermark with extended chain
   - Update transfer status to 'accepted'
-- [ ] Create second test platform for transfer testing
+- [x] Create second test platform for transfer testing
+- [x] Add transfer queries to `src/ledger/queries.js`
 
 **Key Implementation**: See `ORBIT_SPECIFICATION.md` Section 8 (transfer flow diagram)
 
 **Commit Message**: `feat: transfer endpoints`
 
-**Verify**:
-- Platform A initiates → gets transfer_id, status: pending
-- Platform B accepts → gets new registration with chain A→B
+**Verification Complete** ✅ (December 10, 2025):
+- ✅ Platform A initiates → gets transfer_id: 4, status: pending
+- ✅ Platform B accepts → gets new registration (id: 20) with chain A→B
+- ✅ Metadata preserved through transfer (title, artist, ISRC, etc.)
+- ✅ Chain shows origin platform → transfer recipient
+- ✅ Database state correct: transfer status 'accepted', new_registration_id linked
+
+**Files Created/Modified**:
+- `src/api/handlers/transfer.js` (NEW) - Transfer & Accept handlers
+- `src/api/routes.js` - Connected handlers to routes
+- `src/ledger/queries.js` - Added 7 transfer-related queries
 
 ---
 

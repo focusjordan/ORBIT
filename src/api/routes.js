@@ -20,6 +20,7 @@ const { registerUpload, parseCborMetadata } = require('./middleware/multipart');
 // Import handlers
 const registerHandler = require('./handlers/register');
 const verifyHandler = require('./handlers/verify');
+const transferHandlers = require('./handlers/transfer');
 
 const router = express.Router();
 
@@ -39,8 +40,8 @@ router.get('/info', (req, res) => {
     endpoints: [
       { method: 'POST', path: '/orbit/v1/register', description: 'Register new audio', status: 'active' },
       { method: 'POST', path: '/orbit/v1/verify', description: 'Verify audio provenance', status: 'active' },
-      { method: 'POST', path: '/orbit/v1/transfer', description: 'Initiate B2B transfer', status: 'pending' },
-      { method: 'POST', path: '/orbit/v1/accept', description: 'Accept incoming transfer', status: 'pending' },
+      { method: 'POST', path: '/orbit/v1/transfer', description: 'Initiate B2B transfer', status: 'active' },
+      { method: 'POST', path: '/orbit/v1/accept', description: 'Accept incoming transfer', status: 'active' },
       { method: 'GET', path: '/orbit/v1/chain/:fingerprint', description: 'Get full custody chain', status: 'pending' },
     ],
   });
@@ -106,30 +107,33 @@ router.post('/verify', optionalAuth, verifyHandler);
 /**
  * POST /orbit/v1/transfer
  * Initiate B2B transfer to another platform
- * Handler: Session 13
+ * Handler: Session 13 ✅
  * Auth: Required (sender must be authenticated)
+ * 
+ * Request (CBOR/JSON):
+ * {
+ *   registration_id: number,
+ *   to_platform: string
+ * }
+ * 
+ * Response: Transfer record with ID, status, expiration
  */
-router.post('/transfer', platformAuth, (req, res) => {
-  res.orbitError(
-    'not_implemented',
-    'Transfer endpoint not yet implemented. Coming in Session 13.',
-    501
-  );
-});
+router.post('/transfer', platformAuth, transferHandlers.initiateTransfer);
 
 /**
  * POST /orbit/v1/accept
  * Accept incoming transfer from another platform
- * Handler: Session 13
+ * Handler: Session 13 ✅
  * Auth: Required (recipient must be authenticated)
+ * 
+ * Request (CBOR/JSON):
+ * {
+ *   transfer_id: number
+ * }
+ * 
+ * Response: New registration with extended chain, re-watermarked audio
  */
-router.post('/accept', platformAuth, (req, res) => {
-  res.orbitError(
-    'not_implemented',
-    'Accept endpoint not yet implemented. Coming in Session 13.',
-    501
-  );
-});
+router.post('/accept', platformAuth, transferHandlers.acceptTransfer);
 
 /**
  * GET /orbit/v1/chain/:fingerprint

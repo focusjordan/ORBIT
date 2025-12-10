@@ -218,6 +218,130 @@ const queries = {
       `DELETE FROM orbit_registrations WHERE id = $1`,
       [id]
     );
+  },
+  
+  // ============================================================================
+  // Transfer Queries (Session 13)
+  // ============================================================================
+  
+  /**
+   * Create a new transfer record
+   * @param {Object} data - Transfer data
+   * @returns {Promise<{id: number, expires_at: Date}>}
+   */
+  insertTransfer: async (data) => {
+    const result = await pool.query(
+      `INSERT INTO orbit_transfers (
+        registration_id, from_platform, to_platform, from_signature
+      ) VALUES ($1, $2, $3, $4)
+      RETURNING id, status, initiated_at, expires_at`,
+      [
+        data.registration_id,
+        data.from_platform,
+        data.to_platform,
+        data.from_signature
+      ]
+    );
+    return result.rows[0];
+  },
+  
+  /**
+   * Get transfer by ID
+   * @param {number} transferId - Transfer ID
+   * @returns {Promise<Object|undefined>}
+   */
+  getTransfer: async (transferId) => {
+    const result = await pool.query(
+      `SELECT * FROM orbit_transfers WHERE id = $1`,
+      [transferId]
+    );
+    return result.rows[0];
+  },
+  
+  /**
+   * Update transfer status and add recipient signature
+   * @param {number} transferId - Transfer ID
+   * @param {Object} data - Update data {status, to_signature, new_registration_id}
+   * @returns {Promise<Object>}
+   */
+  updateTransfer: async (transferId, data) => {
+    const result = await pool.query(
+      `UPDATE orbit_transfers
+       SET status = $2::varchar,
+           to_signature = $3,
+           new_registration_id = $4,
+           accepted_at = CASE WHEN $2::varchar = 'accepted' THEN NOW() ELSE accepted_at END
+       WHERE id = $1
+       RETURNING *`,
+      [
+        transferId,
+        data.status,
+        data.to_signature,
+        data.new_registration_id || null
+      ]
+    );
+    return result.rows[0];
+  },
+  
+  /**
+   * Get all transfers for a registration
+   * @param {number} registrationId - Registration ID
+   * @returns {Promise<Array>}
+   */
+  getTransfersByRegistration: async (registrationId) => {
+    const result = await pool.query(
+      `SELECT * FROM orbit_transfers
+       WHERE registration_id = $1
+       ORDER BY initiated_at ASC`,
+      [registrationId]
+    );
+    return result.rows;
+  },
+  
+  /**
+   * Get pending transfers for a platform (recipient)
+   * @param {string} platformId - Platform ID
+   * @returns {Promise<Array>}
+   */
+  getPendingTransfersForPlatform: async (platformId) => {
+    const result = await pool.query(
+      `SELECT * FROM orbit_transfers
+       WHERE to_platform = $1
+         AND status = 'pending'
+         AND expires_at > NOW()
+       ORDER BY initiated_at ASC`,
+      [platformId]
+    );
+    return result.rows;
+  },
+  
+  /**
+   * Check if registration is owned by platform
+   * @param {number} registrationId - Registration ID
+   * @param {string} platformId - Platform ID
+   * @returns {Promise<boolean>}
+   */
+  registrationOwnedByPlatform: async (registrationId, platformId) => {
+    const result = await pool.query(
+      `SELECT EXISTS(
+        SELECT 1 FROM orbit_registrations
+        WHERE id = $1 AND origin_platform = $2
+      ) as exists`,
+      [registrationId, platformId]
+    );
+    return result.rows[0].exists;
+  },
+  
+  /**
+   * Delete transfer by ID (for test cleanup)
+   * @param {number} id - Transfer ID
+   * @returns {Promise<void>}
+   */
+  deleteTransfer: async (id) => {
+    await pool.query(
+      `DELETE FROM orbit_transfers WHERE id = $1`,
+      [id]
+    );
   }
 };
 
