@@ -44,3 +44,4 @@ models/
 *.flac
 !tests/fixtures/*.mp3
 !tests/fixtures/*.wav
+.venv

@@ -11,7 +11,12 @@
  * 4. Sign payload with platform key
  * 5. Create watermark payload and embed into audio
  * 6. Insert registration into database
- * 7. Return registration ID, fingerprint, and watermarked audio
+ * 7. Optionally compute MERT embedding (Session 19)
+ * 8. Return registration ID, fingerprint, and watermarked audio
+ * 
+ * Session 19: Added optional MERT semantic fingerprinting
+ * - Set ORBIT_ENABLE_MERT_ON_REGISTER=true to auto-compute MERT embeddings
+ * - Or pass include_mert: true in metadata for per-request control
  * 
  * V2 Note: In Session 21, this will be enhanced with auto-metadata extraction
  * (genre, mood, BPM, key via CLAP/MERT). The metadata handling is designed to be
@@ -24,6 +29,25 @@ const OrbitWatermark = require('../../engines/watermark');
 const queries = require('../../ledger/queries');
 const config = require('../../config');
 const AudioUtils = require('../../utils/audio');
+
+// MERT is optional - only load if available (Session 19)
+let mertModule = null;
+async function getMertModule() {
+  if (mertModule === null) {
+    try {
+      mertModule = require('../../ml/mert');
+      const envCheck = await mertModule.checkPythonEnvironment();
+      if (!envCheck.available) {
+        console.log('⚠️  MERT unavailable:', envCheck.message);
+        mertModule = false; // Mark as unavailable
+      }
+    } catch (e) {
+      console.log('⚠️  MERT module not loaded:', e.message);
+      mertModule = false;
+    }
+  }
+  return mertModule || null;
+}
 
 /**
  * Validate required metadata fields
@@ -358,13 +382,70 @@ async function registerHandler(req, res) {
     console.log(`✅ Registration complete! ID: ${registration.id}`);
     
     // ========================================================================
-    // 8. BUILD & RETURN RESPONSE
+    // 8. OPTIONAL: COMPUTE MERT EMBEDDING (Session 19)
+    // ========================================================================
+    
+    let mertEmbedding = null;
+    let mertSimilar = [];
+    
+    // Check if MERT is enabled (via env or per-request)
+    const enableMert = process.env.ORBIT_ENABLE_MERT_ON_REGISTER === 'true' 
+                       || metadata.include_mert === true;
+    
+    if (enableMert) {
+      const mert = await getMertModule();
+      
+      if (mert) {
+        try {
+          console.log('🧠 Computing MERT semantic embedding...');
+          const mertResult = await mert.getEmbedding(audioBuffer, { verbose: true });
+          
+          // Convert to PostgreSQL vector format
+          const pgVector = mert.embeddingToPostgres(mertResult.embedding);
+          
+          // Update registration with MERT embedding
+          await queries.updateMertEmbedding(registration.id, pgVector);
+          console.log(`✅ MERT embedding stored (${mertResult.embedding.length} dims)`);
+          
+          // Find similar tracks
+          mertSimilar = await queries.findSimilarByMertEmbedding(pgVector, {
+            threshold: 0.5,
+            limit: 5,
+            excludeId: registration.id
+          });
+          
+          if (mertSimilar.length > 0) {
+            console.log(`🔍 Found ${mertSimilar.length} similar tracks:`);
+            mertSimilar.forEach(s => {
+              const rel = mert.classifyRelationship(s.similarity);
+              console.log(`   - "${s.title}" by ${s.artist}: ${(s.similarity * 100).toFixed(1)}% (${rel.relationship})`);
+            });
+          }
+          
+          mertEmbedding = {
+            computed: true,
+            dims: mertResult.embedding.length,
+            processing_time_ms: mertResult.processingTimeMs
+          };
+          
+        } catch (mertError) {
+          console.log(`⚠️  MERT embedding failed (non-fatal): ${mertError.message}`);
+          mertEmbedding = { computed: false, error: mertError.message };
+        }
+      } else {
+        console.log('⚠️  MERT requested but not available (Python dependencies missing)');
+        mertEmbedding = { computed: false, error: 'Python dependencies not installed' };
+      }
+    }
+    
+    // ========================================================================
+    // 9. BUILD & RETURN RESPONSE
     // ========================================================================
     
     const responseTime = Date.now() - startTime;
     console.log(`⏱️  Total registration time: ${responseTime}ms`);
     
-    res.orbit({
+    const response = {
       success: true,
       registration_id: registration.id,
       fingerprint_hash: fingerprint.hash.toString('hex'),
@@ -380,7 +461,23 @@ async function registerHandler(req, res) {
         upc: metadata.upc
       },
       processing_time_ms: responseTime
-    });
+    };
+    
+    // Add MERT info if computed
+    if (mertEmbedding) {
+      response.mert = mertEmbedding;
+      if (mertSimilar.length > 0) {
+        response.similar_tracks = mertSimilar.map(s => ({
+          registration_id: s.id,
+          title: s.title,
+          artist: s.artist,
+          similarity: parseFloat(s.similarity.toFixed(4)),
+          relationship: mertModule ? mertModule.classifyRelationship(s.similarity).relationship : null
+        }));
+      }
+    }
+    
+    res.orbit(response);
     
   } catch (error) {
     console.error('❌ Registration failed:', error);

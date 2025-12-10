@@ -192,13 +192,26 @@ runner.test('Models are not loaded initially', () => {
   assertFalsy(modelManager.isLoaded('sentenceTransformer'), 'sentenceTransformer should not be loaded initially');
 });
 
-runner.test('Custom models throw informative error', async () => {
-  await assertThrowsAsync(
-    () => modelManager.getMert(),
-    'requires custom loading',
-    'MERT should throw custom loading error'
-  );
-  
+runner.test('MERT is available via custom Python bridge (Session 19)', async () => {
+  // MERT now uses custom loading via Python bridge
+  // It will either succeed or fail with Python environment error (not "requires custom loading")
+  try {
+    const mert = await modelManager.getMert();
+    assertTruthy(mert, 'MERT module should be returned');
+    assertTruthy(typeof mert.getEmbedding === 'function', 'Should have getEmbedding function');
+    console.log('     ✓ MERT loaded via Python bridge');
+  } catch (error) {
+    // Acceptable if Python dependencies not installed
+    if (error.message.includes('Python') || error.message.includes('pip install')) {
+      console.log('     ⚠️ MERT not available: Python dependencies not installed');
+      console.log('        Install with: pip install -r scripts/requirements-ml.txt');
+    } else {
+      throw error;
+    }
+  }
+});
+
+runner.test('SilentCipher and WMCodec still require custom loading (future sessions)', async () => {
   await assertThrowsAsync(
     () => modelManager.getSilentCipher(),
     'requires custom loading',

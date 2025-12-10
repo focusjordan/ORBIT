@@ -1,0 +1,19 @@
+# ORBIT ML Dependencies
+# For Session 19+ Neural Enhancements
+#
+# Install with: pip install -r scripts/requirements-ml.txt
+#
+# Note: PyTorch installation may vary by platform.
+# For CPU-only: pip install torch --index-url https://download.pytorch.org/whl/cpu
+# For CUDA: pip install torch (will auto-detect)
+
+# Core ML
+torch>=2.0.0
+transformers>=4.35.0
+
+# Audio processing
+librosa>=0.10.0
+numpy>=1.24.0
+
+# Optional but recommended
+soundfile>=0.12.0  # Better audio file handling

@@ -2,9 +2,11 @@
  * ORBIT Ledger Database Queries
  * 
  * DESIGN NOTES:
- * - All fingerprint lookups use EXACT hash equality (fingerprint_hash = $1)
- * - NO similarity queries (reserved for Session 19 with MERT + pgvector)
+ * - Chromaprint: EXACT hash equality (fingerprint_hash = $1) - fast path
+ * - MERT: Vector similarity via pgvector (Session 19) - semantic path
  * - Multi-platform duplicates allowed: same hash, different platforms = valid
+ * 
+ * Session 19: Added MERT embedding update and similarity queries
  */
 
 const { pool } = require('../config/database');
@@ -342,6 +344,111 @@ const queries = {
       `DELETE FROM orbit_transfers WHERE id = $1`,
       [id]
     );
+  },
+  
+  // ============================================================================
+  // MERT Semantic Fingerprinting Queries (Session 19)
+  // ============================================================================
+  
+  /**
+   * Update MERT embedding for a registration
+   * @param {number} registrationId - Registration ID
+   * @param {string} mertEmbedding - PostgreSQL vector string '[0.1,0.2,...]'
+   * @returns {Promise<Object>}
+   */
+  updateMertEmbedding: async (registrationId, mertEmbedding) => {
+    const result = await pool.query(
+      `UPDATE orbit_registrations
+       SET mert_embedding = $2::vector
+       WHERE id = $1
+       RETURNING id, title, artist`,
+      [registrationId, mertEmbedding]
+    );
+    return result.rows[0];
+  },
+  
+  /**
+   * Find similar registrations by MERT embedding using cosine similarity
+   * 
+   * @param {string} mertEmbedding - PostgreSQL vector string '[0.1,0.2,...]'
+   * @param {Object} options - Query options
+   * @param {number} options.threshold - Minimum similarity (default 0.5)
+   * @param {number} options.limit - Max results (default 10)
+   * @param {number} options.excludeId - Registration ID to exclude (for self-matching)
+   * @returns {Promise<Array>} Array of similar registrations with similarity scores
+   */
+  findSimilarByMertEmbedding: async (mertEmbedding, options = {}) => {
+    const {
+      threshold = 0.5,
+      limit = 10,
+      excludeId = null
+    } = options;
+    
+    let query = `
+      SELECT 
+        id, title, artist, isrc, origin_platform, owner_id, created_at,
+        1 - (mert_embedding <=> $1::vector) as similarity
+      FROM orbit_registrations
+      WHERE mert_embedding IS NOT NULL
+        AND 1 - (mert_embedding <=> $1::vector) > $2
+    `;
+    
+    const params = [mertEmbedding, threshold];
+    
+    if (excludeId) {
+      query += ` AND id != $3`;
+      params.push(excludeId);
+    }
+    
+    query += ` ORDER BY similarity DESC LIMIT $${params.length + 1}`;
+    params.push(limit);
+    
+    const result = await pool.query(query, params);
+    return result.rows;
+  },
+  
+  /**
+   * Check if MERT embedding exists for a registration
+   * @param {number} registrationId - Registration ID
+   * @returns {Promise<boolean>}
+   */
+  hasMertEmbedding: async (registrationId) => {
+    const result = await pool.query(
+      `SELECT EXISTS(
+        SELECT 1 FROM orbit_registrations 
+        WHERE id = $1 AND mert_embedding IS NOT NULL
+      ) as exists`,
+      [registrationId]
+    );
+    return result.rows[0].exists;
+  },
+  
+  /**
+   * Get registration with MERT embedding
+   * @param {number} registrationId - Registration ID
+   * @returns {Promise<Object|undefined>}
+   */
+  getRegistrationWithMert: async (registrationId) => {
+    const result = await pool.query(
+      `SELECT id, title, artist, mert_embedding::text as mert_embedding
+       FROM orbit_registrations 
+       WHERE id = $1`,
+      [registrationId]
+    );
+    return result.rows[0];
+  },
+  
+  /**
+   * Count registrations with MERT embeddings
+   * @returns {Promise<number>}
+   */
+  countMertEmbeddings: async () => {
+    const result = await pool.query(
+      `SELECT COUNT(*) as count 
+       FROM orbit_registrations 
+       WHERE mert_embedding IS NOT NULL`
+    );
+    return parseInt(result.rows[0].count, 10);
   }
 };
 

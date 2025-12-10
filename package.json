@@ -22,6 +22,7 @@
     "test:chain": "node tests/api/chain.test.js",
     "test:sdk": "node sdk/test.js",
     "test:models": "node tests/ml/models.test.js",
+    "test:mert": "node tests/ml/mert.test.js",
     "generate:keypair": "node scripts/generate-keypair.js",
     "seed:platform": "node scripts/seed-platform.js"
   },

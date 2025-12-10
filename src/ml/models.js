@@ -6,6 +6,7 @@
  * then cached for subsequent requests.
  * 
  * Session 18 Implementation - Phase 4: Neural Enhancements
+ * Session 19 Update - MERT custom loading via Python bridge
  * 
  * @see ORBIT_ENHANCEMENTS.md Section 8 (Model Loading Strategy)
  * @see ORBIT_SPECIFICATION.md Section 12 (Zero-Shot ML Enhancements)
@@ -23,6 +24,7 @@
  * - GPU/CPU flexible: Can run on either, with configuration
  * - Progress logging: Large model downloads are logged for visibility
  * - Non-blocking: Model loading is async, doesn't block the event loop
+ * - MERT uses Python bridge (custom loading) for PyTorch model
  */
 
 const path = require('path');
@@ -63,14 +65,15 @@ const MODEL_CONFIGS = {
   },
   
   // MERT for semantic audio fingerprinting
-  // Note: May require custom loading - not natively in @xenova/transformers
+  // Session 19: Custom loading via Python bridge (src/ml/mert.js)
   mert: {
     id: 'm-a-p/MERT-v1-95M',  // Original HuggingFace ID
     task: 'feature-extraction',
     size: '~400MB',
     embeddingDim: 768,
     description: 'Semantic audio fingerprinting (pitch/speed invariant)',
-    custom: true,  // Requires special handling
+    custom: true,  // Uses Python bridge - see src/ml/mert.js
+    loader: 'mert',  // Custom loader identifier
   },
   
   // SilentCipher for neural watermarking (future - Session 22)
@@ -314,13 +317,42 @@ class ModelManager {
    * Used for: Pitch/speed invariant matching, similarity search
    * Output: 768-dim audio embedding
    * 
-   * NOTE: MERT requires custom loading - will be implemented in Session 19
+   * Session 19: MERT uses Python bridge for PyTorch model loading.
+   * Returns a wrapper object with getEmbedding() and helper functions.
    * 
-   * @returns {Promise<Function>} Pipeline function
-   * @throws {Error} Until Session 19 implementation
+   * @returns {Promise<Object>} MERT module with getEmbedding, cosineSimilarity, etc.
+   * 
+   * @example
+   * const mert = await modelManager.getMert();
+   * const { embedding, duration } = await mert.getEmbedding('/path/to/audio.mp3');
+   * const similarity = mert.cosineSimilarity(embedding1, embedding2);
    */
   async getMert() {
-    return this._loadModel('mert');
+    // MERT uses custom loading via Python bridge
+    if (!this.models.mert) {
+      this._logProgress('mert', 'loading custom module', 'Python bridge');
+      
+      // Import the MERT module
+      const mertModule = require('./mert');
+      
+      // Check Python environment
+      const envCheck = await mertModule.checkPythonEnvironment();
+      
+      if (!envCheck.available) {
+        this._logProgress('mert', 'Python environment not ready', envCheck.message);
+        throw new Error(
+          `MERT requires Python with ML dependencies. ${envCheck.message}\n` +
+          `Install with: pip install -r scripts/requirements-ml.txt`
+        );
+      }
+      
+      this._logProgress('mert', 'ready', `Python environment OK, ${mertModule.EMBEDDING_DIM}-dim embeddings`);
+      
+      // Cache the module
+      this.models.mert = mertModule;
+    }
+    
+    return this.models.mert;
   }
   
   /**
@@ -381,13 +413,17 @@ class ModelManager {
     const status = {};
     
     for (const [key, config] of Object.entries(MODEL_CONFIGS)) {
+      // MERT is custom but available via Python bridge (Session 19)
+      const isAvailable = !config.custom || config.loader === 'mert';
+      
       status[key] = {
         loaded: this.isLoaded(key),
         loading: this.isLoading(key),
         size: config.size,
         description: config.description,
         custom: config.custom,
-        available: !config.custom,  // Available via @xenova/transformers
+        available: isAvailable,
+        loader: config.loader || 'transformers',  // 'transformers' or custom loader name
       };
     }
     
