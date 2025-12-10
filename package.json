@@ -20,6 +20,7 @@
     "test:register:full": "node tests/api/register-full-metadata.test.js",
     "test:verify": "node tests/api/verify.test.js",
     "test:chain": "node tests/api/chain.test.js",
+    "test:sdk": "node sdk/test.js",
     "generate:keypair": "node scripts/generate-keypair.js",
     "seed:platform": "node scripts/seed-platform.js"
   },
