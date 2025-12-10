@@ -19,7 +19,7 @@
 | Phase 4 | 18-24 | Neural Enhancements (v2) | 🔄 In Progress (Session 18 Complete) |
 | Phase 5 | 25-28 | Polish & SDK | ⬜ Not Started |
 
-**Current Session**: Session 18 ✅ Complete - Ready for Session 19 (MERT Semantic Fingerprinting)  
+**Current Session**: Session 20 ✅ Complete - Ready for Session 21 (Auto-Metadata Pipeline)  
 **Last Updated**: December 10, 2025  
 **Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Core engines working (fingerprint, watermark, crypto), ✅ Database with full schema, ✅ Express server with CBOR middleware, ✅ Platform authentication, ✅ All 5 v1 API endpoints, ✅ SDK published, ✅ Ohnrshyp integration complete, ✅ **ML ModelManager infrastructure with lazy loading**
 
@@ -173,8 +173,8 @@ Session 15: ✅ Complete - ORBIT SDK Package
 Session 16: ✅ Complete & Tested - Ohnrshyp duplicate check middleware (S3 download pattern, verified in integration)
 Session 17: ✅ Complete & Tested - Ohnrshyp auto-registration middleware (SDK verified: register/verify working)
 Session 18: ✅ Complete & Tested - ML ModelManager infrastructure (lazy loading, CLAP/SentenceTransformer working, 17 tests passing)
-Session 19: ⬜ Not Started
-Session 20: ⬜ Not Started
+Session 19: ✅ Complete & Tested - MERT Semantic Fingerprinting (768-dim embeddings, Python bridge, 23 tests passing)
+Session 20: ✅ Complete & Tested - CLAP Zero-Shot Classification (genre/mood/instruments, 19 tests passing)
 Session 21: ⬜ Not Started
 Session 22: ⬜ Not Started
 Session 23: ⬜ Not Started
@@ -3886,6 +3886,39 @@ _Use this section to track notes, blockers, or decisions made during implementat
 
 ---
 
+### Session 20 Notes (December 10, 2025)
+
+**Completed:**
+- Created `src/ml/clap.js` - CLAP zero-shot classification module
+- Implemented zero-shot-audio-classification pipeline using @xenova/transformers
+- Integrated with AudioUtils for Node.js audio processing (48kHz resampling)
+- Implemented `classifyGenre()` with 15 genre prompts
+- Implemented `classifyMood()` with 12 mood prompts
+- Implemented `detectInstruments()` with 14 instrument prompts (threshold-based)
+- Implemented `detectVocals()` with gender detection
+- Implemented `analyzeAudio()` for comprehensive single-call analysis
+- Created `tests/ml/clap.test.js` with 19 tests (all passing)
+- Added `test:clap` npm script
+
+**Architecture Decisions:**
+- Used zero-shot-audio-classification pipeline instead of embedding extraction
+  (CLAP in transformers.js requires this approach for classification)
+- Audio pre-processing via FFmpeg → 48kHz mono for CLAP compatibility
+- Confidence scores from softmax over text-audio similarities
+- Default threshold 0.15 for instrument detection (tuned for reasonable recall)
+
+**Verification Results:**
+- Electronic track → genre includes "electronic" ✓
+- Mood classification returns happy/sad/energetic with confidence ✓
+- Synthesizer detected in test audio ✓
+- Vocal detection distinguishes instrumental vs vocal tracks ✓
+
+**Carry Forward:**
+- CLAP classification ready for integration into metadata extraction
+- Ready for Session 21 (Auto-Metadata Pipeline combining CLAP + MERT + signal analysis)
+
+---
+
 ### Session Notes Template:
 ```
 ## Session X Notes (Date)
@@ -3913,7 +3946,7 @@ _Use this section to track notes, blockers, or decisions made during implementat
 - Making architectural decisions (add to notes)
 - Changing dependencies (update install commands)
 
-**Last Updated**: December 9, 2025 - Session 10 Complete
+**Last Updated**: December 10, 2025 - Session 20 Complete
 
 ---
 
