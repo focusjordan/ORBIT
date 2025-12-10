@@ -21,6 +21,7 @@ const { registerUpload, parseCborMetadata } = require('./middleware/multipart');
 const registerHandler = require('./handlers/register');
 const verifyHandler = require('./handlers/verify');
 const transferHandlers = require('./handlers/transfer');
+const chainHandler = require('./handlers/chain');
 
 const router = express.Router();
 
@@ -42,7 +43,7 @@ router.get('/info', (req, res) => {
       { method: 'POST', path: '/orbit/v1/verify', description: 'Verify audio provenance', status: 'active' },
       { method: 'POST', path: '/orbit/v1/transfer', description: 'Initiate B2B transfer', status: 'active' },
       { method: 'POST', path: '/orbit/v1/accept', description: 'Accept incoming transfer', status: 'active' },
-      { method: 'GET', path: '/orbit/v1/chain/:fingerprint', description: 'Get full custody chain', status: 'pending' },
+      { method: 'GET', path: '/orbit/v1/chain/:fingerprint', description: 'Get full custody chain', status: 'active' },
     ],
   });
 });
@@ -138,15 +139,15 @@ router.post('/accept', platformAuth, transferHandlers.acceptTransfer);
 /**
  * GET /orbit/v1/chain/:fingerprint
  * Get full custody chain for a fingerprint
- * Handler: Session 14
+ * Handler: Session 14 ✅
  * Auth: Optional (public lookup, but platform context may show more details)
+ * 
+ * URL Parameter:
+ * - fingerprint: 64-character hex string (32-byte hash)
+ * 
+ * Response: Complete chain with all registrations and transfers,
+ *           chronologically ordered, with signature validation status
  */
-router.get('/chain/:fingerprint', optionalAuth, (req, res) => {
-  res.orbitError(
-    'not_implemented',
-    'Chain lookup endpoint not yet implemented. Coming in Session 14.',
-    501
-  );
-});
+router.get('/chain/:fingerprint', optionalAuth, chainHandler);
 
 module.exports = router;
