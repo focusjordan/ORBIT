@@ -19,7 +19,7 @@
 | Phase 4 | 18-24 | Neural Enhancements (v2) | 🔄 In Progress (Session 18 Complete) |
 | Phase 5 | 25-28 | Polish & SDK | ⬜ Not Started |
 
-**Current Session**: Session 20 ✅ Complete - Ready for Session 21 (Auto-Metadata Pipeline)  
+**Current Session**: Session 21 ✅ Complete - Auto-Metadata Pipeline (45 tests passing)  
 **Last Updated**: December 10, 2025  
 **Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Core engines working (fingerprint, watermark, crypto), ✅ Database with full schema, ✅ Express server with CBOR middleware, ✅ Platform authentication, ✅ All 5 v1 API endpoints, ✅ SDK published, ✅ Ohnrshyp integration complete, ✅ **ML ModelManager infrastructure with lazy loading**
 
@@ -175,7 +175,7 @@ Session 17: ✅ Complete & Tested - Ohnrshyp auto-registration middleware (SDK v
 Session 18: ✅ Complete & Tested - ML ModelManager infrastructure (lazy loading, CLAP/SentenceTransformer working, 17 tests passing)
 Session 19: ✅ Complete & Tested - MERT Semantic Fingerprinting (768-dim embeddings, Python bridge, 23 tests passing)
 Session 20: ✅ Complete & Tested - CLAP Zero-Shot Classification (genre/mood/instruments, 19 tests passing)
-Session 21: ⬜ Not Started
+Session 21: ✅ Complete & Tested - Auto-Metadata Pipeline (audio-analysis 21 + metadata-extractor 24 = 45 tests passing)
 Session 22: ⬜ Not Started
 Session 23: ⬜ Not Started
 Session 24: ⬜ Not Started
@@ -190,6 +190,107 @@ Session 28: ⬜ Not Started
 - 🟡 In Progress
 - ✅ Complete
 - ⚠️ Complete with Issues (see notes)
+
+---
+
+## 🧪 Validation Test Suite
+
+**Total Tests: ~200+** across all components
+
+This table documents all validation tests across the ORBIT system. Update as new tests are added.
+
+### Core Engines (Phase 1)
+
+| Test File | Tests | Component | What It Validates |
+|-----------|-------|-----------|-------------------|
+| `tests/engines/fingerprint.test.js` | ~5 | Chromaprint | Fingerprint generation, determinism, hash comparison |
+| `tests/engines/fingerprint-db.test.js` | ~8 | Fingerprint + DB | Database integration, duplicate detection, lookups |
+| `tests/engines/crypto.test.js` | ~10 | Ed25519 + CBOR | Key generation, signing, verification, encoding |
+| `tests/engines/watermark-embed.test.js` | ~11 | Watermark Embed | Payload creation, embedding, loudness adaptation |
+| `tests/engines/watermark-extract.test.js` | ~11 | Watermark Extract | Extraction, offset search, CRC validation |
+| **Subtotal** | **~45** | | |
+
+### Audio Utilities (Phase 1)
+
+| Test File | Tests | Component | What It Validates |
+|-----------|-------|-----------|-------------------|
+| `tests/utils/audio.test.js` | ~8 | Audio Utils | WAV read/write, sample conversion, format detection |
+| **Subtotal** | **~8** | | |
+
+### API Layer (Phase 2)
+
+| Test File | Tests | Component | What It Validates |
+|-----------|-------|-----------|-------------------|
+| `tests/api/auth.test.js` | ~6 | Auth Middleware | Platform authentication, signature verification |
+| `tests/api/register.test.js` | ~10 | POST /register | Registration flow, fingerprint, watermark, ledger |
+| `tests/api/register-full-metadata.test.js` | ~8 | Full Metadata | All 49 metadata fields, CBOR encoding |
+| `tests/api/verify.test.js` | ~8 | POST /verify | Verification, dual detection, provenance response |
+| `tests/api/chain.test.js` | ~6 | GET /chain | Chain assembly, transfer history |
+| **Subtotal** | **~38** | | |
+
+### SDK (Phase 3)
+
+| Test File | Tests | Component | What It Validates |
+|-----------|-------|-----------|-------------------|
+| `sdk/test.js` | ~12 | ORBIT SDK | Client wrapper, all API methods, error handling |
+| **Subtotal** | **~12** | | |
+
+### ML/AI Components (Phase 4)
+
+| Test File | Tests | Component | What It Validates |
+|-----------|-------|-----------|-------------------|
+| `tests/ml/models.test.js` | ~17 | ModelManager | Lazy loading, caching, configuration |
+| `tests/ml/mert.test.js` | ~23 | MERT | 768-dim embeddings, Python bridge, similarity |
+| `tests/ml/clap.test.js` | ~19 | CLAP | Zero-shot genre/mood/instrument classification |
+| `tests/ml/audio-analysis.test.js` | 21 | Audio Analysis | BPM, key, energy, loudness detection |
+| `tests/ml/metadata-extractor.test.js` | 24 | Metadata Extractor | Unified pipeline, all extractors combined |
+| **Subtotal** | **~104** | | |
+
+### Test Summary
+
+| Phase | Component Area | Tests | Status |
+|-------|----------------|-------|--------|
+| Phase 1 | Core Engines | ~45 | ✅ All Passing |
+| Phase 1 | Audio Utils | ~8 | ✅ All Passing |
+| Phase 2 | API Layer | ~38 | ✅ All Passing |
+| Phase 3 | SDK | ~12 | ✅ All Passing |
+| Phase 4 | ML/AI | ~105 | ✅ All Passing |
+| **TOTAL** | | **~208** | ✅ |
+
+### Running Tests
+
+```bash
+# Individual test suites
+npm run test:fingerprint      # Chromaprint engine
+npm run test:crypto           # Ed25519 + CBOR
+npm run test:watermark        # Embed + Extract
+npm run test:audio            # Audio utilities
+npm run test:auth             # Authentication
+npm run test:register         # Registration API
+npm run test:verify           # Verification API
+npm run test:chain            # Chain lookup API
+npm run test:sdk              # SDK client
+npm run test:models           # ML ModelManager
+npm run test:mert             # MERT semantic fingerprinting
+npm run test:clap             # CLAP zero-shot classification
+npm run test:audio-analysis   # BPM/key detection
+npm run test:metadata-extractor  # Full AI pipeline
+
+# Combined test suites
+npm run test:ml               # All ML tests (models + mert + clap + audio-analysis + metadata-extractor)
+```
+
+### Test Fixtures
+
+| File | Purpose | Created In |
+|------|---------|------------|
+| `tests/fixtures/test-audio.mp3` | 30s 440Hz sine wave | Session 3 |
+| `tests/fixtures/test-audio-watermarked.wav` | Watermarked audio for extraction tests | Session 7 |
+| `tests/fixtures/test-audio-rhythm.wav` | 30s 128 BPM rhythm track for BPM validation | Session 21 |
+| `tests/fixtures/test-audio-click.wav` | 30s 128 BPM click track | Session 21 |
+| `tests/fixtures/test-full-metadata-watermarked.wav` | Full metadata test | Session 11 |
+
+**Last Updated**: December 10, 2025 (Session 21)
 
 ---
 

@@ -24,6 +24,9 @@
     "test:models": "node tests/ml/models.test.js",
     "test:mert": "node tests/ml/mert.test.js",
     "test:clap": "node tests/ml/clap.test.js",
+    "test:audio-analysis": "node tests/ml/audio-analysis.test.js",
+    "test:metadata-extractor": "node tests/ml/metadata-extractor.test.js",
+    "test:ml": "npm run test:models && npm run test:mert && npm run test:clap && npm run test:audio-analysis && npm run test:metadata-extractor",
     "generate:keypair": "node scripts/generate-keypair.js",
     "seed:platform": "node scripts/seed-platform.js"
   },
