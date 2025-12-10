@@ -337,3 +337,4 @@ These can be added in future versions without breaking changes.
 ## Session 15 Complete! ✅
 
 The SDK is fully implemented and ready for testing. Once tests pass, we can proceed to Session 16 (example middleware) and Session 17 (Ohnrshyp integration).
+

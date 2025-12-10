@@ -1,0 +1,26 @@
+# ORBIT Integration Configuration
+# Copy these variables to your Ohnrshyp .env file
+
+# ORBIT API Configuration
+ORBIT_API_URL=https://orbit.ohnrshyp.com
+# For local development:
+# ORBIT_API_URL=http://localhost:4000
+
+# Your platform ID (registered with ORBIT)
+ORBIT_PLATFORM_ID=ohnrshyp
+
+# Your Ed25519 private key (64 bytes, base64-encoded)
+# Obtain from ORBIT admin during platform registration
+ORBIT_PRIVATE_KEY=your_base64_encoded_private_key_here
+
+# API key for rate limiting and billing (optional)
+ORBIT_API_KEY=your_api_key_here
+
+# ORBIT Feature Flags (optional)
+ORBIT_DUPLICATE_CHECK_ENABLED=true
+ORBIT_AUTO_REGISTER_ENABLED=true
+ORBIT_VERIFY_ENDPOINT_ENABLED=true
+
+# ORBIT Timeouts (milliseconds, optional)
+ORBIT_TIMEOUT=30000
+ORBIT_RETRY_ATTEMPTS=2
