@@ -324,10 +324,247 @@ async function orbitDuplicateCheck(req, res, next) {
   }
 }
 
+/**
+ * ORBIT Auto-Registration Middleware for Ohnrshyp
+ * 
+ * Registers newly created tracks with ORBIT AFTER the track document is saved
+ * and response is sent to the user.
+ * 
+ * Prerequisites:
+ * - Track document created (req.track exists)
+ * - Track has MongoDB _id
+ * - Response already sent to user (don't block upload)
+ * - Audio exists in S3 (from uploadToS3 middleware)
+ * 
+ * Flow:
+ * 1. Check if Track model is available
+ * 2. Reuse metadata/audio from duplicate check if available
+ * 3. Otherwise, download from S3 and extract metadata
+ * 4. Call ORBIT register endpoint
+ * 5. Update Track document with registration data
+ * 6. Log success/failure (but don't fail the request)
+ * 
+ * Behavior:
+ * - Success: Track.orbit updated with registration data
+ * - ORBIT unavailable: Logged warning, track remains unregistered
+ * - Network/API errors: Logged error, track remains unregistered
+ * - Track can be registered later via manual endpoint
+ * 
+ * Usage in routes:
+ * 
+ * router.post('/',
+ *   auth,
+ *   isMusician,
+ *   uploadToS3,
+ *   fileSecurityValidation,
+ *   orbitDuplicateCheck,
+ *   contentModerationMiddleware,
+ *   async (req, res, next) => {
+ *     const track = await Track.create({...});
+ *     req.track = track;  // ← Required
+ *     res.json({ success: true, track });
+ *     next();  // ← Important: pass to next middleware
+ *   },
+ *   registerWithOrbit  // ← This function
+ * );
+ */
+async function registerWithOrbit(req, res, next) {
+  // Skip if ORBIT not configured
+  const client = getOrbitClient();
+  if (!client) {
+    console.log('⚠️  ORBIT: Auto-registration skipped (not configured)');
+    return next ? next() : undefined;
+  }
+  
+  // Skip if no track was created
+  if (!req.track) {
+    console.log('⚠️  ORBIT: Auto-registration skipped (no track in request)');
+    return next ? next() : undefined;
+  }
+  
+  // Skip if track already has ORBIT registration
+  // Note: Using camelCase to match Ohnrshyp's Track model convention
+  if (req.track.orbit?.registrationId) {
+    console.log(`⚠️  ORBIT: Track ${req.track._id} already registered (ID: ${req.track.orbit.registrationId})`);
+    return next ? next() : undefined;
+  }
+  
+  // Skip if auto-registration is disabled for this track
+  if (req.track.orbit?.autoRegister === false) {
+    console.log(`⚠️  ORBIT: Auto-registration disabled for track ${req.track._id}`);
+    return next ? next() : undefined;
+  }
+  
+  const startTime = Date.now();
+  const trackId = req.track._id;
+  
+  try {
+    console.log(`🔄 ORBIT: Auto-registering track ${trackId}...`);
+    
+    // Step 1: Get Track model (need it to update after registration)
+    // In Ohnrshyp, this would be imported at top of file
+    // For now, try to get from req.app.locals or require
+    const Track = req.app.locals.Track || require('../../models/Track');
+    if (!Track) {
+      throw new Error('Track model not available');
+    }
+    
+    // Step 2: Get audio buffer and metadata
+    let audioBuffer, orbitMetadata;
+    
+    // Try to reuse data from duplicate check (more efficient)
+    if (req.orbit?.metadata && req.files?.audio?.[0]) {
+      console.log('   ℹ️  Reusing metadata from duplicate check');
+      orbitMetadata = req.orbit.metadata;
+      
+      // Download audio from S3
+      const audioFile = req.files.audio[0];
+      const s3Client = req.app.locals.s3Client || global.s3Client;
+      
+      if (!s3Client) {
+        throw new Error('S3 client not available');
+      }
+      
+      audioBuffer = await downloadAudioFromS3(
+        s3Client,
+        audioFile.bucket,
+        audioFile.key
+      );
+      
+      console.log(`   ✅ Downloaded from S3 (${(audioBuffer.length / 1024).toFixed(0)} KB)`);
+    } else {
+      // Need to fetch from track's audioUrl and extract metadata
+      console.log('   ℹ️  Fetching audio and extracting metadata');
+      
+      // Parse S3 URL to get bucket and key
+      // Ohnrshyp audioUrl format: https://bucket.s3.region.amazonaws.com/key
+      // or s3://bucket/key
+      const audioUrl = req.track.audioUrl;
+      const { bucket, key } = parseS3Url(audioUrl);
+      
+      const s3Client = req.app.locals.s3Client || global.s3Client;
+      if (!s3Client) {
+        throw new Error('S3 client not available');
+      }
+      
+      audioBuffer = await downloadAudioFromS3(s3Client, bucket, key);
+      console.log(`   ✅ Downloaded from S3 (${(audioBuffer.length / 1024).toFixed(0)} KB)`);
+      
+      // Extract technical metadata
+      const technicalMetadata = await extractAudioMetadata(audioBuffer);
+      console.log(`   ✅ Extracted metadata (duration: ${technicalMetadata.duration_ms}ms)`);
+      
+      // Map to ORBIT schema
+      orbitMetadata = mapOhnrshypToOrbit(req, technicalMetadata);
+    }
+    
+    // Step 3: Register with ORBIT
+    console.log('   📤 Registering with ORBIT...');
+    
+    const ownerId = req.user?._id?.toString() || req.track.artist?.toString();
+    if (!ownerId) {
+      throw new Error('Owner ID not available');
+    }
+    
+    const result = await client.register(audioBuffer, orbitMetadata, ownerId);
+    
+    const duration = Date.now() - startTime;
+    console.log(`   ✅ ORBIT registration complete (${duration}ms)`);
+    console.log(`      Registration ID: ${result.registration_id}`);
+    
+    // Step 4: Update Track document with ORBIT data
+    // Note: Using camelCase to match Ohnrshyp's Track model convention
+    const updateData = {
+      'orbit.registrationId': result.registration_id,
+      'orbit.fingerprintHash': result.fingerprint_hash,
+      'orbit.watermarkHash': result.watermark_hash || null,
+      'orbit.entryHash': result.entry_hash,
+      'orbit.registeredAt': new Date(),
+      'orbit.lastVerified': new Date()
+    };
+    
+    await Track.findByIdAndUpdate(trackId, updateData);
+    
+    console.log(`   ✅ Track ${trackId} updated with ORBIT data`);
+    console.log(`   🎉 Auto-registration successful!`);
+    
+    // Success - continue to next middleware if present
+    if (next) next();
+    
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error(`❌ ORBIT: Auto-registration failed for track ${trackId} (${duration}ms)`);
+    console.error(`   Error: ${error.message}`);
+    
+    // Log different error types for debugging
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+      console.error('   Cause: ORBIT service unavailable');
+    } else if (error.message.includes('S3')) {
+      console.error('   Cause: Failed to download audio from S3');
+    } else if (error.message.includes('Track model')) {
+      console.error('   Cause: Track model not available');
+    } else if (error.response?.status) {
+      console.error(`   Cause: ORBIT API error (${error.response.status})`);
+    } else {
+      console.error('   Cause: Unknown error');
+    }
+    
+    // Important: Don't throw - track upload already succeeded
+    // User doesn't need to know registration failed
+    // Track can be registered later via manual endpoint
+    console.log(`   ℹ️  Track ${trackId} created successfully but not registered with ORBIT`);
+    console.log('   ℹ️  Can be registered later via manual registration endpoint');
+    
+    // Continue to next middleware if present
+    if (next) next();
+  }
+}
+
+/**
+ * Helper: Parse S3 URL to extract bucket and key
+ * 
+ * Supports formats:
+ * - https://bucket.s3.region.amazonaws.com/path/to/file.mp3
+ * - https://bucket.s3.amazonaws.com/path/to/file.mp3
+ * - https://s3.region.amazonaws.com/bucket/path/to/file.mp3
+ * - s3://bucket/path/to/file.mp3
+ */
+function parseS3Url(url) {
+  if (url.startsWith('s3://')) {
+    // s3://bucket/key format
+    const parts = url.slice(5).split('/');
+    const bucket = parts[0];
+    const key = parts.slice(1).join('/');
+    return { bucket, key };
+  }
+  
+  // HTTPS URL format
+  const urlObj = new URL(url);
+  
+  // Format 1: bucket.s3.region.amazonaws.com/key
+  if (urlObj.hostname.includes('.s3.')) {
+    const bucket = urlObj.hostname.split('.')[0];
+    const key = urlObj.pathname.slice(1); // Remove leading /
+    return { bucket, key };
+  }
+  
+  // Format 2: s3.region.amazonaws.com/bucket/key
+  if (urlObj.hostname.startsWith('s3.')) {
+    const parts = urlObj.pathname.slice(1).split('/');
+    const bucket = parts[0];
+    const key = parts.slice(1).join('/');
+    return { bucket, key };
+  }
+  
+  throw new Error(`Unable to parse S3 URL: ${url}`);
+}
+
 module.exports = {
   orbitDuplicateCheck,
+  registerWithOrbit,
   getOrbitClient,
   mapOhnrshypToOrbit,
   extractAudioMetadata,
-  downloadAudioFromS3
+  downloadAudioFromS3,
+  parseS3Url
 };

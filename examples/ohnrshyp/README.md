@@ -11,19 +11,25 @@ Ohnrshyp uses a **streaming upload pattern**:
 4. contentModerationMiddleware
 5. Track document created
 
-## Integration Steps
+## Integration Overview
 
-### Session 16: Duplicate Detection (Current)
-- ✅ Downloads audio from S3 (same pattern as fileSecurityValidation)
-- ✅ Extracts technical metadata (duration, bitrate, etc.)
-- ✅ Calls ORBIT verify endpoint
-- ✅ Returns 409 if duplicate, continues if new
-- ✅ Graceful degradation if ORBIT unavailable
+This integration provides two key features:
 
-### Session 17: Auto-Registration (Next)
-- ⬜ After Track created, register with ORBIT
-- ⬜ Update Track.orbit with registration data
-- ⬜ Store watermarked audio back to S3 (optional)
+### Duplicate Detection (`orbitDuplicateCheck`)
+- Downloads audio from S3 (same pattern as fileSecurityValidation)
+- Extracts technical metadata (duration, bitrate, etc.)
+- Calls ORBIT verify endpoint
+- Returns 409 if duplicate, continues if new
+- Graceful degradation if ORBIT unavailable
+
+### Auto-Registration (`registerWithOrbit`)
+- Runs after Track document is created
+- Registers track with ORBIT
+- Updates Track.orbit with registration data
+- Non-blocking (response sent before registration)
+- Graceful error handling (upload succeeds even if ORBIT fails)
+- Reuses metadata from duplicate check when available
+- Logs all actions for debugging
 
 ## Files
 
@@ -111,32 +117,42 @@ In `routes/music.routes.js`:
 ```javascript
 const { orbitDuplicateCheck } = require('../path/to/orbit-middleware-ohnrshyp');
 
+const { orbitDuplicateCheck, registerWithOrbit } = require('./orbit-middleware-ohnrshyp');
+
 router.post('/',
   auth,
   isMusician,
   uploadToS3,                    // Existing: Streams to S3
   fileSecurityValidation,        // Existing: Downloads & validates
-  orbitDuplicateCheck,           // NEW: Downloads, fingerprints, checks duplicates
+  orbitDuplicateCheck,           // Session 16: Downloads, fingerprints, checks duplicates
   contentModerationMiddleware,   // Existing
-  async (req, res) => {
-    // Existing: Create Track document
-    const track = new Track({
+  async (req, res, next) => {
+    // Create Track document
+    const track = await Track.create({
       title: req.body.title,
       artist: req.user._id,
       audioUrl: req.files.audio[0].location,
       // ... other fields ...
       
-      // NEW: Add ORBIT subdocument (will be null until Session 17)
+      // ORBIT subdocument (populated by registerWithOrbit)
       orbit: {
-        registrationId: null,
-        fingerprintHash: null,
-        registeredAt: null
+        registration_id: null,
+        fingerprint_hash: null,
+        registered_at: null,
+        auto_register: true  // Enable auto-registration
       }
     });
     
-    await track.save();
+    // ⭐ CRITICAL: Attach track for next middleware
+    req.track = track;
+    
+    // Send response immediately (don't wait for ORBIT)
     res.json({ success: true, track });
-  }
+    
+    // Continue to next middleware
+    next();
+  },
+  registerWithOrbit              // Session 17: Auto-register with ORBIT (non-blocking)
 );
 ```
 
@@ -334,12 +350,12 @@ You have three options:
 - **Issues:** Report integration issues to ORBIT team
 - **Platform Status:** Check ORBIT service health at `/health`
 
-## Roadmap
+## Future Enhancements
 
-- ✅ **Session 16:** Duplicate check middleware (current)
-- 🚧 **Session 17:** Auto-registration middleware (next)
-- 📅 **Future:** Transfer tracks to partner DSPs
-- 📅 **Future:** V2 ML features (genre detection, similarity search)
+- Transfer tracks to partner DSPs via ORBIT protocol
+- V2 ML features (neural fingerprinting, genre detection, similarity search)
+- Admin dashboard for ORBIT registration status
+- Watermarked audio storage back to S3
 
 ## License
 

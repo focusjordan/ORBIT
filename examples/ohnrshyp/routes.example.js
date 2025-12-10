@@ -5,71 +5,120 @@
  * Copy the relevant patterns into your actual routes file.
  */
 
+/**
+ * ORBIT Integration Examples for Ohnrshyp Routes
+ * 
+ * This file shows how to integrate ORBIT middleware into your existing routes.
+ * Copy the relevant patterns into your actual routes file.
+ * 
+ * Session 16: orbitDuplicateCheck (duplicate detection)
+ * Session 17: registerWithOrbit (auto-registration after track creation)
+ */
+
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
-const { checkDuplicate, registerWithOrbit, verifyAudio } = require('./orbit.middleware');
+const { 
+  orbitDuplicateCheck,      // Session 16: Check for duplicates before track creation
+  registerWithOrbit          // Session 17: Auto-register after track creation
+} = require('./orbit-middleware-ohnrshyp');  // ← Use the S3-aware version
 
-// Your existing middleware (these are placeholders)
-const auth = require('../../middleware/auth');
-const artistOnly = require('../../middleware/artistOnly');
-const Track = require('../../models/Track');  // Your Track model
+// Your existing Ohnrshyp middleware (adjust paths as needed)
+const auth = require('../../middleware/auth.middleware');
+const isMusician = require('../../middleware/isMusician');
+const Track = require('../../models/track.model');
 
-// Multer configuration (your existing setup)
-const upload = multer({ 
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 }  // 100MB
-});
+// Note: Ohnrshyp uses multer-s3 for direct streaming to S3
+// This is just a placeholder - use your actual upload configuration
+// const { uploadToS3 } = require('../../middleware/upload.middleware');
 
 /**
  * Pattern 1: Upload with Duplicate Check + Auto-Registration
  * 
- * This is the recommended pattern for Ohnrshyp's main upload endpoint.
+ * ⭐ RECOMMENDED PATTERN for Ohnrshyp's main upload endpoint
  * 
  * Flow:
- * 1. User uploads audio
- * 2. checkDuplicate runs BEFORE track creation
- *    - If duplicate: Returns 409, stops here
- *    - If new: Continues to track creation
- * 3. Track is created in Ohnrshyp database
- * 4. registerWithOrbit runs AFTER track creation (Session 17)
- *    - Registers with ORBIT
- *    - Updates track with registration data
+ * 1. uploadToS3 - Streams audio directly to S3 (Ohnrshyp's existing middleware)
+ * 2. fileSecurityValidation - Downloads from S3, validates file (existing)
+ * 3. orbitDuplicateCheck - Downloads from S3, checks for duplicates (Session 16)
+ *    ✅ If new: Continues to track creation
+ *    🚫 If duplicate: Returns 409, stops here
+ * 4. contentModerationMiddleware - Existing Ohnrshyp middleware
+ * 5. Track created in MongoDB
+ * 6. Response sent to user
+ * 7. registerWithOrbit - Auto-registers with ORBIT in background (Session 17)
+ * 
+ * Key Points:
+ * - Response sent BEFORE ORBIT registration (non-blocking)
+ * - ORBIT failures don't affect upload success
+ * - Track.orbit field updated after registration
+ * - Can retry registration later via manual endpoint
  */
-router.post('/api/tracks',
+router.post('/api/music',
   auth,
-  artistOnly,
-  upload.single('audio'),
-  checkDuplicate,              // ← Session 16: Check for duplicates
+  isMusician,
+  // uploadToS3,                 // Your existing S3 streaming upload
+  // fileSecurityValidation,     // Your existing security validation
+  orbitDuplicateCheck,           // ← Session 16: ORBIT duplicate detection
+  // contentModerationMiddleware, // Your existing moderation
   async (req, res, next) => {
     try {
-      // Your existing track creation logic
+      // Get artist name for metadata
+      const artistName = req.user.artistProfile?.artistName || req.user.username;
+      const currentYear = new Date().getFullYear();
+      
+      // Create track in Ohnrshyp database
       const track = await Track.create({
         title: req.body.title,
         artist: req.user._id,
-        duration: req.body.duration,
-        audioUrl: req.body.audioUrl,  // From S3 upload
+        duration: req.body.duration || 0,
+        audioUrl: req.files.audio[0].location,  // S3 URL from multer-s3
         genre: req.body.genre,
-        isrc: req.body.isrc,
-        upc: req.body.upc,
-        p_line: req.body.p_line || `${new Date().getFullYear()} ${req.user.artistName}`,
-        c_line: req.body.c_line || `${new Date().getFullYear()} ${req.user.artistName}`,
-        // ... other fields
+        mood: req.body.mood,
+        albumTitle: req.body.albumTitle,
+        releaseDate: req.body.releaseDate,
+        
+        // ISRC/UPC (if provided)
+        isrc: req.body.isrc || null,
+        upc: req.body.upc || null,
+        
+        // Copyright info
+        p_line: req.body.p_line || `${currentYear} ${artistName}`,
+        c_line: req.body.c_line || `${currentYear} ${artistName}`,
+        
+        // ORBIT subdocument (will be populated by registerWithOrbit)
+        orbit: {
+          registration_id: null,
+          fingerprint_hash: null,
+          registered_at: null,
+          auto_register: true  // Enable auto-registration
+        }
       });
       
-      // Attach track to request for next middleware
+      // ✅ CRITICAL: Attach track to request for registerWithOrbit middleware
       req.track = track;
       
-      // Send response to user (don't wait for ORBIT registration)
+      // ✅ Send response immediately (don't wait for ORBIT)
       res.status(201).json({
         success: true,
-        track: track.toJSON()
+        message: 'Track uploaded successfully',
+        track: {
+          _id: track._id,
+          title: track.title,
+          artist: track.artist,
+          audioUrl: track.audioUrl,
+          duration: track.duration,
+          genre: track.genre,
+          orbit: {
+            status: 'pending_registration'  // Will be updated by next middleware
+          }
+        }
       });
       
-      // Continue to next middleware (registerWithOrbit)
+      // ✅ Continue to next middleware (ORBIT registration happens in background)
       next();
       
     } catch (error) {
+      console.error('Track creation failed:', error);
       res.status(500).json({
         success: false,
         error: 'UPLOAD_FAILED',
@@ -77,22 +126,66 @@ router.post('/api/tracks',
       });
     }
   },
-  registerWithOrbit            // ← Session 17: Auto-register with ORBIT
+  registerWithOrbit              // ← Session 17: Auto-register with ORBIT (non-blocking)
 );
 
 /**
  * Pattern 2: Dedicated Verification Endpoint
  * 
  * Allows users to check if audio is registered WITHOUT uploading a track.
- * Useful for:
- * - Pre-upload checks
- * - Verifying received audio
- * - Admin tools
+ * 
+ * Use Cases:
+ * - Pre-upload duplicate check
+ * - Verifying received audio files
+ * - Admin investigation tools
+ * - Copyright verification
+ * 
+ * Note: This requires implementing a separate verifyAudio handler
+ * that calls OrbitClient.verify() and returns the result.
  */
 router.post('/api/orbit/verify',
   auth,
-  upload.single('audio'),
-  verifyAudio
+  // upload.single('audio'),  // You'd need a temporary upload handler
+  async (req, res) => {
+    try {
+      const { getOrbitClient } = require('./orbit-middleware-ohnrshyp');
+      const client = getOrbitClient();
+      
+      if (!client) {
+        return res.status(503).json({
+          success: false,
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'ORBIT service not configured'
+        });
+      }
+      
+      // Verify audio (assuming audio buffer in req.file)
+      const verification = await client.verify(req.file.buffer);
+      
+      res.json({
+        success: true,
+        verified: verification.verified,
+        provenance: {
+          is_registered: verification.verified,
+          registration_id: verification.fingerprint_match?.registration_id,
+          metadata: verification.metadata || null,
+          origin: verification.origin || null,
+          watermark: {
+            detected: verification.watermark?.detected || false,
+            valid: verification.watermark?.valid || false
+          }
+        }
+      });
+      
+    } catch (error) {
+      console.error('ORBIT verification failed:', error);
+      res.status(500).json({
+        success: false,
+        error: 'VERIFICATION_FAILED',
+        message: error.message
+      });
+    }
+  }
 );
 
 /**
@@ -187,19 +280,37 @@ router.post('/api/tracks/:trackId/orbit/register',
       const audioBuffer = await fetchAudioFromS3(track.audioUrl);
       
       // Register with ORBIT (using SDK)
-      const { getOrbitClient } = require('./orbit.middleware');
+      const { getOrbitClient, mapOhnrshypToOrbit, extractAudioMetadata } = require('./orbit-middleware-ohnrshyp');
       const client = getOrbitClient();
+
+      if (!client) {
+        return res.status(503).json({
+          success: false,
+          error: 'ORBIT_UNAVAILABLE',
+          message: 'ORBIT service not configured'
+        });
+      }
       
-      const result = await client.register(audioBuffer, {
+      // Extract technical metadata
+      const technicalMetadata = await extractAudioMetadata(audioBuffer);
+      
+      // Build metadata object
+      const metadata = {
         title: track.title,
-        artist: req.user.artistName || req.user.username,
-        duration_ms: track.duration * 1000,
+        artist: req.user.artistProfile?.artistName || req.user.username,
+        duration_ms: technicalMetadata.duration_ms || track.duration * 1000,
         isrc: track.isrc,
         upc: track.upc,
         primary_genre: track.genre,
         p_line: track.p_line,
-        c_line: track.c_line
-      }, req.user._id.toString());
+        c_line: track.c_line,
+        bitrate: technicalMetadata.bitrate,
+        sample_rate: technicalMetadata.sample_rate,
+        channels: technicalMetadata.channels,
+        format: technicalMetadata.format
+      };
+      
+      const result = await client.register(audioBuffer, metadata, req.user._id.toString());
       
       // Update track with ORBIT data
       track.orbit = {
