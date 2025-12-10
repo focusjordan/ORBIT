@@ -36,6 +36,7 @@ coverage/
 
 # Model cache (can be large)
 models/
+.test-model-cache/
 
 # Audio test files (can be large)
 *.wav
