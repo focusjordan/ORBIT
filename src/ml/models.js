@@ -6,17 +6,20 @@
  * then cached for subsequent requests.
  * 
  * Session 18 Implementation - Phase 4: Neural Enhancements
- * Session 19 Update - MERT custom loading via Python bridge
+ * Session 22 Update - MERT disabled (CC BY-NC 4.0 incompatible with commercial use)
+ *                     CLAP now provides both classification AND embeddings
  * 
  * @see ORBIT_ENHANCEMENTS.md Section 8 (Model Loading Strategy)
  * @see ORBIT_SPECIFICATION.md Section 12 (Zero-Shot ML Enhancements)
  * 
  * MODELS MANAGED:
- * - CLAP (Contrastive Language-Audio Pretraining) - Zero-shot classification
- * - MERT (Music Embedding Representation Transformer) - Semantic fingerprinting  
+ * - CLAP (Contrastive Language-Audio Pretraining) - Zero-shot classification + audio embeddings
  * - Sentence Transformers - Metadata embedding
  * - SilentCipher (future) - Neural watermarking
  * - WMCodec (future) - Codec-aware watermarking fallback
+ * 
+ * DISABLED (non-commercial license):
+ * - MERT - CC BY-NC 4.0, cannot be used in commercial products
  * 
  * DESIGN DECISIONS:
  * - Lazy loading: Models only download/load when first requested
@@ -24,7 +27,6 @@
  * - GPU/CPU flexible: Can run on either, with configuration
  * - Progress logging: Large model downloads are logged for visibility
  * - Non-blocking: Model loading is async, doesn't block the event loop
- * - MERT uses Python bridge (custom loading) for PyTorch model
  */
 
 const path = require('path');
@@ -40,7 +42,7 @@ const fs = require('fs');
  * - embeddingDim: Output embedding dimension
  * - description: What this model is used for in ORBIT
  * 
- * Note: Some models (MERT, SilentCipher, WMCodec) may require
+ * Note: Some models (SilentCipher, WMCodec) may require
  * special loading procedures - these are marked with custom: true
  */
 const MODEL_CONFIGS = {
@@ -64,17 +66,17 @@ const MODEL_CONFIGS = {
     custom: false,
   },
   
-  // MERT for semantic audio fingerprinting
-  // Session 19: Custom loading via Python bridge (src/ml/mert.js)
-  mert: {
-    id: 'm-a-p/MERT-v1-95M',  // Original HuggingFace ID
-    task: 'feature-extraction',
-    size: '~400MB',
-    embeddingDim: 768,
-    description: 'Semantic audio fingerprinting (pitch/speed invariant)',
-    custom: true,  // Uses Python bridge - see src/ml/mert.js
-    loader: 'mert',  // Custom loader identifier
-  },
+  // MERT DISABLED - CC BY-NC 4.0 license incompatible with commercial use
+  // Use CLAP embeddings (clap.getAudioEmbedding) instead
+  // mert: {
+  //   id: 'm-a-p/MERT-v1-95M',
+  //   task: 'feature-extraction',
+  //   size: '~400MB',
+  //   embeddingDim: 768,
+  //   description: 'Semantic audio fingerprinting (pitch/speed invariant)',
+  //   custom: true,
+  //   loader: 'mert',
+  // },
   
   // SilentCipher for neural watermarking (future - Session 22)
   silentCipher: {
@@ -311,49 +313,9 @@ class ModelManager {
     return this._loadModel('sentenceTransformer');
   }
   
-  /**
-   * Get MERT model for semantic audio fingerprinting
-   * 
-   * Used for: Pitch/speed invariant matching, similarity search
-   * Output: 768-dim audio embedding
-   * 
-   * Session 19: MERT uses Python bridge for PyTorch model loading.
-   * Returns a wrapper object with getEmbedding() and helper functions.
-   * 
-   * @returns {Promise<Object>} MERT module with getEmbedding, cosineSimilarity, etc.
-   * 
-   * @example
-   * const mert = await modelManager.getMert();
-   * const { embedding, duration } = await mert.getEmbedding('/path/to/audio.mp3');
-   * const similarity = mert.cosineSimilarity(embedding1, embedding2);
-   */
-  async getMert() {
-    // MERT uses custom loading via Python bridge
-    if (!this.models.mert) {
-      this._logProgress('mert', 'loading custom module', 'Python bridge');
-      
-      // Import the MERT module
-      const mertModule = require('./mert');
-      
-      // Check Python environment
-      const envCheck = await mertModule.checkPythonEnvironment();
-      
-      if (!envCheck.available) {
-        this._logProgress('mert', 'Python environment not ready', envCheck.message);
-        throw new Error(
-          `MERT requires Python with ML dependencies. ${envCheck.message}\n` +
-          `Install with: pip install -r scripts/requirements-ml.txt`
-        );
-      }
-      
-      this._logProgress('mert', 'ready', `Python environment OK, ${mertModule.EMBEDDING_DIM}-dim embeddings`);
-      
-      // Cache the module
-      this.models.mert = mertModule;
-    }
-    
-    return this.models.mert;
-  }
+  // MERT DISABLED - CC BY-NC 4.0 license incompatible with commercial use
+  // Use clap.getAudioEmbedding() for audio embeddings instead
+  // async getMert() { ... }
   
   /**
    * Get SilentCipher model for neural watermarking
@@ -413,8 +375,8 @@ class ModelManager {
     const status = {};
     
     for (const [key, config] of Object.entries(MODEL_CONFIGS)) {
-      // MERT is custom but available via Python bridge (Session 19)
-      const isAvailable = !config.custom || config.loader === 'mert';
+      // Custom models (SilentCipher, WMCodec) not yet available
+      const isAvailable = !config.custom;
       
       status[key] = {
         loaded: this.isLoaded(key),

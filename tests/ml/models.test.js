@@ -145,7 +145,7 @@ runner.test('MODEL_CONFIGS is exported and has expected models', () => {
   assertTruthy(MODEL_CONFIGS, 'MODEL_CONFIGS should be exported');
   assertTruthy(MODEL_CONFIGS.clap, 'Should have clap config');
   assertTruthy(MODEL_CONFIGS.sentenceTransformer, 'Should have sentenceTransformer config');
-  assertTruthy(MODEL_CONFIGS.mert, 'Should have mert config');
+  // MERT disabled (CC BY-NC 4.0 - non-commercial only)
   assertTruthy(MODEL_CONFIGS.silentCipher, 'Should have silentCipher config');
   assertTruthy(MODEL_CONFIGS.wmCodec, 'Should have wmCodec config');
 });
@@ -178,7 +178,7 @@ runner.test('getStatus returns all model statuses', () => {
   
   assertTruthy(status.clap, 'Should have clap status');
   assertTruthy(status.sentenceTransformer, 'Should have sentenceTransformer status');
-  assertTruthy(status.mert, 'Should have mert status');
+  // MERT disabled (CC BY-NC 4.0 - non-commercial only)
   
   // Check structure
   assertEqual(typeof status.clap.loaded, 'boolean', 'loaded should be boolean');
@@ -192,24 +192,8 @@ runner.test('Models are not loaded initially', () => {
   assertFalsy(modelManager.isLoaded('sentenceTransformer'), 'sentenceTransformer should not be loaded initially');
 });
 
-runner.test('MERT is available via custom Python bridge (Session 19)', async () => {
-  // MERT now uses custom loading via Python bridge
-  // It will either succeed or fail with Python environment error (not "requires custom loading")
-  try {
-    const mert = await modelManager.getMert();
-    assertTruthy(mert, 'MERT module should be returned');
-    assertTruthy(typeof mert.getEmbedding === 'function', 'Should have getEmbedding function');
-    console.log('     ✓ MERT loaded via Python bridge');
-  } catch (error) {
-    // Acceptable if Python dependencies not installed
-    if (error.message.includes('Python') || error.message.includes('pip install')) {
-      console.log('     ⚠️ MERT not available: Python dependencies not installed');
-      console.log('        Install with: pip install -r scripts/requirements-ml.txt');
-    } else {
-      throw error;
-    }
-  }
-});
+// MERT test removed - CC BY-NC 4.0 license incompatible with commercial use
+// Use CLAP embeddings (clap.getAudioEmbedding) instead
 
 runner.test('SilentCipher and WMCodec still require custom loading (future sessions)', async () => {
   await assertThrowsAsync(

@@ -11,16 +11,13 @@
  * 4. Sign payload with platform key
  * 5. Create watermark payload and embed into audio
  * 6. Insert registration into database
- * 7. Optionally compute MERT embedding (Session 19)
+ * 7. Optionally compute audio embedding for similarity search
  * 8. Return registration ID, fingerprint, and watermarked audio
  * 
- * Session 19: Added optional MERT semantic fingerprinting
- * - Set ORBIT_ENABLE_MERT_ON_REGISTER=true to auto-compute MERT embeddings
- * - Or pass include_mert: true in metadata for per-request control
- * 
- * V2 Note: In Session 21, this will be enhanced with auto-metadata extraction
- * (genre, mood, BPM, key via CLAP/MERT). The metadata handling is designed to be
- * extensible for this future enhancement.
+ * Session 19: Added optional semantic fingerprinting
+ * Session 22: Switched from MERT (CC BY-NC 4.0) to CLAP embeddings (Apache 2.0)
+ * - Set ORBIT_ENABLE_EMBEDDING_ON_REGISTER=true to auto-compute embeddings
+ * - Or pass include_embedding: true in metadata for per-request control
  */
 
 const OrbitFingerprint = require('../../engines/fingerprint');
@@ -30,24 +27,8 @@ const queries = require('../../ledger/queries');
 const config = require('../../config');
 const AudioUtils = require('../../utils/audio');
 
-// MERT is optional - only load if available (Session 19)
-let mertModule = null;
-async function getMertModule() {
-  if (mertModule === null) {
-    try {
-      mertModule = require('../../ml/mert');
-      const envCheck = await mertModule.checkPythonEnvironment();
-      if (!envCheck.available) {
-        console.log('⚠️  MERT unavailable:', envCheck.message);
-        mertModule = false; // Mark as unavailable
-      }
-    } catch (e) {
-      console.log('⚠️  MERT module not loaded:', e.message);
-      mertModule = false;
-    }
-  }
-  return mertModule || null;
-}
+// CLAP for audio embeddings (Apache 2.0 licensed - commercially safe)
+const clap = require('../../ml/clap');
 
 /**
  * Validate required metadata fields
@@ -382,59 +363,53 @@ async function registerHandler(req, res) {
     console.log(`✅ Registration complete! ID: ${registration.id}`);
     
     // ========================================================================
-    // 8. OPTIONAL: COMPUTE MERT EMBEDDING (Session 19)
+    // 8. OPTIONAL: COMPUTE AUDIO EMBEDDING (Session 22 - CLAP)
+    // Uses CLAP embeddings (Apache 2.0) instead of MERT (non-commercial)
     // ========================================================================
     
-    let mertEmbedding = null;
-    let mertSimilar = [];
+    let audioEmbedding = null;
+    let similarTracks = [];
     
-    // Check if MERT is enabled (via env or per-request)
-    const enableMert = process.env.ORBIT_ENABLE_MERT_ON_REGISTER === 'true' 
-                       || metadata.include_mert === true;
+    // Check if embedding is enabled (via env or per-request)
+    const enableEmbedding = process.env.ORBIT_ENABLE_EMBEDDING_ON_REGISTER === 'true' 
+                           || metadata.include_embedding === true;
     
-    if (enableMert) {
-      const mert = await getMertModule();
-      
-      if (mert) {
-        try {
-          console.log('🧠 Computing MERT semantic embedding...');
-          const mertResult = await mert.getEmbedding(audioBuffer, { verbose: true });
-          
-          // Convert to PostgreSQL vector format
-          const pgVector = mert.embeddingToPostgres(mertResult.embedding);
-          
-          // Update registration with MERT embedding
-          await queries.updateMertEmbedding(registration.id, pgVector);
-          console.log(`✅ MERT embedding stored (${mertResult.embedding.length} dims)`);
-          
-          // Find similar tracks
-          mertSimilar = await queries.findSimilarByMertEmbedding(pgVector, {
-            threshold: 0.5,
-            limit: 5,
-            excludeId: registration.id
+    if (enableEmbedding) {
+      try {
+        console.log('🧠 Computing CLAP audio embedding...');
+        const embeddingResult = await clap.getAudioEmbedding(audioBuffer, { verbose: true });
+        
+        // Convert to PostgreSQL vector format
+        const pgVector = clap.embeddingToPostgres(embeddingResult.embedding);
+        
+        // Update registration with embedding
+        await queries.updateAudioEmbedding(registration.id, pgVector);
+        console.log(`✅ Audio embedding stored (${embeddingResult.embedding.length} dims)`);
+        
+        // Find similar tracks
+        similarTracks = await queries.findSimilarByEmbedding(pgVector, {
+          threshold: 0.5,
+          limit: 5,
+          excludeId: registration.id
+        });
+        
+        if (similarTracks.length > 0) {
+          console.log(`🔍 Found ${similarTracks.length} similar tracks:`);
+          similarTracks.forEach(s => {
+            const rel = clap.classifyRelationship(s.similarity);
+            console.log(`   - "${s.title}" by ${s.artist}: ${(s.similarity * 100).toFixed(1)}% (${rel.relationship})`);
           });
-          
-          if (mertSimilar.length > 0) {
-            console.log(`🔍 Found ${mertSimilar.length} similar tracks:`);
-            mertSimilar.forEach(s => {
-              const rel = mert.classifyRelationship(s.similarity);
-              console.log(`   - "${s.title}" by ${s.artist}: ${(s.similarity * 100).toFixed(1)}% (${rel.relationship})`);
-            });
-          }
-          
-          mertEmbedding = {
-            computed: true,
-            dims: mertResult.embedding.length,
-            processing_time_ms: mertResult.processingTimeMs
-          };
-          
-        } catch (mertError) {
-          console.log(`⚠️  MERT embedding failed (non-fatal): ${mertError.message}`);
-          mertEmbedding = { computed: false, error: mertError.message };
         }
-      } else {
-        console.log('⚠️  MERT requested but not available (Python dependencies missing)');
-        mertEmbedding = { computed: false, error: 'Python dependencies not installed' };
+        
+        audioEmbedding = {
+          computed: true,
+          dims: embeddingResult.embedding.length,
+          processing_time_ms: embeddingResult.processingTimeMs
+        };
+        
+      } catch (embeddingError) {
+        console.log(`⚠️  Audio embedding failed (non-fatal): ${embeddingError.message}`);
+        audioEmbedding = { computed: false, error: embeddingError.message };
       }
     }
     
@@ -463,16 +438,16 @@ async function registerHandler(req, res) {
       processing_time_ms: responseTime
     };
     
-    // Add MERT info if computed
-    if (mertEmbedding) {
-      response.mert = mertEmbedding;
-      if (mertSimilar.length > 0) {
-        response.similar_tracks = mertSimilar.map(s => ({
+    // Add embedding info if computed
+    if (audioEmbedding) {
+      response.embedding = audioEmbedding;
+      if (similarTracks.length > 0) {
+        response.similar_tracks = similarTracks.map(s => ({
           registration_id: s.id,
           title: s.title,
           artist: s.artist,
           similarity: parseFloat(s.similarity.toFixed(4)),
-          relationship: mertModule ? mertModule.classifyRelationship(s.similarity).relationship : null
+          relationship: clap.classifyRelationship(s.similarity).relationship
         }));
       }
     }

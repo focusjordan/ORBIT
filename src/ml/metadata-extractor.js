@@ -8,8 +8,7 @@
  * registration.
  * 
  * Components Integrated:
- * - CLAP (clap.js): Genre, mood, instruments, vocals detection
- * - MERT (mert.js): Semantic embedding for similarity search
+ * - CLAP (clap.js): Genre, mood, instruments, vocals detection + audio embeddings
  * - Audio Analysis (audio-analysis.js): BPM, key, energy, loudness
  * 
  * Output follows ORBIT_ENHANCEMENTS.md Section 5 (Enhanced Verification Response)
@@ -23,7 +22,8 @@ const fs = require('fs');
 
 // Import ML modules
 const clap = require('./clap');
-const mert = require('./mert');
+// MERT DISABLED - CC BY-NC 4.0 license incompatible with commercial use
+// const mert = require('./mert');
 const audioAnalysis = require('./audio-analysis');
 
 /**
@@ -32,7 +32,7 @@ const audioAnalysis = require('./audio-analysis');
 const EXTRACTOR_CONFIG = {
   // Enable/disable individual extractors
   enableClap: true,
-  enableMert: true,
+  enableEmbedding: true,  // Uses CLAP embeddings (Apache 2.0)
   enableAudioAnalysis: true,
   
   // CLAP configuration
@@ -43,8 +43,8 @@ const EXTRACTOR_CONFIG = {
   // Audio analysis configuration
   audioAnalysisMaxLength: 120,
   
-  // MERT configuration
-  mertMaxLength: 30,
+  // Embedding configuration (CLAP 512-dim)
+  embeddingMaxLength: 30,
   
   // Whether to fail on partial extraction errors
   failOnError: false,
@@ -54,13 +54,12 @@ const EXTRACTOR_CONFIG = {
  * Extract all AI metadata from an audio file
  * 
  * This is the main entry point that combines all extractors:
- * - CLAP: genre, mood, instruments, vocals
+ * - CLAP: genre, mood, instruments, vocals + audio embeddings
  * - Audio Analysis: BPM, key, energy, loudness, danceability
- * - MERT: semantic embedding (for storage/similarity)
  * 
  * @param {string|Buffer} input - Audio file path or buffer
  * @param {Object} options - Options
- * @param {boolean} options.includeEmbedding - Include MERT embedding in response (default: false)
+ * @param {boolean} options.includeEmbedding - Include audio embedding in response (default: false)
  * @param {boolean} options.verbose - Log progress (default: false)
  * @param {Object} options.config - Override default configuration
  * @returns {Promise<Object>} Complete AI metadata object
@@ -79,7 +78,7 @@ const EXTRACTOR_CONFIG = {
  * //   danceability: 0.85,
  * //   duration: 180.5,
  * //   processingTimeMs: 12500,
- * //   extractionStatus: { clap: 'success', audioAnalysis: 'success', mert: 'success' }
+ * //   extractionStatus: { clap: 'success', audioAnalysis: 'success', embedding: 'success' }
  * // }
  */
 async function extractMetadata(input, options = {}) {
@@ -102,7 +101,7 @@ async function extractMetadata(input, options = {}) {
   const extractionStatus = {
     clap: 'pending',
     audioAnalysis: 'pending',
-    mert: 'pending',
+    embedding: 'pending',
   };
   
   // Results container
@@ -119,8 +118,8 @@ async function extractMetadata(input, options = {}) {
     duration: null,
   };
   
-  // Optional embedding storage
-  let mertEmbedding = null;
+  // Optional embedding storage (CLAP - Apache 2.0)
+  let audioEmbedding = null;
   
   // ==========================================
   // CLAP Extraction (genre, mood, instruments, vocals)
@@ -209,37 +208,37 @@ async function extractMetadata(input, options = {}) {
   }
   
   // ==========================================
-  // MERT Embedding (for storage and similarity)
+  // Audio Embedding (CLAP - Apache 2.0, commercially licensable)
+  // Replaces MERT which is CC BY-NC 4.0 (non-commercial only)
   // ==========================================
-  if (cfg.enableMert) {
+  if (cfg.enableEmbedding) {
     try {
       if (verbose) {
-        console.log('   → MERT: Generating semantic embedding...');
+        console.log('   → CLAP: Generating audio embedding...');
       }
       
-      const mertResult = await mert.getEmbedding(input, {
-        maxLength: cfg.mertMaxLength,
+      const embeddingResult = await clap.getAudioEmbedding(input, {
         verbose: false,
       });
       
-      mertEmbedding = mertResult.embedding;
+      audioEmbedding = embeddingResult.embedding;
       
-      // If duration wasn't set by audio analysis, use MERT's duration
+      // If duration wasn't set by audio analysis, use embedding duration
       if (result.duration === null) {
-        result.duration = mertResult.duration;
+        result.duration = embeddingResult.duration;
       }
       
-      extractionStatus.mert = 'success';
+      extractionStatus.embedding = 'success';
       
       if (verbose) {
-        console.log(`   ✓ MERT: Complete (${mertResult.processingTimeMs}ms)`);
+        console.log(`   ✓ CLAP Embedding: Complete (${embeddingResult.processingTimeMs}ms)`);
       }
       
     } catch (error) {
-      extractionStatus.mert = `error: ${error.message}`;
+      extractionStatus.embedding = `error: ${error.message}`;
       
       if (verbose) {
-        console.log(`   ✗ MERT: Failed - ${error.message}`);
+        console.log(`   ✗ CLAP Embedding: Failed - ${error.message}`);
       }
       
       if (cfg.failOnError) {
@@ -247,7 +246,7 @@ async function extractMetadata(input, options = {}) {
       }
     }
   } else {
-    extractionStatus.mert = 'disabled';
+    extractionStatus.embedding = 'disabled';
   }
   
   // ==========================================
@@ -259,13 +258,14 @@ async function extractMetadata(input, options = {}) {
   result.extractionStatus = extractionStatus;
   
   // Include embedding if requested
-  if (includeEmbedding && mertEmbedding) {
-    result.mertEmbedding = mertEmbedding;
+  if (includeEmbedding && audioEmbedding) {
+    result.embedding = audioEmbedding;
+    result.embeddingDim = audioEmbedding.length;
   }
   
   if (verbose) {
     console.log(`✅ MetadataExtractor: Complete in ${(totalTime / 1000).toFixed(1)}s`);
-    console.log(`   Status: CLAP=${extractionStatus.clap}, AudioAnalysis=${extractionStatus.audioAnalysis}, MERT=${extractionStatus.mert}`);
+    console.log(`   Status: CLAP=${extractionStatus.clap}, AudioAnalysis=${extractionStatus.audioAnalysis}, Embedding=${extractionStatus.embedding}`);
   }
   
   return result;
@@ -286,7 +286,7 @@ async function extractClapOnly(input, options = {}) {
     ...options,
     config: {
       enableClap: true,
-      enableMert: false,
+      enableEmbedding: false,
       enableAudioAnalysis: false,
     },
   });
@@ -306,7 +306,7 @@ async function extractAudioAnalysisOnly(input, options = {}) {
     ...options,
     config: {
       enableClap: false,
-      enableMert: false,
+      enableEmbedding: false,
       enableAudioAnalysis: true,
     },
   });
@@ -320,38 +320,20 @@ async function extractAudioAnalysisOnly(input, options = {}) {
 async function checkEnvironment() {
   const status = {
     clap: { available: false, message: '' },
-    mert: { available: false, message: '' },
     audioAnalysis: { available: false, message: '' },
     overall: { available: false, message: '' },
   };
   
   // Check CLAP (requires @xenova/transformers)
   try {
-    // CLAP uses transformers.js which is a JS dependency
-    // Just check if the module loads
     status.clap = {
       available: true,
-      message: 'CLAP module loaded',
+      message: 'CLAP module loaded (classification + embeddings)',
     };
   } catch (error) {
     status.clap = {
       available: false,
       message: `CLAP error: ${error.message}`,
-    };
-  }
-  
-  // Check MERT (requires Python + dependencies)
-  try {
-    const mertStatus = await mert.checkPythonEnvironment();
-    status.mert = {
-      available: mertStatus.available,
-      message: mertStatus.message,
-      details: mertStatus.details,
-    };
-  } catch (error) {
-    status.mert = {
-      available: false,
-      message: `MERT error: ${error.message}`,
     };
   }
   
@@ -371,8 +353,8 @@ async function checkEnvironment() {
   }
   
   // Overall status
-  const allAvailable = status.clap.available && status.mert.available && status.audioAnalysis.available;
-  const partialAvailable = status.clap.available || status.mert.available || status.audioAnalysis.available;
+  const allAvailable = status.clap.available && status.audioAnalysis.available;
+  const partialAvailable = status.clap.available || status.audioAnalysis.available;
   
   if (allAvailable) {
     status.overall = {
@@ -382,7 +364,6 @@ async function checkEnvironment() {
   } else if (partialAvailable) {
     const unavailable = [];
     if (!status.clap.available) unavailable.push('CLAP');
-    if (!status.mert.available) unavailable.push('MERT');
     if (!status.audioAnalysis.available) unavailable.push('AudioAnalysis');
     
     status.overall = {
@@ -427,14 +408,15 @@ function formatForDatabase(extractionResult) {
 }
 
 /**
- * Format MERT embedding for PostgreSQL vector storage
+ * Format audio embedding for PostgreSQL vector storage
+ * Uses CLAP 512-dim embeddings (Apache 2.0 licensed)
  * 
- * @param {Float32Array|null} embedding - MERT embedding
+ * @param {Float32Array|null} embedding - Audio embedding
  * @returns {string|null} PostgreSQL vector format or null
  */
 function formatEmbeddingForDatabase(embedding) {
   if (!embedding) return null;
-  return mert.embeddingToPostgres(embedding);
+  return clap.embeddingToPostgres(embedding);
 }
 
 // Export configuration for testing
@@ -459,7 +441,6 @@ module.exports = {
   // Re-export component modules for direct access if needed
   components: {
     clap,
-    mert,
     audioAnalysis,
   },
 };

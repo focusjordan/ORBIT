@@ -1,27 +1,27 @@
 /**
- * ORBIT MERT Semantic Fingerprinting Tests
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║  ⚠️  MERT TESTS DISABLED - Session 22                                     ║
+ * ║                                                                          ║
+ * ║  MERT model weights are CC BY-NC 4.0 (non-commercial only).              ║
+ * ║  ORBIT is a commercial product, so MERT cannot be used.                  ║
+ * ║                                                                          ║
+ * ║  Use CLAP embeddings instead: clap.getAudioEmbedding()                   ║
+ * ║  See: tests/ml/clap.test.js                                              ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ * 
+ * ORBIT MERT Semantic Fingerprinting Tests (DISABLED)
  * 
  * Session 19 - Tests for MERT semantic audio embeddings
- * 
- * Tests verify:
- * 1. Python environment check works
- * 2. Embedding generation produces 768-dim vectors
- * 3. Same audio → high similarity (~0.99)
- * 4. Different audio → lower similarity
- * 5. Cosine similarity calculation is correct
- * 6. Relationship classification works
- * 7. Serialization helpers work correctly
- * 
- * Prerequisites:
- * - Python 3.8+ installed
- * - pip install -r scripts/requirements-ml.txt
- * - Test audio files in tests/fixtures/
- * 
- * Run: npm run test:mert
- * 
- * NOTE: First run will download MERT model (~400MB) and may take several minutes.
+ * Session 22 - DISABLED due to CC BY-NC 4.0 license
  */
 
+// Exit immediately - MERT is disabled
+console.log('\n⚠️  MERT TESTS SKIPPED');
+console.log('   MERT model is CC BY-NC 4.0 (non-commercial only)');
+console.log('   Use CLAP embeddings instead: npm run test:clap\n');
+process.exit(0);
+
+// Original test code below (preserved for reference)
 const path = require('path');
 const fs = require('fs');
 

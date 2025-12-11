@@ -19,7 +19,7 @@
 | Phase 4 | 18-24 | Neural Enhancements (v2) | 🔄 In Progress (Session 18 Complete) |
 | Phase 5 | 25-28 | Polish & SDK | ⬜ Not Started |
 
-**Current Session**: Session 21 ✅ Complete - Auto-Metadata Pipeline (45 tests passing)  
+**Current Session**: Session 22 🔄 In Progress - MERT→CLAP migration complete, SilentCipher next  
 **Last Updated**: December 10, 2025  
 **Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Core engines working (fingerprint, watermark, crypto), ✅ Database with full schema, ✅ Express server with CBOR middleware, ✅ Platform authentication, ✅ All 5 v1 API endpoints, ✅ SDK published, ✅ Ohnrshyp integration complete, ✅ **ML ModelManager infrastructure with lazy loading**
 
@@ -33,7 +33,7 @@ This table maps `ORBIT_ENHANCEMENTS.md` sections to their implementing sessions.
 |---------------------|--------------|------------------------|------------|
 | §1 Neural Watermarking - SilentCipher | 99%+ extraction accuracy on compressed audio | Session 22 | Session 6-7 (spread spectrum becomes fallback) |
 | §1 Neural Watermarking - WMCodec | Codec-aware fallback watermark | Session 23 | — (additive) |
-| §2 Neural Fingerprinting (MERT) | Pitch/speed invariant matching, similarity search | Session 19 | Session 3-4 (Chromaprint becomes exact-match only) |
+| §2 Neural Fingerprinting (MERT) | ⚠️ **DISABLED** - CC BY-NC 4.0 license. CLAP embeddings used instead | Session 19 → Session 22 | CLAP embeddings replace MERT |
 | §3 Zero-Shot CLAP Classification | Auto-extract genre, mood, instruments | Session 20 | — (new capability) |
 | §3 Auto-Metadata Pipeline | BPM, key, combined AI metadata | Session 21 | — (new capability) |
 | §4 Content Relationship Detection | Detect covers, remixes, mashups | Session 24 | — (new capability) |
@@ -52,7 +52,10 @@ When building these v1 sessions, keep implementations **minimal and modular** �
 | **Session 12** (Verify) | Basic verification response | **Enhanced** with AI metadata in v2 | Design response as extensible object |
 | **Session 11** (Register) | Basic registration | **Enhanced** with auto-metadata in v2 | Make metadata injection pluggable |
 
-### 🎯 Chromaprint + MERT: Dual Fingerprint Architecture
+### 🎯 Chromaprint + CLAP: Dual Fingerprint Architecture
+
+> ⚠️ **Session 22 Update**: MERT was disabled due to CC BY-NC 4.0 license (non-commercial only).
+> CLAP embeddings (Apache 2.0) now provide semantic similarity search.
 
 **Why Both Are Needed**:
 
@@ -60,12 +63,12 @@ When building these v1 sessions, keep implementations **minimal and modular** �
 |----------|------|-------|---------|
 | Exact duplicate (same MP3) | Chromaprint | ⚡ 1s | 32 bytes |
 | Transcoded (MP3→FLAC) | Chromaprint | ⚡ 1s | 32 bytes |
-| Pitch shifted (+2 semitones) | MERT | ⏱️ 5s | 3KB |
-| Time stretched (110% speed) | MERT | ⏱️ 5s | 3KB |
-| Cover version | MERT | ⏱️ 5s | 3KB |
-| Remix / mashup | MERT | ⏱️ 5s | 3KB |
+| Pitch shifted (+2 semitones) | CLAP | ⏱️ 2s | 2KB |
+| Time stretched (110% speed) | CLAP | ⏱️ 2s | 2KB |
+| Cover version | CLAP | ⏱️ 2s | 2KB |
+| Remix / mashup | CLAP | ⏱️ 2s | 2KB |
 
-**Result**: Chromaprint catches 95% instantly, MERT handles sophisticated 5%
+**Result**: Chromaprint catches 95% instantly, CLAP handles sophisticated 5%
 
 ---
 
@@ -173,7 +176,7 @@ Session 15: ✅ Complete - ORBIT SDK Package
 Session 16: ✅ Complete & Tested - Ohnrshyp duplicate check middleware (S3 download pattern, verified in integration)
 Session 17: ✅ Complete & Tested - Ohnrshyp auto-registration middleware (SDK verified: register/verify working)
 Session 18: ✅ Complete & Tested - ML ModelManager infrastructure (lazy loading, CLAP/SentenceTransformer working, 17 tests passing)
-Session 19: ✅ Complete & Tested - MERT Semantic Fingerprinting (768-dim embeddings, Python bridge, 23 tests passing)
+Session 19: ⚠️ MERT Disabled (Session 22) - CC BY-NC 4.0 license incompatible with commercial use. CLAP embeddings (512-dim, Apache 2.0) now used instead.
 Session 20: ✅ Complete & Tested - CLAP Zero-Shot Classification (genre/mood/instruments, 19 tests passing)
 Session 21: ✅ Complete & Tested - Auto-Metadata Pipeline (audio-analysis 21 + metadata-extractor 24 = 45 tests passing)
 Session 22: ⬜ Not Started

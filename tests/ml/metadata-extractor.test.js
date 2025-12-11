@@ -6,7 +6,7 @@
  * Tests verify:
  * 1. Module exports required functions
  * 2. Environment check reports all components
- * 3. Full extraction combines CLAP + AudioAnalysis + MERT
+ * 3. Full extraction combines CLAP + AudioAnalysis + CLAP embeddings
  * 4. Partial extraction works with individual components
  * 5. Error handling is graceful (doesn't fail on individual component errors)
  * 6. Database formatting functions work correctly
@@ -156,14 +156,13 @@ runner.test('Module exports required functions', () => {
 runner.test('Config object is exported', () => {
   assertType(metadataExtractor.config, 'object', 'config: ');
   assertHasProperty(metadataExtractor.config, 'enableClap', 'config: ');
-  assertHasProperty(metadataExtractor.config, 'enableMert', 'config: ');
+  assertHasProperty(metadataExtractor.config, 'enableEmbedding', 'config: ');
   assertHasProperty(metadataExtractor.config, 'enableAudioAnalysis', 'config: ');
 });
 
 runner.test('Components are exported for direct access', () => {
   assertType(metadataExtractor.components, 'object', 'components: ');
   assertHasProperty(metadataExtractor.components, 'clap', 'components: ');
-  assertHasProperty(metadataExtractor.components, 'mert', 'components: ');
   assertHasProperty(metadataExtractor.components, 'audioAnalysis', 'components: ');
 });
 
@@ -176,12 +175,11 @@ runner.test('Environment check returns status for all components', async () => {
   
   assertType(status, 'object', 'Status: ');
   assertHasProperty(status, 'clap', 'Status: ');
-  assertHasProperty(status, 'mert', 'Status: ');
   assertHasProperty(status, 'audioAnalysis', 'Status: ');
   assertHasProperty(status, 'overall', 'Status: ');
   
   // Each component should have available and message
-  for (const component of ['clap', 'mert', 'audioAnalysis', 'overall']) {
+  for (const component of ['clap', 'audioAnalysis', 'overall']) {
     assertHasProperty(status[component], 'available', `${component}: `);
     assertHasProperty(status[component], 'message', `${component}: `);
   }
@@ -193,7 +191,7 @@ runner.test('At least some components are available', async () => {
   // Overall should indicate availability
   assertTrue(
     status.overall.available,
-    `No components available. CLAP: ${status.clap.message}, MERT: ${status.mert.message}, AudioAnalysis: ${status.audioAnalysis.message}`
+    `No components available. CLAP: ${status.clap.message}, AudioAnalysis: ${status.audioAnalysis.message}`
   );
 });
 
@@ -224,7 +222,7 @@ runner.test('Extraction status tracks all components', async () => {
   
   assertHasProperty(result.extractionStatus, 'clap', 'extractionStatus: ');
   assertHasProperty(result.extractionStatus, 'audioAnalysis', 'extractionStatus: ');
-  assertHasProperty(result.extractionStatus, 'mert', 'extractionStatus: ');
+  assertHasProperty(result.extractionStatus, 'embedding', 'extractionStatus: ');
 });
 
 runner.test('Genre is extracted as array with confidence scores', async () => {
@@ -319,7 +317,7 @@ runner.test('extractClapOnly returns only CLAP results', async () => {
   
   // Status should reflect disabled components
   assertEqual(result.extractionStatus.audioAnalysis, 'disabled', 'audioAnalysis status: ');
-  assertEqual(result.extractionStatus.mert, 'disabled', 'mert status: ');
+  assertEqual(result.extractionStatus.embedding, 'disabled', 'embedding status: ');
 });
 
 runner.test('extractAudioAnalysisOnly returns only analysis results', async () => {
@@ -336,28 +334,28 @@ runner.test('extractAudioAnalysisOnly returns only analysis results', async () =
   
   // Status should reflect disabled components
   assertEqual(result.extractionStatus.clap, 'disabled', 'clap status: ');
-  assertEqual(result.extractionStatus.mert, 'disabled', 'mert status: ');
+  assertEqual(result.extractionStatus.embedding, 'disabled', 'embedding status: ');
 });
 
 // ------------------------------------------
-// MERT Embedding Tests
+// Audio Embedding Tests (CLAP - Apache 2.0)
 // ------------------------------------------
 
-runner.test('MERT embedding is not included by default', async () => {
+runner.test('Audio embedding is not included by default', async () => {
   const result = await metadataExtractor.extractMetadata(TEST_AUDIO_PATH);
   
-  assertFalse('mertEmbedding' in result, 'mertEmbedding should not be present by default');
+  assertFalse('embedding' in result, 'embedding should not be present by default');
 });
 
-runner.test('MERT embedding can be included with option', async () => {
+runner.test('Audio embedding can be included with option', async () => {
   const result = await metadataExtractor.extractMetadata(TEST_AUDIO_PATH, {
     includeEmbedding: true,
   });
   
-  if (result.extractionStatus.mert === 'success') {
-    assertHasProperty(result, 'mertEmbedding', 'Result with embedding: ');
-    assertTrue(result.mertEmbedding instanceof Float32Array, 'mertEmbedding should be Float32Array');
-    assertEqual(result.mertEmbedding.length, 768, 'MERT embedding should be 768-dim');
+  if (result.extractionStatus.embedding === 'success') {
+    assertHasProperty(result, 'embedding', 'Result with embedding: ');
+    assertTrue(result.embedding instanceof Float32Array, 'embedding should be Float32Array');
+    assertEqual(result.embedding.length, 512, 'CLAP embedding should be 512-dim');
   }
 });
 
@@ -410,12 +408,12 @@ runner.test('Configuration can be overridden', async () => {
   const result = await metadataExtractor.extractMetadata(TEST_AUDIO_PATH, {
     config: {
       enableClap: true,
-      enableMert: false,
+      enableEmbedding: false,
       enableAudioAnalysis: false,
     },
   });
   
-  assertEqual(result.extractionStatus.mert, 'disabled', 'mert should be disabled');
+  assertEqual(result.extractionStatus.embedding, 'disabled', 'embedding should be disabled');
   assertEqual(result.extractionStatus.audioAnalysis, 'disabled', 'audioAnalysis should be disabled');
 });
 
@@ -447,9 +445,9 @@ runner.test('Full extraction completes within reasonable time', async () => {
   await metadataExtractor.extractMetadata(TEST_AUDIO_PATH);
   const elapsed = Date.now() - startTime;
   
-  // Full extraction should complete within 3 minutes for test audio
-  // (CLAP ~40s + AudioAnalysis ~10s + MERT ~60s = ~2 min typical, 3 min max)
-  assertTrue(elapsed < 180000, `Extraction took ${elapsed}ms, expected < 180000ms (3 min)`);
+  // Full extraction should complete within 2 minutes for test audio
+  // (CLAP classification ~40s + AudioAnalysis ~10s + CLAP embedding ~5s)
+  assertTrue(elapsed < 120000, `Extraction took ${elapsed}ms, expected < 120000ms (2 min)`);
   console.log(`     (Took ${(elapsed / 1000).toFixed(1)}s)`);
 });
 
@@ -483,7 +481,6 @@ async function main() {
   console.log('\n🔍 Checking environment...');
   const envStatus = await metadataExtractor.checkEnvironment();
   console.log(`   CLAP: ${envStatus.clap.available ? '✅' : '❌'} ${envStatus.clap.message}`);
-  console.log(`   MERT: ${envStatus.mert.available ? '✅' : '❌'} ${envStatus.mert.message}`);
   console.log(`   AudioAnalysis: ${envStatus.audioAnalysis.available ? '✅' : '❌'} ${envStatus.audioAnalysis.message}`);
   console.log(`   Overall: ${envStatus.overall.available ? '✅' : '❌'} ${envStatus.overall.message}`);
   

@@ -51,6 +51,12 @@ const CLAP_CONFIG = {
 let _pipeline = null;
 let _pipelinePromise = null;
 
+// Model/processor/tokenizer cache for direct embedding extraction
+let _clapModel = null;
+let _clapProcessor = null;
+let _clapTokenizer = null;
+let _modelLoadPromise = null;
+
 // ==========================================
 // PROMPT DEFINITIONS
 // ==========================================
@@ -207,6 +213,167 @@ async function _loadAudioForClap(input, options = {}) {
   
   return samples;
 }
+
+// ==========================================
+// AUDIO EMBEDDING EXTRACTION
+// ==========================================
+
+/**
+ * Load CLAP model, processor, and tokenizer for direct embedding extraction
+ * @private
+ */
+async function _loadClapModel() {
+  if (_clapModel && _clapProcessor && _clapTokenizer) {
+    return { model: _clapModel, processor: _clapProcessor, tokenizer: _clapTokenizer };
+  }
+  
+  if (_modelLoadPromise) {
+    return _modelLoadPromise;
+  }
+  
+  _modelLoadPromise = (async () => {
+    const verbose = process.env.ORBIT_ML_VERBOSE === 'true';
+    
+    if (verbose) {
+      console.log(`📦 CLAP: Loading model for embedding extraction...`);
+    }
+    
+    const { ClapModel, AutoProcessor, AutoTokenizer } = await import('@xenova/transformers');
+    
+    _clapModel = await ClapModel.from_pretrained(CLAP_CONFIG.model);
+    _clapProcessor = await AutoProcessor.from_pretrained(CLAP_CONFIG.model);
+    _clapTokenizer = await AutoTokenizer.from_pretrained(CLAP_CONFIG.model);
+    
+    if (verbose) {
+      console.log(`✅ CLAP: Model loaded for embeddings`);
+    }
+    
+    return { model: _clapModel, processor: _clapProcessor, tokenizer: _clapTokenizer };
+  })();
+  
+  return _modelLoadPromise;
+}
+
+/**
+ * Extract audio embedding for similarity comparison
+ * 
+ * This function generates a 512-dimensional embedding that captures
+ * the acoustic/semantic content of audio. These embeddings can be
+ * compared via cosine similarity to detect:
+ * - Pitch-shifted duplicates
+ * - Covers (same song, different recording)
+ * - Remixes
+ * - Similar-sounding tracks
+ * 
+ * LICENSE: Apache 2.0 (commercially licensable)
+ * 
+ * @param {string|Buffer} input - Audio file path or buffer
+ * @param {Object} options - Options
+ * @param {boolean} options.verbose - Log progress (default: false)
+ * @param {boolean} options.normalize - L2 normalize embedding (default: true)
+ * @returns {Promise<{embedding: Float32Array, duration: number}>}
+ * 
+ * @example
+ * const { embedding: emb1 } = await getAudioEmbedding('song1.mp3');
+ * const { embedding: emb2 } = await getAudioEmbedding('song1_pitched.mp3');
+ * const similarity = cosineSimilarity(emb1, emb2);
+ * // similarity > 0.85 indicates likely same song
+ */
+async function getAudioEmbedding(input, options = {}) {
+  const { 
+    verbose = process.env.ORBIT_ML_VERBOSE === 'true',
+    normalize = true,
+  } = options;
+  
+  const startTime = Date.now();
+  
+  if (verbose) {
+    console.log(`🎵 CLAP: Extracting audio embedding...`);
+  }
+  
+  // Load audio samples at CLAP's expected sample rate (48kHz)
+  const audioSamples = await _loadAudioForClap(input, { verbose });
+  const duration = audioSamples.length / CLAP_CONFIG.sampleRate;
+  
+  // Load model, processor, and tokenizer
+  const { model, processor, tokenizer } = await _loadClapModel();
+  
+  // Process audio through CLAP processor
+  const audioInputs = await processor(audioSamples, {
+    sampling_rate: CLAP_CONFIG.sampleRate,
+  });
+  
+  // CLAP requires text input - use dummy text (we only want audio embeddings)
+  const textInputs = await tokenizer(['audio'], { padding: true, truncation: true });
+  
+  // Combine inputs and run model
+  const allInputs = { ...audioInputs, ...textInputs };
+  const { audio_embeds } = await model(allInputs);
+  
+  // Extract embedding as Float32Array
+  let embedding = new Float32Array(audio_embeds.data);
+  
+  // L2 normalize if requested (for cosine similarity)
+  if (normalize) {
+    let norm = 0;
+    for (let i = 0; i < embedding.length; i++) {
+      norm += embedding[i] * embedding[i];
+    }
+    norm = Math.sqrt(norm);
+    if (norm > 0) {
+      for (let i = 0; i < embedding.length; i++) {
+        embedding[i] /= norm;
+      }
+    }
+  }
+  
+  const elapsed = Date.now() - startTime;
+  
+  if (verbose) {
+    console.log(`✅ CLAP: Extracted ${embedding.length}-dim embedding in ${(elapsed / 1000).toFixed(1)}s`);
+  }
+  
+  return {
+    embedding,
+    duration,
+    embeddingDim: embedding.length,
+    processingTimeMs: elapsed,
+    model: CLAP_CONFIG.model,
+  };
+}
+
+/**
+ * Classify relationship between two audio files based on embedding similarity
+ * 
+ * @param {number} similarity - Cosine similarity score (0-1)
+ * @returns {{relationship: string, confidence: string}}
+ * 
+ * Thresholds (calibrated for CLAP):
+ * - 0.95-1.00: EXACT_DUPLICATE (same file or transcoded)
+ * - 0.85-0.95: LIKELY_DUPLICATE (pitch-shifted, minor edits)
+ * - 0.70-0.85: POSSIBLE_COVER (same song, different recording)
+ * - 0.55-0.70: STYLISTICALLY_SIMILAR
+ * - < 0.55: DIFFERENT_WORK
+ */
+function classifyRelationship(similarity) {
+  if (similarity >= 0.95) {
+    return { relationship: 'EXACT_DUPLICATE', confidence: 'very_high' };
+  }
+  if (similarity >= 0.85) {
+    return { relationship: 'LIKELY_DUPLICATE', confidence: 'high' };
+  }
+  if (similarity >= 0.70) {
+    return { relationship: 'POSSIBLE_COVER', confidence: 'medium' };
+  }
+  if (similarity >= 0.55) {
+    return { relationship: 'STYLISTICALLY_SIMILAR', confidence: 'low' };
+  }
+  return { relationship: 'DIFFERENT_WORK', confidence: 'high' };
+}
+
+// ==========================================
+// CLASSIFICATION FUNCTIONS
+// ==========================================
 
 /**
  * Classify audio against a set of candidate labels
@@ -520,6 +687,10 @@ async function analyzeAudio(input, options = {}) {
 function unload() {
   _pipeline = null;
   _pipelinePromise = null;
+  _clapModel = null;
+  _clapProcessor = null;
+  _clapTokenizer = null;
+  _modelLoadPromise = null;
 }
 
 /**
@@ -558,6 +729,11 @@ function postgresVectorToEmbedding(vectorString) {
 // ==========================================
 
 module.exports = {
+  // Audio embedding extraction (for similarity/duplicate detection)
+  // LICENSE: Apache 2.0 - commercially licensable
+  getAudioEmbedding,
+  classifyRelationship,
+  
   // Core classification function
   classifyWithLabels,
   

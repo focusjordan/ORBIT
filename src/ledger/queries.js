@@ -3,10 +3,13 @@
  * 
  * DESIGN NOTES:
  * - Chromaprint: EXACT hash equality (fingerprint_hash = $1) - fast path
- * - MERT: Vector similarity via pgvector (Session 19) - semantic path
+ * - Audio Embedding: Vector similarity via pgvector - semantic path
  * - Multi-platform duplicates allowed: same hash, different platforms = valid
  * 
- * Session 19: Added MERT embedding update and similarity queries
+ * Session 19: Added embedding update and similarity queries
+ * Session 22: Switched from MERT (non-commercial) to CLAP embeddings (Apache 2.0)
+ *             Database column remains 'mert_embedding' for backwards compatibility
+ *             but stores CLAP 512-dim vectors
  */
 
 const { pool } = require('../config/database');
@@ -347,37 +350,39 @@ const queries = {
   },
   
   // ============================================================================
-  // MERT Semantic Fingerprinting Queries (Session 19)
+  // Audio Embedding Queries (Session 19, updated Session 22)
+  // Uses CLAP embeddings (512-dim, Apache 2.0 licensed)
+  // Database column 'mert_embedding' retained for backwards compatibility
   // ============================================================================
   
   /**
-   * Update MERT embedding for a registration
+   * Update audio embedding for a registration
    * @param {number} registrationId - Registration ID
-   * @param {string} mertEmbedding - PostgreSQL vector string '[0.1,0.2,...]'
+   * @param {string} embedding - PostgreSQL vector string '[0.1,0.2,...]'
    * @returns {Promise<Object>}
    */
-  updateMertEmbedding: async (registrationId, mertEmbedding) => {
+  updateAudioEmbedding: async (registrationId, embedding) => {
     const result = await pool.query(
       `UPDATE orbit_registrations
        SET mert_embedding = $2::vector
        WHERE id = $1
        RETURNING id, title, artist`,
-      [registrationId, mertEmbedding]
+      [registrationId, embedding]
     );
     return result.rows[0];
   },
   
   /**
-   * Find similar registrations by MERT embedding using cosine similarity
+   * Find similar registrations by audio embedding using cosine similarity
    * 
-   * @param {string} mertEmbedding - PostgreSQL vector string '[0.1,0.2,...]'
+   * @param {string} embedding - PostgreSQL vector string '[0.1,0.2,...]'
    * @param {Object} options - Query options
    * @param {number} options.threshold - Minimum similarity (default 0.5)
    * @param {number} options.limit - Max results (default 10)
    * @param {number} options.excludeId - Registration ID to exclude (for self-matching)
    * @returns {Promise<Array>} Array of similar registrations with similarity scores
    */
-  findSimilarByMertEmbedding: async (mertEmbedding, options = {}) => {
+  findSimilarByEmbedding: async (embedding, options = {}) => {
     const {
       threshold = 0.5,
       limit = 10,
@@ -393,7 +398,7 @@ const queries = {
         AND 1 - (mert_embedding <=> $1::vector) > $2
     `;
     
-    const params = [mertEmbedding, threshold];
+    const params = [embedding, threshold];
     
     if (excludeId) {
       query += ` AND id != $3`;
@@ -408,11 +413,11 @@ const queries = {
   },
   
   /**
-   * Check if MERT embedding exists for a registration
+   * Check if audio embedding exists for a registration
    * @param {number} registrationId - Registration ID
    * @returns {Promise<boolean>}
    */
-  hasMertEmbedding: async (registrationId) => {
+  hasAudioEmbedding: async (registrationId) => {
     const result = await pool.query(
       `SELECT EXISTS(
         SELECT 1 FROM orbit_registrations 
@@ -424,13 +429,13 @@ const queries = {
   },
   
   /**
-   * Get registration with MERT embedding
+   * Get registration with audio embedding
    * @param {number} registrationId - Registration ID
    * @returns {Promise<Object|undefined>}
    */
-  getRegistrationWithMert: async (registrationId) => {
+  getRegistrationWithEmbedding: async (registrationId) => {
     const result = await pool.query(
-      `SELECT id, title, artist, mert_embedding::text as mert_embedding
+      `SELECT id, title, artist, mert_embedding::text as audio_embedding
        FROM orbit_registrations 
        WHERE id = $1`,
       [registrationId]
@@ -439,10 +444,10 @@ const queries = {
   },
   
   /**
-   * Count registrations with MERT embeddings
+   * Count registrations with audio embeddings
    * @returns {Promise<number>}
    */
-  countMertEmbeddings: async () => {
+  countAudioEmbeddings: async () => {
     const result = await pool.query(
       `SELECT COUNT(*) as count 
        FROM orbit_registrations 

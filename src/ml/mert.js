@@ -3,6 +3,24 @@
  * 
  * Session 19 - Neural fingerprinting with MERT
  * 
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║  ⚠️  LICENSE WARNING: MERT IS NON-COMMERCIAL USE ONLY (CC BY-NC 4.0)     ║
+ * ║                                                                          ║
+ * ║  The MERT model weights are licensed under Creative Commons              ║
+ * ║  Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).             ║
+ * ║                                                                          ║
+ * ║  For COMMERCIAL deployments, use CLAP embeddings instead:                ║
+ * ║  - Set ORBIT_EMBEDDING_PROVIDER=clap (default)                           ║
+ * ║  - CLAP is Apache 2.0 licensed (commercially licensable)                 ║
+ * ║                                                                          ║
+ * ║  MERT is available for:                                                  ║
+ * ║  - Research and development                                              ║
+ * ║  - Internal testing                                                      ║
+ * ║  - Non-commercial applications                                           ║
+ * ║                                                                          ║
+ * ║  Set ORBIT_EMBEDDING_PROVIDER=mert to explicitly enable (non-commercial) ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ * 
  * MERT (Music Embedding Representation Transformer) generates 768-dimensional
  * semantic embeddings that are invariant to pitch shifts, speed changes,
  * and other audio transformations that break traditional fingerprinting.
@@ -14,7 +32,7 @@
  * 
  * Dual Fingerprint Strategy (see ORBIT_ENHANCEMENTS.md Section 2):
  * 1. Chromaprint (Session 3-4): Fast exact-match detection (95% of cases)
- * 2. MERT (this module): Semantic similarity for edge cases
+ * 2. MERT/CLAP (this module or clap.js): Semantic similarity for edge cases
  * 
  * @see ORBIT_SPECIFICATION.md Section 12 (Zero-Shot ML Enhancements)
  * @see ORBIT_ENHANCEMENTS.md Section 2 (Neural Fingerprinting)

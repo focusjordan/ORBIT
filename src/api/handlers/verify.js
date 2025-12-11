@@ -12,7 +12,7 @@
  * V2 Note (Session 25): This response will be enhanced with:
  * - AI-extracted metadata (genre, mood, BPM, key)
  * - Content relationship detection (covers, remixes)
- * - MERT semantic similarity scores
+ * - Audio embedding similarity scores (CLAP)
  * - Enhanced confidence metrics
  * 
  * Design: Response structure is extensible to support v2 additions
