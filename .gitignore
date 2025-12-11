@@ -44,4 +44,6 @@ models/
 *.flac
 !tests/fixtures/*.mp3
 !tests/fixtures/*.wav
-.venv
+# Python virtual environments
+.venv/
+.venv-watermark/

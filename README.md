@@ -193,6 +193,28 @@ orbit/
 | Chromaprint | Any | Audio fingerprinting (`fpcalc` CLI) |
 | FFmpeg | Any | Audio format conversion |
 | Docker | Optional | Containerized PostgreSQL |
+| Python | 3.8+ | ML model inference |
+
+### Python ML Dependencies
+
+ORBIT uses Python for ML features. Two virtual environments are recommended due to torch version conflicts:
+
+```bash
+# Main venv (CLAP, audio analysis, etc.) - torch 2.9+
+python -m venv .venv
+source .venv/bin/activate
+pip install -r scripts/requirements-ml.txt
+
+# SilentCipher venv (neural watermarking) - requires torch<=2.0.0
+python -m venv .venv-watermark
+source .venv-watermark/bin/activate
+pip install torch==2.0.0 silentcipher librosa soundfile numpy
+```
+
+Set the environment variable to point to the watermark venv:
+```bash
+export ORBIT_SILENTCIPHER_PYTHON=/path/to/ORBIT/.venv-watermark/bin/python3
+```
 
 ---
 

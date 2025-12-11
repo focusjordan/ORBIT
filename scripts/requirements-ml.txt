@@ -15,5 +15,10 @@ transformers>=4.35.0
 librosa>=0.10.0
 numpy>=1.24.0
 
-# Optional but recommended
-soundfile>=0.12.0  # Better audio file handling
+# Audio file handling
+soundfile>=0.12.0
+
+# Neural Watermarking (Session 22)
+# SilentCipher by Sony AI - MIT License (commercially licensable)
+# https://github.com/sony/silentcipher
+silentcipher>=1.0.0
