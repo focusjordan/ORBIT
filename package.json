@@ -28,7 +28,8 @@
     "test:audio-analysis": "node tests/ml/audio-analysis.test.js",
     "test:metadata-extractor": "node tests/ml/metadata-extractor.test.js",
     "test:silentcipher": "node tests/ml/silentcipher.test.js",
-    "test:ml": "npm run test:models && npm run test:mert && npm run test:clap && npm run test:audio-analysis && npm run test:metadata-extractor && npm run test:silentcipher",
+    "test:content-analysis": "node tests/ml/content-analysis.test.js",
+    "test:ml": "npm run test:models && npm run test:mert && npm run test:clap && npm run test:audio-analysis && npm run test:metadata-extractor && npm run test:silentcipher && npm run test:content-analysis",
     "generate:keypair": "node scripts/generate-keypair.js",
     "seed:platform": "node scripts/seed-platform.js"
   },

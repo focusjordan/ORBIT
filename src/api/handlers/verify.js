@@ -26,6 +26,9 @@ const queries = require('../../ledger/queries');
 const config = require('../../config');
 const AudioUtils = require('../../utils/audio');
 
+// Content analysis for detecting covers, remixes, similar works (Session 24)
+const contentAnalysis = require('../../ml/content-analysis');
+
 /**
  * Main verification handler
  * Expects CBOR/JSON request with:
@@ -179,9 +182,42 @@ async function verifyHandler(req, res) {
       processing_time_ms: Date.now() - startTime
     };
     
-    // If no matches found, return early with unverified response
+    // If no matches found, still try content analysis for similar works
     if (matches.length === 0) {
-      console.log(`[Verify] No matches found - audio not registered`);
+      console.log(`[Verify] No fingerprint matches found - checking for similar content...`);
+      
+      // Even without an exact fingerprint match, we can find similar works
+      try {
+        const includeContentAnalysis = req.query?.include_content_analysis !== 'false';
+        
+        if (includeContentAnalysis) {
+          const contentResult = await contentAnalysis.findRelatedContent(audioBuffer, {
+            threshold: 0.50,
+            limit: 10,
+            verbose: process.env.ORBIT_ML_VERBOSE === 'true'
+          });
+          
+          response.content_analysis = {
+            is_derivative: contentResult.is_derivative,
+            similar_works: contentResult.similar_works,
+            relationship_counts: contentResult.relationship_counts || {},
+            analysis_time_ms: contentResult.processing_time_ms
+          };
+          
+          if (contentResult.is_derivative) {
+            console.log(`[Verify] Unregistered audio has ${contentResult.total_found} similar works (possible derivative)`);
+          }
+        }
+      } catch (contentError) {
+        console.warn(`[Verify] Content analysis failed for unregistered audio: ${contentError.message}`);
+        response.content_analysis = {
+          error: contentError.message,
+          is_derivative: false,
+          similar_works: []
+        };
+      }
+      
+      response.processing_time_ms = Date.now() - startTime;
       return res.orbit(response, 200);
     }
     
@@ -307,7 +343,45 @@ async function verifyHandler(req, res) {
     }
     
     // ========================================================================
-    // 9. RETURN COMPLETE VERIFICATION RESPONSE
+    // 9. CONTENT RELATIONSHIP ANALYSIS (Session 24)
+    // ========================================================================
+    
+    // Run content analysis to find covers, remixes, and similar works
+    // This uses CLAP embeddings and pgvector similarity search
+    try {
+      const includeContentAnalysis = req.query?.include_content_analysis !== 'false';
+      
+      if (includeContentAnalysis) {
+        console.log(`[Verify] Running content relationship analysis...`);
+        
+        const contentResult = await contentAnalysis.findRelatedContent(audioBuffer, {
+          threshold: 0.50,  // Include stylistically similar and above
+          limit: 10,
+          excludeId: registration.id,  // Don't include self-match
+          verbose: process.env.ORBIT_ML_VERBOSE === 'true'
+        });
+        
+        response.content_analysis = {
+          is_derivative: contentResult.is_derivative,
+          similar_works: contentResult.similar_works,
+          relationship_counts: contentResult.relationship_counts || {},
+          analysis_time_ms: contentResult.processing_time_ms
+        };
+        
+        console.log(`[Verify] Content analysis: is_derivative=${contentResult.is_derivative}, found=${contentResult.total_found}`);
+      }
+    } catch (contentError) {
+      // Content analysis is non-fatal - log and continue
+      console.warn(`[Verify] Content analysis failed: ${contentError.message}`);
+      response.content_analysis = {
+        error: contentError.message,
+        is_derivative: false,
+        similar_works: []
+      };
+    }
+    
+    // ========================================================================
+    // 10. RETURN COMPLETE VERIFICATION RESPONSE
     // ========================================================================
     
     console.log(`[Verify] Verification complete: verified=${response.verified}, time=${response.processing_time_ms}ms`);

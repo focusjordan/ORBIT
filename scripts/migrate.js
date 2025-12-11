@@ -160,9 +160,12 @@ CREATE TABLE IF NOT EXISTS orbit_api_usage (
 
 CREATE INDEX IF NOT EXISTS idx_orbit_usage_platform_month ON orbit_api_usage(platform_id, timestamp);
 
--- Note: Vector indexes created after data exists (need tuning for data size)
--- CREATE INDEX idx_orbit_audio_embedding ON orbit_registrations 
---   USING ivfflat (audio_embedding vector_cosine_ops) WITH (lists = 100);
+-- Vector indexes for similarity search (Session 24)
+-- Using IVFFlat for approximate nearest neighbor search
+-- Note: For best performance, rebuild after loading initial data:
+--   REINDEX INDEX idx_orbit_mert_embedding;
+CREATE INDEX IF NOT EXISTS idx_orbit_mert_embedding ON orbit_registrations 
+  USING ivfflat (mert_embedding vector_cosine_ops) WITH (lists = 100);
 `;
 
 async function migrate() {
