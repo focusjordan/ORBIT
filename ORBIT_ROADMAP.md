@@ -19,7 +19,7 @@
 | Phase 4 | 18-24 | Neural Enhancements (v2) | 🔄 In Progress (Session 18 Complete) |
 | Phase 5 | 25-28 | Polish & SDK | ⬜ Not Started |
 
-**Current Session**: Session 23 ⬜ Not Started - WMCodec fallback watermarking  
+**Current Session**: Session 24 ⬜ Not Started - Content Relationship Detection  
 **Last Updated**: December 11, 2025  
 **Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Core engines working (fingerprint, watermark, crypto), ✅ Database with full schema, ✅ Express server with CBOR middleware, ✅ Platform authentication, ✅ All 5 v1 API endpoints, ✅ SDK published, ✅ Ohnrshyp integration complete, ✅ **ML ModelManager infrastructure with lazy loading**
 
@@ -32,7 +32,7 @@ This table maps `ORBIT_ENHANCEMENTS.md` sections to their implementing sessions.
 | Enhancement Section | What It Adds | Implementing Session(s) | Supersedes |
 |---------------------|--------------|------------------------|------------|
 | §1 Neural Watermarking - SilentCipher | 99%+ extraction accuracy on compressed audio | Session 22 | Session 6-7 (spread spectrum becomes fallback) |
-| §1 Neural Watermarking - WMCodec | Codec-aware fallback watermark | Session 23 | — (additive) |
+| §1 Neural Watermarking - WMCodec | ⏭️ **SKIPPED** - Redundant; layered provenance handles compression | ~~Session 23~~ | — |
 | §2 Neural Fingerprinting (MERT) | ⚠️ **DISABLED** - CC BY-NC 4.0 license. CLAP embeddings used instead | Session 19 → Session 22 | CLAP embeddings replace MERT |
 | §3 Zero-Shot CLAP Classification | Auto-extract genre, mood, instruments | Session 20 | — (new capability) |
 | §3 Auto-Metadata Pipeline | BPM, key, combined AI metadata | Session 21 | — (new capability) |
@@ -180,7 +180,7 @@ Session 19: ⚠️ MERT Disabled (Session 22) - CC BY-NC 4.0 license incompatibl
 Session 20: ✅ Complete & Tested - CLAP Zero-Shot Classification (genre/mood/instruments, 19 tests passing)
 Session 21: ✅ Complete & Tested - Auto-Metadata Pipeline (audio-analysis 21 + metadata-extractor 24 = 45 tests passing)
 Session 22: ✅ Complete & Tested - SilentCipher neural watermarking + unified interface (silentcipher 22 + unified 14 = 36 tests passing)
-Session 23: ⬜ Not Started
+Session 23: ⏭️ Skipped - WMCodec redundant; layered provenance (fingerprint + CLAP + ledger) handles compression scenarios
 Session 24: ⬜ Not Started
 Session 25: ⬜ Not Started
 Session 26: ⬜ Not Started
@@ -3369,27 +3369,35 @@ npm install essentia.js  # Or use Python subprocess
 
 ### Session 23: WMCodec Fallback
 
-**Goal**: Dual watermarking system with fallback
+**Status**: ⏭️ **SKIPPED** - Redundant with layered provenance architecture
 
-**Prerequisites**: Session 22 complete
+**Original Goal**: Dual watermarking system with fallback
 
-**Tasks**:
-- [ ] Integrate WMCodec as secondary watermarker
-- [ ] Create `src/ml/wmcodec.js`
-- [ ] Update registration to embed both watermarks
-- [ ] Update extraction to try SilentCipher first
-- [ ] Fall back to WMCodec if primary fails
-- [ ] Return which method succeeded in response
-- [ ] Test with heavily compressed audio
+**Why Skipped**:
 
-**Key Implementation**: See `ORBIT_ENHANCEMENTS.md` Section 1 (fallback architecture)
+1. **Licensing uncertainty** - WMCodec commercial license status unclear
+2. **Redundant functionality** - SilentCipher already handles MP3/AAC compression robustly
+3. **Layered provenance solves the problem better**:
 
-**Commit Message**: `feat: WMCodec watermark fallback`
+   ```
+   LAYER 1: Neural Watermark (SilentCipher)
+   → Embedded proof, survives reasonable compression
+   
+   LAYER 2: Fingerprint (Chromaprint)  
+   → Exact match, identifies same audio even if watermark lost
+   
+   LAYER 3: Content Relationship (CLAP - Session 24)
+   → Semantic match, catches covers/remixes/heavily compressed
+   
+   LAYER 4: ORBIT Ledger (Provenance Chain)
+   → "This fingerprint was registered with watermark X"
+   ```
 
-**Verify**:
-- Normal extraction → uses SilentCipher
-- Heavy compression → falls back to WMCodec
-- Response shows `method: "silentcipher"` or `method: "wmcodec"`
+4. **Reverse-engineering provenance**: If a heavily compressed upload loses its watermark but matches a registered fingerprint, the ledger PROVES it was originally watermarked. The watermark served its purpose at registration time.
+
+**Alternative approach**: Spread spectrum already serves as fallback when SilentCipher is unavailable. Compression-resistant identification is handled by fingerprinting and Session 24's content relationship detection.
+
+**Decision date**: December 11, 2025
 
 ---
 
@@ -3397,12 +3405,16 @@ npm install essentia.js  # Or use Python subprocess
 
 **Goal**: Detect covers, remixes, and similar works
 
-**Prerequisites**: Session 23 complete
+**Prerequisites**: Session 22 complete (Session 23 skipped)
+
+> 📝 **Note**: This session uses CLAP embeddings (512-dim, Apache 2.0) instead of MERT 
+> (which was disabled in Session 22 due to CC BY-NC 4.0 license).
+> CLAP embeddings are already computed on registration when `include_embedding: true`.
 
 **Tasks**:
 - [ ] Create `src/ml/content-analysis.js`
 - [ ] Define similarity thresholds for relationship types
-- [ ] Query pgvector for similar MERT embeddings
+- [ ] Query pgvector for similar CLAP embeddings (not MERT)
 - [ ] Classify relationships: EXACT_DUPLICATE, TRANSCODED, POSSIBLE_REMIX, POSSIBLE_COVER, STYLISTICALLY_SIMILAR
 - [ ] Integrate into verify response as `content_analysis`
 - [ ] Create vector index if not exists (for performance)
