@@ -22,7 +22,7 @@
 
 const OrbitFingerprint = require('../../engines/fingerprint');
 const OrbitCrypto = require('../../engines/crypto');
-const OrbitWatermark = require('../../engines/watermark');
+const { UnifiedWatermark, getWatermarkMethod } = require('../../engines/watermark-unified');
 const queries = require('../../ledger/queries');
 const config = require('../../config');
 const AudioUtils = require('../../utils/audio');
@@ -250,38 +250,61 @@ async function registerHandler(req, res) {
     // ========================================================================
     
     console.log('💧 Creating watermark...');
+    console.log(`   Method: ${getWatermarkMethod()} (ORBIT_WATERMARK_METHOD)`);
     
-    // Create watermark instance
-    const watermark = new OrbitWatermark(config.orbit.secretKey);
+    // Create unified watermark instance (handles neural + spread spectrum)
+    const watermark = new UnifiedWatermark(config.orbit.secretKey);
     
-    // Create watermark payload (compact 64-byte structure for embedding)
-    const payloadHash = OrbitCrypto.hash(signedPayloadCbor).slice(0, 16); // 16-byte hash
-    const watermarkPayload = watermark.createPayload({
+    // Create payload hash (16 bytes for spread spectrum, 5 bytes used for neural)
+    const payloadHash = OrbitCrypto.hash(signedPayloadCbor).slice(0, 16);
+    
+    // Prepare payload data
+    const payloadData = {
       platform: req.platform.id,
       timestamp: timestamp,
       payloadHash: payloadHash
-    });
+    };
     
-    console.log('🎵 Converting audio to samples...');
-    const audioSamples = await AudioUtils.decodeAudioToSamples(audioBuffer);
-    console.log(`   Decoded ${audioSamples.length} samples (${(audioSamples.length / 44100).toFixed(1)}s)`);
+    // Check audio duration before attempting watermark
+    // Note: Neural watermarking needs ~1s minimum, spread spectrum needs ~12s at default settings
+    const audioInfo = await AudioUtils.loadAudioSamples(audioBuffer, { targetSampleRate: 44100 });
+    console.log(`   Audio duration: ${audioInfo.duration.toFixed(1)}s`);
     
-    // Check if audio is long enough for watermarking
-    const minSamples = watermark.getRequiredSamples();
-    if (audioSamples.length < minSamples) {
+    // For spread spectrum fallback, check minimum duration
+    const minDurationSpread = watermark.spreadWatermark.getMinimumDuration();
+    if (getWatermarkMethod() === 'spread' && audioInfo.duration < minDurationSpread) {
       return res.orbitError(
         'audio_too_short',
-        `Audio must be at least ${watermark.getMinimumDuration().toFixed(1)} seconds for watermarking`,
+        `Audio must be at least ${minDurationSpread.toFixed(1)} seconds for watermarking`,
         400
       );
     }
     
     console.log('💧 Embedding watermark...');
-    const watermarkedSamples = watermark.embed(audioSamples, watermarkPayload);
+    const embedResult = await watermark.embed(audioBuffer, payloadData, {
+      verbose: process.env.ORBIT_ML_VERBOSE === 'true'
+    });
     
-    console.log('🎵 Encoding watermarked audio...');
-    const watermarkedAudio = await AudioUtils.encodeSamplesToWav(watermarkedSamples, 44100, 1);
+    if (!embedResult.success) {
+      return res.orbitError(
+        'watermark_failed',
+        'Failed to embed watermark into audio',
+        500
+      );
+    }
+    
+    const watermarkedAudio = embedResult.watermarkedAudio;
+    const watermarkPayload = embedResult.watermarkPayload;
+    const watermarkMethod = embedResult.method;
+    
+    console.log(`✅ Watermark embedded using ${watermarkMethod}`);
     console.log(`   Watermarked audio size: ${watermarkedAudio.length} bytes`);
+    if (embedResult.sdr) {
+      console.log(`   SDR: ${embedResult.sdr.toFixed(1)}dB`);
+    }
+    if (embedResult.fallbackUsed) {
+      console.log(`   ⚠️  Fallback used: ${embedResult.fallbackReason}`);
+    }
     
     // ========================================================================
     // 7. CREATE ENTRY HASH & INSERT INTO DATABASE
@@ -425,6 +448,7 @@ async function registerHandler(req, res) {
       registration_id: registration.id,
       fingerprint_hash: fingerprint.hash.toString('hex'),
       watermark_hash: payloadHash.toString('hex'),
+      watermark_method: watermarkMethod, // 'silentcipher' or 'spread'
       watermarked_audio: watermarkedAudio.toString('base64'),
       entry_hash: entryHash.toString('hex'),
       registered_at: registration.created_at,
@@ -437,6 +461,17 @@ async function registerHandler(req, res) {
       },
       processing_time_ms: responseTime
     };
+    
+    // Add neural watermark SDR if available
+    if (embedResult.sdr) {
+      response.watermark_sdr = embedResult.sdr;
+    }
+    
+    // Add fallback info if applicable
+    if (embedResult.fallbackUsed) {
+      response.watermark_fallback_used = true;
+      response.watermark_fallback_reason = embedResult.fallbackReason;
+    }
     
     // Add embedding info if computed
     if (audioEmbedding) {

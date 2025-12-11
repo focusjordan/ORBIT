@@ -21,7 +21,7 @@
 
 const OrbitFingerprint = require('../../engines/fingerprint');
 const OrbitCrypto = require('../../engines/crypto');
-const OrbitWatermark = require('../../engines/watermark');
+const { UnifiedWatermark } = require('../../engines/watermark-unified');
 const queries = require('../../ledger/queries');
 const config = require('../../config');
 const AudioUtils = require('../../utils/audio');
@@ -101,43 +101,61 @@ async function verifyHandler(req, res) {
     let watermarkResult = {
       detected: false,
       valid: false,
+      method: null,
       payload: null,
       confidence: 0,
       extracted_data: null
     };
     
     try {
-      // Convert audio to samples for watermark extraction
-      const samples = await AudioUtils.decodeAudioToSamples(audioBuffer);
-      console.log(`[Verify] Audio decoded: ${samples.length} samples`);
+      console.log(`[Verify] Extracting watermark...`);
       
-      // Initialize watermark engine with secret key
-      const watermark = new OrbitWatermark(config.orbit.secretKey);
+      // Initialize unified watermark engine (tries neural first, then spread spectrum)
+      const watermark = new UnifiedWatermark(config.orbit.secretKey);
       
-      // Extract watermark with offset search
-      const extracted = watermark.extractWithOffsetSearch(samples);
+      // Extract watermark using unified interface
+      const extracted = await watermark.extract(audioBuffer, {
+        verbose: process.env.ORBIT_ML_VERBOSE === 'true'
+      });
       
-      if (extracted.valid) {
+      if (extracted.detected) {
         watermarkResult.detected = true;
         watermarkResult.valid = true;
-        watermarkResult.payload = extracted.payload;
+        watermarkResult.method = extracted.method; // 'silentcipher' or 'spread'
         watermarkResult.confidence = extracted.confidence;
         
-        // Parse watermark payload
-        const parsed = watermark.parsePayload(extracted.payload);
-        if (parsed) {
+        if (extracted.method === 'silentcipher') {
+          // Neural watermark: payload is a 5-byte hash prefix
           watermarkResult.extracted_data = {
-            magic: parsed.magic,
-            version: parsed.version,
-            timestamp: new Date(parsed.timestamp).toISOString(),
-            platform_hash: parsed.platformHash.toString('hex'),
-            payload_hash: parsed.payloadHash.toString('hex'),
-            crc_valid: parsed.crcValid
+            method: 'silentcipher',
+            payload_hash_prefix: extracted.payloadHash.toString('hex'),
+            message: extracted.message
           };
-          console.log(`[Verify] Watermark extracted: platform=${watermarkResult.extracted_data.platform_hash.slice(0, 8)}...`);
+          console.log(`[Verify] Neural watermark extracted: hash_prefix=${watermarkResult.extracted_data.payload_hash_prefix}`);
+        } else if (extracted.method === 'spread') {
+          // Spread spectrum: full 64-byte payload
+          watermarkResult.payload = extracted.payload;
+          
+          if (extracted.parsedPayload) {
+            watermarkResult.extracted_data = {
+              method: 'spread',
+              magic: extracted.parsedPayload.magic,
+              version: extracted.parsedPayload.version,
+              timestamp: new Date(extracted.parsedPayload.timestamp).toISOString(),
+              platform_hash: extracted.parsedPayload.platformHash.toString('hex'),
+              payload_hash: extracted.parsedPayload.payloadHash.toString('hex'),
+              crc_valid: extracted.parsedPayload.crcValid
+            };
+            console.log(`[Verify] Spread watermark extracted: platform=${watermarkResult.extracted_data.platform_hash.slice(0, 8)}...`);
+          }
+        }
+        
+        if (extracted.fallbackUsed) {
+          watermarkResult.fallback_used = true;
+          console.log(`[Verify] Fallback used for extraction`);
         }
       } else {
-        console.log(`[Verify] Watermark not detected or invalid`);
+        console.log(`[Verify] Watermark not detected`);
       }
     } catch (error) {
       console.warn(`[Verify] Watermark extraction failed: ${error.message}`);
