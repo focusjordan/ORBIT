@@ -258,8 +258,8 @@ async function registerHandler(req, res) {
     // Create payload hash (16 bytes for spread spectrum, 5 bytes used for neural)
     const payloadHash = OrbitCrypto.hash(signedPayloadCbor).slice(0, 16);
     
-    // Prepare payload data
-    const payloadData = {
+    // Prepare watermark payload data
+    const watermarkData = {
       platform: req.platform.id,
       timestamp: timestamp,
       payloadHash: payloadHash
@@ -281,7 +281,7 @@ async function registerHandler(req, res) {
     }
     
     console.log('💧 Embedding watermark...');
-    const embedResult = await watermark.embed(audioBuffer, payloadData, {
+    const embedResult = await watermark.embed(audioBuffer, watermarkData, {
       verbose: process.env.ORBIT_ML_VERBOSE === 'true'
     });
     

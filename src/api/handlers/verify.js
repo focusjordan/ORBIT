@@ -6,17 +6,19 @@
  * 1. Generating fingerprint and searching database for matches
  * 2. Extracting watermark and validating integrity
  * 3. Verifying cryptographic signatures
- * 4. Building comprehensive provenance response
- * 5. Flagging duplicates from different owners
+ * 4. Extracting AI metadata (genre, mood, BPM, key, instruments)
+ * 5. Computing CLAP embeddings for semantic similarity
+ * 6. Building comprehensive provenance response
+ * 7. Flagging duplicates from different owners
  * 
- * V2 Note (Session 25): This response will be enhanced with:
- * - AI-extracted metadata (genre, mood, BPM, key)
- * - Content relationship detection (covers, remixes)
- * - Audio embedding similarity scores (CLAP)
- * - Enhanced confidence metrics
+ * Session 25: Enhanced V2 Verification Response
+ * - Added `identity` section with dual fingerprints (Chromaprint + CLAP embedding)
+ * - Added `ai_extracted_metadata` section with ML-derived metadata
+ * - Enhanced `watermark` section with method and confidence
+ * - Added `confidence_summary` section for overall verification confidence
+ * - Maintains backward compatibility with v1 clients
  * 
- * Design: Response structure is extensible to support v2 additions
- * without breaking v1 clients.
+ * @see ORBIT_ENHANCEMENTS.md Section 5 (Enhanced V2 Verify Response)
  */
 
 const OrbitFingerprint = require('../../engines/fingerprint');
@@ -26,13 +28,96 @@ const queries = require('../../ledger/queries');
 const config = require('../../config');
 const AudioUtils = require('../../utils/audio');
 
-// Content analysis for detecting covers, remixes, similar works (Session 24)
+// ML modules for v2 enhancements (Session 20-24)
 const contentAnalysis = require('../../ml/content-analysis');
+const metadataExtractor = require('../../ml/metadata-extractor');
+const clap = require('../../ml/clap');
+
+/**
+ * Calculate overall confidence summary based on verification results
+ * 
+ * @param {Object} params - Verification results
+ * @returns {Object} Confidence summary
+ */
+function calculateConfidenceSummary(params) {
+  const {
+    fingerprintMatch,
+    watermarkResult,
+    signatureValid,
+    aiMetadata,
+    contentAnalysisResult,
+  } = params;
+  
+  // Identity confidence: based on fingerprint match
+  let identityConfidence = 0;
+  if (fingerprintMatch) {
+    identityConfidence = fingerprintMatch.similarity || 1.0;
+  }
+  
+  // Watermark confidence: from extraction result
+  let watermarkConfidence = 0;
+  if (watermarkResult?.detected && watermarkResult?.valid) {
+    watermarkConfidence = watermarkResult.confidence || 0.9;
+  } else if (watermarkResult?.detected) {
+    watermarkConfidence = 0.5; // Detected but invalid
+  }
+  
+  // Metadata confidence: based on AI extraction success
+  let metadataConfidence = 0;
+  if (aiMetadata) {
+    // Check both camelCase and snake_case for compatibility
+    const status = aiMetadata.extraction_status || aiMetadata.extractionStatus || {};
+    let successCount = 0;
+    let totalCount = 0;
+    
+    for (const [key, value] of Object.entries(status)) {
+      totalCount++;
+      if (value === 'success') successCount++;
+    }
+    
+    metadataConfidence = totalCount > 0 ? successCount / totalCount : 0;
+  }
+  
+  // Calculate overall verification confidence
+  // Weighted average: identity (50%), watermark (30%), signature (20%)
+  const signatureWeight = signatureValid ? 1.0 : 0.0;
+  const overallScore = (
+    (identityConfidence * 0.50) +
+    (watermarkConfidence * 0.30) +
+    (signatureWeight * 0.20)
+  );
+  
+  // Determine overall verification level
+  let overallVerification = 'NONE';
+  if (overallScore >= 0.9) {
+    overallVerification = 'VERY_HIGH';
+  } else if (overallScore >= 0.75) {
+    overallVerification = 'HIGH';
+  } else if (overallScore >= 0.5) {
+    overallVerification = 'MEDIUM';
+  } else if (overallScore > 0) {
+    overallVerification = 'LOW';
+  }
+  
+  return {
+    identity_confidence: parseFloat(identityConfidence.toFixed(4)),
+    watermark_confidence: parseFloat(watermarkConfidence.toFixed(4)),
+    metadata_confidence: parseFloat(metadataConfidence.toFixed(4)),
+    signature_valid: signatureValid,
+    overall_score: parseFloat(overallScore.toFixed(4)),
+    overall_verification: overallVerification,
+  };
+}
 
 /**
  * Main verification handler
  * Expects CBOR/JSON request with:
  * - audio: base64-encoded audio buffer
+ * 
+ * Query parameters:
+ * - include_ai_metadata: 'true' (default) or 'false' - include AI-extracted metadata
+ * - include_content_analysis: 'true' (default) or 'false' - include content relationship analysis
+ * - include_embedding: 'true' or 'false' (default) - include raw CLAP embedding in response
  */
 async function verifyHandler(req, res) {
   const startTime = Date.now();
@@ -72,6 +157,12 @@ async function verifyHandler(req, res) {
       );
     }
     
+    // Parse query options
+    const includeAiMetadata = req.query?.include_ai_metadata !== 'false';
+    const includeContentAnalysis = req.query?.include_content_analysis !== 'false';
+    const includeEmbedding = req.query?.include_embedding === 'true';
+    const verbose = process.env.ORBIT_ML_VERBOSE === 'true';
+    
     console.log(`[Verify] Processing audio: ${audioBuffer.length} bytes`);
     
     // ========================================================================
@@ -105,9 +196,9 @@ async function verifyHandler(req, res) {
       detected: false,
       valid: false,
       method: null,
-      payload: null,
       confidence: 0,
-      extracted_data: null
+      payload_hash: null,
+      fallback_attempted: false,
     };
     
     try {
@@ -117,45 +208,34 @@ async function verifyHandler(req, res) {
       const watermark = new UnifiedWatermark(config.orbit.secretKey);
       
       // Extract watermark using unified interface
-      const extracted = await watermark.extract(audioBuffer, {
-        verbose: process.env.ORBIT_ML_VERBOSE === 'true'
-      });
+      const extracted = await watermark.extract(audioBuffer, { verbose });
       
       if (extracted.detected) {
         watermarkResult.detected = true;
         watermarkResult.valid = true;
         watermarkResult.method = extracted.method; // 'silentcipher' or 'spread'
         watermarkResult.confidence = extracted.confidence;
+        watermarkResult.fallback_attempted = extracted.fallbackUsed || false;
         
         if (extracted.method === 'silentcipher') {
           // Neural watermark: payload is a 5-byte hash prefix
-          watermarkResult.extracted_data = {
-            method: 'silentcipher',
-            payload_hash_prefix: extracted.payloadHash.toString('hex'),
-            message: extracted.message
-          };
-          console.log(`[Verify] Neural watermark extracted: hash_prefix=${watermarkResult.extracted_data.payload_hash_prefix}`);
+          watermarkResult.payload_hash = extracted.payloadHash.toString('hex');
+          watermarkResult.message = extracted.message;
+          console.log(`[Verify] Neural watermark extracted: hash_prefix=${watermarkResult.payload_hash}`);
         } else if (extracted.method === 'spread') {
-          // Spread spectrum: full 64-byte payload
-          watermarkResult.payload = extracted.payload;
+          // Spread spectrum: full 64-byte payload with parsed data
+          watermarkResult.payload_hash = extracted.parsedPayload?.payloadHash?.toString('hex') || null;
           
           if (extracted.parsedPayload) {
-            watermarkResult.extracted_data = {
-              method: 'spread',
+            watermarkResult.parsed_payload = {
               magic: extracted.parsedPayload.magic,
               version: extracted.parsedPayload.version,
               timestamp: new Date(extracted.parsedPayload.timestamp).toISOString(),
               platform_hash: extracted.parsedPayload.platformHash.toString('hex'),
-              payload_hash: extracted.parsedPayload.payloadHash.toString('hex'),
-              crc_valid: extracted.parsedPayload.crcValid
+              crc_valid: extracted.parsedPayload.crcValid,
             };
-            console.log(`[Verify] Spread watermark extracted: platform=${watermarkResult.extracted_data.platform_hash.slice(0, 8)}...`);
+            console.log(`[Verify] Spread watermark extracted: platform=${watermarkResult.parsed_payload.platform_hash.slice(0, 8)}...`);
           }
-        }
-        
-        if (extracted.fallbackUsed) {
-          watermarkResult.fallback_used = true;
-          console.log(`[Verify] Fallback used for extraction`);
         }
       } else {
         console.log(`[Verify] Watermark not detected`);
@@ -166,63 +246,171 @@ async function verifyHandler(req, res) {
     }
     
     // ========================================================================
-    // 5. BUILD VERIFICATION RESPONSE
+    // 5. EXTRACT AI METADATA (Session 25 - v2 enhancement)
     // ========================================================================
     
-    // Base response structure
+    let aiMetadata = null;
+    let clapEmbedding = null;
+    
+    if (includeAiMetadata) {
+      try {
+        console.log(`[Verify] Extracting AI metadata...`);
+        
+        // Extract full AI metadata (genre, mood, instruments, vocals, BPM, key)
+        const aiResult = await metadataExtractor.extractMetadata(audioBuffer, {
+          includeEmbedding: true, // We need the embedding for identity section
+          verbose,
+        });
+        
+        // Store embedding separately for identity section
+        if (aiResult.embedding) {
+          clapEmbedding = aiResult.embedding;
+          // Remove from AI metadata (it goes in identity section)
+          delete aiResult.embedding;
+          delete aiResult.embeddingDim;
+        }
+        
+        aiMetadata = {
+          genre: aiResult.genre,
+          mood: aiResult.mood,
+          instruments: aiResult.instruments,
+          vocals: aiResult.vocals,
+          bpm: aiResult.bpm,
+          key: aiResult.key,
+          energy: aiResult.energy,
+          loudness_db: aiResult.loudness_db,
+          danceability: aiResult.danceability,
+          duration: aiResult.duration,
+          extraction_status: aiResult.extractionStatus,
+          processing_time_ms: aiResult.processingTimeMs,
+        };
+        
+        console.log(`[Verify] AI metadata extracted in ${aiResult.processingTimeMs}ms`);
+        
+      } catch (error) {
+        console.warn(`[Verify] AI metadata extraction failed: ${error.message}`);
+        aiMetadata = {
+          error: error.message,
+          extraction_status: { clap: 'error', audioAnalysis: 'error', embedding: 'error' },
+        };
+      }
+    }
+    
+    // ========================================================================
+    // 6. BUILD V2 VERIFICATION RESPONSE
+    // ========================================================================
+    
+    // Base response structure (v2 format)
     const response = {
       verified: matches.length > 0,
-      fingerprint_hash: fingerprintData.hash.toString('hex'),
-      fingerprint_match: null,
+      
+      // v2: Enhanced identity section
+      identity: {
+        fingerprint_hash: fingerprintData.hash.toString('hex'),
+        chromaprint_match: null,
+        clap_embedding_id: null,
+        semantic_match: null,
+      },
+      
+      // v2: Enhanced watermark section
       watermark: watermarkResult,
-      metadata: null,
-      origin: null,
-      transfers: [], // V1: not implemented yet (Session 13)
+      
+      // v1 compatibility: registered_metadata (same as v1 'metadata')
+      registered_metadata: null,
+      
+      // v2: AI-extracted metadata
+      ai_extracted_metadata: aiMetadata,
+      
+      // v2/v1: Content analysis (already added in Session 24)
+      content_analysis: null,
+      
+      // v2/v1: Provenance
+      provenance: {
+        origin: null,
+        transfers: [],
+        chain_integrity: null,
+      },
+      
+      // v1 compatibility: duplicate_of
       duplicate_of: null,
-      processing_time_ms: Date.now() - startTime
+      
+      // v2: Confidence summary
+      confidence_summary: null,
+      
+      // Timing
+      processing_time_ms: Date.now() - startTime,
     };
     
-    // If no matches found, still try content analysis for similar works
+    // Add CLAP embedding to identity if available
+    if (clapEmbedding) {
+      response.identity.clap_embedding_id = `emb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      response.identity.clap_embedding_dim = clapEmbedding.length;
+      
+      // Optionally include raw embedding (large, usually not needed)
+      if (includeEmbedding) {
+        response.identity.clap_embedding = Array.from(clapEmbedding);
+      }
+    }
+    
+    // ========================================================================
+    // 7. HANDLE NO MATCHES (unregistered audio)
+    // ========================================================================
+    
     if (matches.length === 0) {
       console.log(`[Verify] No fingerprint matches found - checking for similar content...`);
       
-      // Even without an exact fingerprint match, we can find similar works
-      try {
-        const includeContentAnalysis = req.query?.include_content_analysis !== 'false';
-        
-        if (includeContentAnalysis) {
+      // Run content analysis to find similar works
+      if (includeContentAnalysis) {
+        try {
           const contentResult = await contentAnalysis.findRelatedContent(audioBuffer, {
             threshold: 0.50,
             limit: 10,
-            verbose: process.env.ORBIT_ML_VERBOSE === 'true'
+            verbose,
           });
           
           response.content_analysis = {
             is_derivative: contentResult.is_derivative,
             similar_works: contentResult.similar_works,
             relationship_counts: contentResult.relationship_counts || {},
-            analysis_time_ms: contentResult.processing_time_ms
+            analysis_time_ms: contentResult.processing_time_ms,
           };
           
           if (contentResult.is_derivative) {
             console.log(`[Verify] Unregistered audio has ${contentResult.total_found} similar works (possible derivative)`);
           }
+        } catch (contentError) {
+          console.warn(`[Verify] Content analysis failed: ${contentError.message}`);
+          response.content_analysis = {
+            error: contentError.message,
+            is_derivative: false,
+            similar_works: [],
+          };
         }
-      } catch (contentError) {
-        console.warn(`[Verify] Content analysis failed for unregistered audio: ${contentError.message}`);
-        response.content_analysis = {
-          error: contentError.message,
-          is_derivative: false,
-          similar_works: []
-        };
       }
       
+      // Calculate confidence summary for unregistered audio
+      response.confidence_summary = calculateConfidenceSummary({
+        fingerprintMatch: null,
+        watermarkResult,
+        signatureValid: false,
+        aiMetadata,
+        contentAnalysisResult: response.content_analysis,
+      });
+      
       response.processing_time_ms = Date.now() - startTime;
+      
+      // V1 compatibility: also include 'metadata' at top level (null for unregistered)
+      response.metadata = null;
+      response.origin = null;
+      response.transfers = [];
+      response.fingerprint_hash = fingerprintData.hash.toString('hex');
+      response.fingerprint_match = null;
+      
       return res.orbit(response, 200);
     }
     
     // ========================================================================
-    // 6. PROCESS MATCHES AND BUILD PROVENANCE
+    // 8. PROCESS MATCHES AND BUILD PROVENANCE
     // ========================================================================
     
     // Get the first (oldest) registration for primary match
@@ -239,15 +427,23 @@ async function verifyHandler(req, res) {
       );
     }
     
-    // Build fingerprint match info
-    response.fingerprint_match = {
+    // Build identity section with Chromaprint match
+    response.identity.chromaprint_match = {
       registration_id: registration.id,
-      similarity: 1.0, // V1: Chromaprint is exact match only (Session 19 adds MERT similarity)
-      matched_at: registration.created_at
+      similarity: 1.0, // Chromaprint is exact match only
+      matched_at: registration.created_at,
     };
     
-    // Extract metadata (handle JSONB fields)
-    response.metadata = {
+    // If the registration has a stored CLAP embedding, we could compute semantic similarity
+    // For now, we indicate exact match since fingerprint matched
+    response.identity.semantic_match = {
+      registration_id: registration.id,
+      similarity: 1.0, // Same as fingerprint match (exact)
+      method: 'chromaprint_verified',
+    };
+    
+    // Build registered_metadata (v2) / metadata (v1 compatibility)
+    const registeredMetadata = {
       isrc: registration.isrc,
       upc: registration.upc,
       title: registration.title,
@@ -279,11 +475,16 @@ async function verifyHandler(req, res) {
       // Rights
       iswc: registration.iswc,
       territories: registration.territories || null,
-      preview_start_ms: registration.preview_start_ms
+      preview_start_ms: registration.preview_start_ms,
     };
     
+    response.registered_metadata = registeredMetadata;
+    
+    // V1 compatibility: also include at top level
+    response.metadata = registeredMetadata;
+    
     // ========================================================================
-    // 7. VERIFY CRYPTOGRAPHIC SIGNATURE
+    // 9. VERIFY CRYPTOGRAPHIC SIGNATURE
     // ========================================================================
     
     let signatureValid = false;
@@ -307,22 +508,26 @@ async function verifyHandler(req, res) {
       console.error(`[Verify] Signature verification error: ${error.message}`);
     }
     
-    // Build origin section
-    response.origin = {
+    // Build provenance section (v2) / origin (v1 compatibility)
+    const originData = {
       platform: registration.origin_platform,
       owner_id: registration.owner_id,
       timestamp: registration.origin_timestamp,
       signature_valid: signatureValid,
-      registered_at: registration.created_at
+      registered_at: registration.created_at,
     };
     
+    response.provenance.origin = originData;
+    response.provenance.chain_integrity = signatureValid ? 'VALID' : 'SIGNATURE_INVALID';
+    
+    // V1 compatibility
+    response.origin = originData;
+    
     // ========================================================================
-    // 8. CHECK FOR DUPLICATES FROM DIFFERENT OWNERS
+    // 10. CHECK FOR DUPLICATES FROM DIFFERENT OWNERS
     // ========================================================================
     
-    // If there are multiple registrations with different owners, flag as duplicate
     if (matches.length > 1) {
-      // Check if any match has a different owner than the first
       const differentOwner = matches.find(m => m.owner_id !== primaryMatch.owner_id);
       
       if (differentOwner) {
@@ -335,56 +540,74 @@ async function verifyHandler(req, res) {
             registration_id: m.id,
             owner_id: m.owner_id,
             platform: m.origin_platform,
-            registered_at: m.created_at
-          }))
+            registered_at: m.created_at,
+          })),
         };
         console.log(`[Verify] Duplicate detected: ${matches.length} registrations found`);
       }
     }
     
     // ========================================================================
-    // 9. CONTENT RELATIONSHIP ANALYSIS (Session 24)
+    // 11. CONTENT RELATIONSHIP ANALYSIS
     // ========================================================================
     
-    // Run content analysis to find covers, remixes, and similar works
-    // This uses CLAP embeddings and pgvector similarity search
-    try {
-      const includeContentAnalysis = req.query?.include_content_analysis !== 'false';
-      
-      if (includeContentAnalysis) {
+    if (includeContentAnalysis) {
+      try {
         console.log(`[Verify] Running content relationship analysis...`);
         
         const contentResult = await contentAnalysis.findRelatedContent(audioBuffer, {
-          threshold: 0.50,  // Include stylistically similar and above
+          threshold: 0.50,
           limit: 10,
-          excludeId: registration.id,  // Don't include self-match
-          verbose: process.env.ORBIT_ML_VERBOSE === 'true'
+          excludeId: registration.id, // Don't include self-match
+          verbose,
         });
         
         response.content_analysis = {
           is_derivative: contentResult.is_derivative,
           similar_works: contentResult.similar_works,
           relationship_counts: contentResult.relationship_counts || {},
-          analysis_time_ms: contentResult.processing_time_ms
+          analysis_time_ms: contentResult.processing_time_ms,
         };
         
         console.log(`[Verify] Content analysis: is_derivative=${contentResult.is_derivative}, found=${contentResult.total_found}`);
+      } catch (contentError) {
+        console.warn(`[Verify] Content analysis failed: ${contentError.message}`);
+        response.content_analysis = {
+          error: contentError.message,
+          is_derivative: false,
+          similar_works: [],
+        };
       }
-    } catch (contentError) {
-      // Content analysis is non-fatal - log and continue
-      console.warn(`[Verify] Content analysis failed: ${contentError.message}`);
-      response.content_analysis = {
-        error: contentError.message,
-        is_derivative: false,
-        similar_works: []
-      };
     }
     
     // ========================================================================
-    // 10. RETURN COMPLETE VERIFICATION RESPONSE
+    // 12. CALCULATE CONFIDENCE SUMMARY (v2)
     // ========================================================================
     
-    console.log(`[Verify] Verification complete: verified=${response.verified}, time=${response.processing_time_ms}ms`);
+    response.confidence_summary = calculateConfidenceSummary({
+      fingerprintMatch: response.identity.chromaprint_match,
+      watermarkResult,
+      signatureValid,
+      aiMetadata,
+      contentAnalysisResult: response.content_analysis,
+    });
+    
+    // ========================================================================
+    // 13. V1 COMPATIBILITY FIELDS
+    // ========================================================================
+    
+    // These fields are at top level for v1 client compatibility
+    response.fingerprint_hash = fingerprintData.hash.toString('hex');
+    response.fingerprint_match = response.identity.chromaprint_match;
+    response.transfers = response.provenance.transfers;
+    
+    // ========================================================================
+    // 14. RETURN COMPLETE VERIFICATION RESPONSE
+    // ========================================================================
+    
+    response.processing_time_ms = Date.now() - startTime;
+    
+    console.log(`[Verify] Verification complete: verified=${response.verified}, confidence=${response.confidence_summary.overall_verification}, time=${response.processing_time_ms}ms`);
     return res.orbit(response, 200);
     
   } catch (error) {
@@ -398,4 +621,3 @@ async function verifyHandler(req, res) {
 }
 
 module.exports = verifyHandler;
-

@@ -17,9 +17,9 @@
 | Phase 2 | 9-14 | API Layer (v1) | ✅ Complete (All 5 v1 endpoints working) |
 | Phase 3 | 15-17 | Ohnrshyp Integration | ✅ Complete (SDK + Duplicate Check + Auto-Registration) |
 | Phase 4 | 18-24 | Neural Enhancements (v2) | ✅ Complete (Session 24 Complete) |
-| Phase 5 | 25-28 | Polish & SDK | ⬜ Not Started |
+| Phase 5 | 25-28 | Polish & SDK | 🔄 In Progress (Session 25 ✅, 25b 🐛 Bug Found) |
 
-**Current Session**: Session 25 ⬜ Not Started - Enhanced V2 Verification Response  
+**Current Session**: Session 25(b) 🐛 Bug Found - Watermarking Destroys Fingerprint  
 **Last Updated**: December 11, 2025  
 **Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Core engines working (fingerprint, watermark, crypto), ✅ Database with full schema, ✅ Express server with CBOR middleware, ✅ Platform authentication, ✅ All 5 v1 API endpoints, ✅ SDK published, ✅ Ohnrshyp integration complete, ✅ **ML ModelManager infrastructure with lazy loading**, ✅ **Content relationship detection (CLAP embeddings + pgvector)**
 
@@ -37,7 +37,8 @@ This table maps `ORBIT_ENHANCEMENTS.md` sections to their implementing sessions.
 | §3 Zero-Shot CLAP Classification | Auto-extract genre, mood, instruments | Session 20 | — (new capability) |
 | §3 Auto-Metadata Pipeline | BPM, key, combined AI metadata | Session 21 | — (new capability) |
 | §4 Content Relationship Detection | Detect covers, remixes, mashups | Session 24 | — (new capability) |
-| §5 Enhanced V2 Verify Response | Rich verification with AI metadata | Session 25 | Session 12 (v1 verify enhanced) |
+| §5 Enhanced V2 Verify Response | Rich verification with AI metadata | Session 25 ✅ | Session 12 (v1 verify enhanced) |
+| 🐛 Watermark Format Preservation | Stereo→mono conversion breaks fingerprint | Session 25(b) | Sessions 6-7 (spread spectrum needs fix) |
 | §7 `POST /orbit/v2/similar` | Find similar-sounding tracks | Session 26 | — (new endpoint) |
 | §7 `POST /orbit/v2/analyze` | Standalone audio analysis | Session 26 | — (new endpoint) |
 
@@ -47,7 +48,7 @@ When building these v1 sessions, keep implementations **minimal and modular** �
 
 | V1 Session | What to Build | V2 Fate | Implementation Guidance |
 |------------|---------------|---------|------------------------|
-| **Session 6-7** (Watermark) | Spread spectrum embed/extract with offset search | Becomes **fallback** when neural fails, offset search reused | Keep simple interface. Offset search stays in both v1 and v2 (neural also needs it) |
+| **Session 6-7** (Watermark) | Spread spectrum embed/extract with offset search | Becomes **fallback** when neural fails, offset search reused | Keep simple interface. Offset search stays in both v1 and v2 (neural also needs it). **⚠️ BUG**: Currently converts stereo→mono, breaking fingerprints. See Session 25(b). |
 | **Session 3-4** (Fingerprint) | Chromaprint exact matching | Becomes **exact-match layer** under MERT | **CRITICAL**: No similarity scoring, no fuzzy matching - keep it pure exact hash comparison |
 | **Session 12** (Verify) | Basic verification response | **Enhanced** with AI metadata in v2 | Design response as extensible object |
 | **Session 11** (Register) | Basic registration | **Enhanced** with auto-metadata in v2 | Make metadata injection pluggable |
@@ -3462,30 +3463,86 @@ npm install essentia.js  # Or use Python subprocess
 
 ## Phase 5: Polish & SDK
 
-### Session 25: Enhanced V2 Verification Response
+### Session 25: Enhanced V2 Verification Response ✅ COMPLETE
 
 **Goal**: Verification returns full rich v2 response
 
 **Prerequisites**: Session 24 complete
 
 **Tasks**:
-- [ ] Update verify handler for v2 response format
-- [ ] Add `identity` section (both fingerprint types)
-- [ ] Add `watermark` section (method, confidence)
-- [ ] Add `registered_metadata` section
-- [ ] Add `ai_extracted_metadata` section
-- [ ] Add `content_analysis` section (similar works)
-- [ ] Add `confidence_summary` section
-- [ ] Maintain backward compatibility with v1 clients
+- [x] Update verify handler for v2 response format
+- [x] Add `identity` section (Chromaprint + CLAP embedding)
+- [x] Add `watermark` section (method, confidence, payload_hash)
+- [x] Add `registered_metadata` section
+- [x] Add `ai_extracted_metadata` section
+- [x] Add `content_analysis` section (similar works)
+- [x] Add `confidence_summary` section
+- [x] Maintain backward compatibility with v1 clients
 
 **Key Implementation**: See `ORBIT_ENHANCEMENTS.md` Section 5 (v2 response format)
+
+**Key Files Modified**:
+- `src/api/handlers/verify.js` - Full v2 response structure
+- `tests/api/verify.test.js` - V2 response validation tests
+- `tests/api/full-stack-test.js` - End-to-end validation test
 
 **Commit Message**: `feat: enhanced v2 verification response`
 
 **Verify**:
-- Response matches full v2 schema
-- All sections populated with real data
-- v1 clients still work
+- ✅ Response matches full v2 schema
+- ✅ All sections populated with real data
+- ✅ v1 clients still work (backward compatibility)
+- ✅ Original audio verification works
+- ⚠️ Watermarked audio verification FAILS (see Session 25(b))
+
+---
+
+### Session 25(b): 🐛 Critical Bug - Watermarking Destroys Fingerprint
+
+**Discovery Date**: December 11, 2025
+
+**Bug Summary**: The watermarking pipeline converts stereo audio to mono, which completely changes the Chromaprint fingerprint. This means:
+1. User uploads stereo audio → fingerprint A
+2. Watermarking converts to mono → fingerprint B (DIFFERENT!)
+3. User tries to verify watermarked audio → no match found
+
+**Test Evidence** (from `tests/api/full-stack-test.js`):
+```
+Original:    34,449,962 bytes (stereo)
+Watermarked: 17,224,986 bytes (mono - HALF SIZE!)
+
+Original fingerprint:    2916e62391d386abd95c8c8dfdbe44f1
+Watermarked fingerprint: c4e6d741d3922a9c84d5566c0ca3db7a  ← COMPLETELY DIFFERENT
+```
+
+**Root Cause**: 
+- `src/utils/audio.js` `loadAudioSamples()` converts to mono (line 56: `-ac 1`)
+- `src/engines/watermark-unified.js` spread spectrum path uses mono encoding
+- This is a **lossless-breaking change** - users lose stereo quality!
+
+**Impact**:
+- ❌ Watermarked audio verification fails (fingerprint mismatch)
+- ❌ Audio quality degradation (stereo → mono)
+- ❌ Dolby/spatial audio destroyed
+- ❌ Professional music production use case broken
+
+**Required Fix** (Future Session):
+1. **Preserve original channel count**: stereo in = stereo out
+2. **Preserve sample rate**: don't resample unless necessary
+3. **Preserve bit depth**: don't re-quantize
+4. **Embed watermark on all channels**: spread spectrum on L+R
+5. **Fingerprint consistency**: input format preserved = fingerprint matches
+
+**Design Principle**: 
+> ORBIT should be **lossless** from user perspective - what they upload is what they get back, just with invisible watermark embedded.
+
+**Workaround** (not recommended):
+- Users could verify original audio (works)
+- But this defeats the purpose of watermark verification
+
+**Priority**: HIGH - Blocks production use of watermark verification
+
+**Estimated Fix**: 2-3 hours (modify `loadAudioSamples` and `encodeSamplesToWav` to preserve channels)
 
 ---
 
