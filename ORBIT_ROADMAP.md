@@ -17,7 +17,7 @@
 | Phase 2 | 9-14 | API Layer (v1) | ✅ Complete (All 5 v1 endpoints working) |
 | Phase 3 | 15-17 | Ohnrshyp Integration | ✅ Complete (SDK + Duplicate Check + Auto-Registration) |
 | Phase 4 | 18-24 | Neural Enhancements (v2) | ✅ Complete (Session 24 Complete) |
-| Phase 5 | 25-28 | Polish & SDK | 🔄 In Progress (Session 26 ✅ Complete) |
+| Phase 5 | 25-29 | Polish, Integration & B2B | 🔄 In Progress (Session 26 ✅ Complete) |
 
 **Current Session**: Session 27 (Next)
 **Last Updated**: December 12, 2025
@@ -185,8 +185,10 @@ Session 23: ⏭️ Skipped - WMCodec redundant; layered provenance (fingerprint 
 Session 24: ✅ Complete & Tested - Content relationship detection (content-analysis.js, 43 tests passing, verify integration)
 Session 25: ✅ Complete - Enhanced V2 verification, stereo preservation fixed, fingerprint-after-watermark flow. SilentCipher requires GPU (crashes on M1 Mac).
 Session 26: ✅ Complete & Tested - V2 API endpoints (POST /orbit/v2/similar, POST /orbit/v2/analyze), 8 tests passing
-Session 27: ⬜ Not Started
-Session 28: ⬜ Not Started
+Session 27: ⬜ Not Started - Testing Suite (CI/CD)
+Session 27.5: ⬜ Not Started - Ohnrshyp Integration & Production Testing
+Session 28: ⬜ Not Started - Documentation & Use Case Guide
+Session 29: ⬜ Not Started - B2B Validation (Test Distributor Platform)
 ```
 
 **Status Legend:**
@@ -3604,56 +3606,165 @@ Watermarked fingerprint: c4e6d741d3922a9c84d5566c0ca3db7a  ← COMPLETELY DIFFER
 **Prerequisites**: Session 26 complete
 
 **Tasks**:
-- [ ] Set up Jest as test framework
-- [ ] Write unit tests for all engines (fingerprint, watermark, crypto)
-- [ ] Write unit tests for ML modules
-- [ ] Write integration tests for all API endpoints
+- [ ] Set up Jest as test framework (or validate existing test structure)
+- [ ] Consolidate all existing tests under unified runner
+- [ ] Write any missing unit tests for engines (fingerprint, watermark, crypto)
+- [ ] Write any missing unit tests for ML modules
+- [ ] Write integration tests for all API endpoints (v1 + v2)
 - [ ] Create comprehensive test fixtures (audio files)
-- [ ] Add `npm test` script
+- [ ] Update `npm test` script to run all tests
 - [ ] Create GitHub Actions workflow for CI
 - [ ] Add test coverage reporting
+- [ ] Document known limitations (SilentCipher requires GPU, venv setup for AWS)
+
+**Note**: SilentCipher neural watermarking requires GPU (crashes on Apple Silicon). Tests should gracefully handle this and use spread spectrum fallback. Full neural watermark testing requires AWS environment with GPU.
 
 **Install**:
 ```bash
 npm install --save-dev jest supertest
 ```
 
-**Commit Message**: `test: comprehensive test suite`
+**Commit Message**: `test: comprehensive test suite with CI/CD`
 
 **Verify**:
 ```bash
-npm test                    # All tests pass
+npm test                    # All tests pass (with graceful GPU fallback)
 npm run test:coverage       # Coverage report generated
 ```
 
 ---
 
-### Session 28: Documentation & SDK Publishing
+### Session 27.5: Ohnrshyp Integration & Production Testing
 
-**Goal**: Ready for partners to integrate
+**Goal**: Integrate ORBIT into Ohnrshyp and validate production use cases
 
 **Prerequisites**: Session 27 complete
 
-**Tasks**:
-- [ ] Complete README.md with quick start guide
-- [ ] Document all API endpoints with examples
-- [ ] Document SDK with code samples
-- [ ] Create `CONTRIBUTING.md`
-- [ ] Update SDK version to 1.0.0
-- [ ] Prepare for npm publish (or private registry)
-- [ ] Create Dockerfile for easy deployment
-- [ ] Create docker-compose.yml for full stack
-- [ ] Final code review and cleanup
-- [ ] Tag release v1.0.0
+**Context**: Sessions 15-17 created the SDK and middleware patterns. This session actually integrates them into the live Ohnrshyp platform.
 
-**Commit Message**: `docs: complete documentation and SDK v1.0.0`
+**Tasks**:
+- [ ] **Update Ohnrshyp Repository**:
+  - [ ] Copy/adapt `orbit.middleware.js` from ORBIT examples
+  - [ ] Add ORBIT SDK as dependency (`@ohnrshyp/orbit-sdk`)
+  - [ ] Configure environment variables (ORBIT_API_URL, keys)
+  - [ ] Add ORBIT fields to Track model
+- [ ] **Integrate Upload Flow**:
+  - [ ] Add duplicate check middleware before upload
+  - [ ] Add auto-registration middleware after successful upload
+  - [ ] Store ORBIT registration ID in track metadata
+  - [ ] Add AI metadata (genre, mood, BPM, key) to track display
+- [ ] **Integrate Verification Flow**:
+  - [ ] Add verification endpoint for uploaded tracks
+  - [ ] Display provenance information in track details
+  - [ ] Show AI-extracted metadata vs user-provided
+- [ ] **Production E2E Testing**:
+  - [ ] Upload real tracks through Ohnrshyp UI
+  - [ ] Verify tracks appear in ORBIT with correct metadata
+  - [ ] Test duplicate detection with actual files
+  - [ ] Test verification flow from track page
+  - [ ] Validate AI metadata extraction accuracy
+- [ ] **Document Internal Use Cases**:
+  - [ ] Duplicate detection preventing re-uploads
+  - [ ] AI metadata auto-population
+  - [ ] Provenance tracking for uploaded content
+  - [ ] Content relationship detection
+
+**Commit Message**: `feat: ohnrshyp ORBIT integration`
 
 **Verify**:
-- New developer can follow README
-- `npm install @ohnrshyp/orbit-sdk` works
-- `docker-compose up` spins up full system
+- Upload track via Ohnrshyp → appears in ORBIT registry
+- Duplicate upload → blocked with clear error
+- Track details show AI metadata + provenance
+- Verification confirms ownership chain
 
-**🏁 Phase 5 Complete**: ORBIT v1.0.0 ready for production
+---
+
+### Session 28: Documentation & Use Case Guide
+
+**Goal**: Complete documentation with internal value proposition
+
+**Prerequisites**: Session 27.5 complete
+
+**Tasks**:
+- [ ] **README.md**: Quick start guide for ORBIT
+- [ ] **API Documentation**:
+  - [ ] Document all v1 endpoints with examples
+  - [ ] Document all v2 endpoints with examples
+  - [ ] Request/response samples in CBOR and JSON
+- [ ] **SDK Documentation**:
+  - [ ] Installation guide
+  - [ ] Authentication setup
+  - [ ] Code samples for all operations
+- [ ] **Use Case Guide** (key deliverable):
+  - [ ] Internal platform benefits (even without B2B):
+    - Duplicate detection for uploads
+    - AI-powered metadata extraction
+    - Content provenance tracking
+    - Derivative/cover detection
+  - [ ] Comparison vs manual metadata entry
+  - [ ] Value of embedded watermarks
+- [ ] **Deployment Guide**:
+  - [ ] Dockerfile for easy deployment
+  - [ ] docker-compose.yml for full stack
+  - [ ] AWS deployment notes (GPU for SilentCipher)
+- [ ] **CONTRIBUTING.md**
+- [ ] Update SDK version to 1.0.0
+- [ ] Final code review and cleanup
+
+**Commit Message**: `docs: complete documentation and use case guide`
+
+**Verify**:
+- New developer can follow README and run ORBIT
+- SDK documentation is complete
+- Use case guide demonstrates standalone value
+
+---
+
+### Session 29: B2B Validation - Test Distributor Platform
+
+**Goal**: Validate B2B transfer protocol with a second platform
+
+**Prerequisites**: Session 28 complete
+
+**Context**: To prove ORBIT works as a B2B solution, we need to test transfers between two independent platforms. We'll create a minimal "Orbit Protocol Distributor" test platform.
+
+**Tasks**:
+- [ ] **Create Test Distributor Platform**:
+  - [ ] Simple landing page explaining ORBIT Protocol distribution
+  - [ ] Basic authentication (can reuse test platform credentials or create new)
+  - [ ] Register as second platform in ORBIT (`orbit-distributor`)
+  - [ ] Generate keypair for distributor platform
+- [ ] **Implement Distributor Features**:
+  - [ ] Accept incoming transfers from Ohnrshyp
+  - [ ] Display received tracks with full provenance chain
+  - [ ] Verify watermarks on received audio
+  - [ ] Show transfer history
+- [ ] **Test B2B Transfer Flow**:
+  - [ ] Ohnrshyp initiates transfer to distributor
+  - [ ] Distributor accepts transfer
+  - [ ] Verify chain extends correctly (Ohnrshyp → Distributor)
+  - [ ] Verify re-watermarking works
+  - [ ] Test rejection flow
+  - [ ] Test expiration flow
+- [ ] **Document B2B Protocol**:
+  - [ ] Transfer initiation flow
+  - [ ] Acceptance requirements
+  - [ ] Chain extension behavior
+  - [ ] Error handling
+- [ ] **Validate DDEX Alternative Use Case**:
+  - [ ] Document how ORBIT replaces DDEX for metadata transfer
+  - [ ] Show embedded metadata survives transfer
+  - [ ] Demonstrate cryptographic proof of custody
+
+**Commit Message**: `feat: b2b validation with test distributor platform`
+
+**Verify**:
+- Transfer from Ohnrshyp to Distributor completes successfully
+- Chain shows both platforms
+- Distributor can verify audio came from Ohnrshyp
+- Watermark survives and contains valid chain
+
+**🏁 Phase 5 Complete**: ORBIT v1.0.0 ready for production + B2B validated
 
 ---
 
@@ -3687,8 +3798,10 @@ npm run test:coverage       # Coverage report generated
 | 24 | ML | Content relationship | Enhance §4 |
 | 25 | Polish | V2 verify response | Enhance §5 |
 | 26 | Polish | Similarity endpoint | Enhance §7 |
-| 27 | Polish | Testing suite | — |
-| 28 | Polish | Docs & publish | — |
+| 27 | Polish | Testing suite (CI/CD) | — |
+| 27.5 | Integration | Ohnrshyp production testing | Spec §11 |
+| 28 | Polish | Docs & use case guide | — |
+| 29 | B2B | Test distributor platform | Spec §8 (transfer) |
 
 ---
 
