@@ -10,6 +10,7 @@ const express = require('express');
 const config = require('./config');
 const { cborMiddleware } = require('./api/middleware/cbor');
 const orbitRoutes = require('./api/routes');
+const orbitV2Routes = require('./api/v2/routes');
 
 const app = express();
 
@@ -45,6 +46,12 @@ app.get('/health', (req, res) => {
 // ============================================================================
 
 app.use('/orbit/v1', orbitRoutes);
+
+// ============================================================================
+// ORBIT API v2 Routes (Session 26)
+// ============================================================================
+
+app.use('/orbit/v2', orbitV2Routes);
 
 // ============================================================================
 // Error Handling
@@ -85,14 +92,19 @@ function startServer() {
     console.log(`   Environment: ${env}`);
     console.log(`   Port:        ${port}`);
     console.log('');
-    console.log('   Endpoints:');
+    console.log('   Endpoints (v1):');
     console.log(`   • Health:    http://localhost:${port}/health`);
     console.log(`   • Info:      http://localhost:${port}/orbit/v1/info`);
-    console.log(`   • Register:  http://localhost:${port}/orbit/v1/register  [pending]`);
-    console.log(`   • Verify:    http://localhost:${port}/orbit/v1/verify    [pending]`);
-    console.log(`   • Transfer:  http://localhost:${port}/orbit/v1/transfer  [pending]`);
-    console.log(`   • Accept:    http://localhost:${port}/orbit/v1/accept    [pending]`);
-    console.log(`   • Chain:     http://localhost:${port}/orbit/v1/chain/:fp [pending]`);
+    console.log(`   • Register:  http://localhost:${port}/orbit/v1/register`);
+    console.log(`   • Verify:    http://localhost:${port}/orbit/v1/verify`);
+    console.log(`   • Transfer:  http://localhost:${port}/orbit/v1/transfer`);
+    console.log(`   • Accept:    http://localhost:${port}/orbit/v1/accept`);
+    console.log(`   • Chain:     http://localhost:${port}/orbit/v1/chain/:fp`);
+    console.log('');
+    console.log('   Endpoints (v2):');
+    console.log(`   • Info:      http://localhost:${port}/orbit/v2/info`);
+    console.log(`   • Similar:   http://localhost:${port}/orbit/v2/similar`);
+    console.log(`   • Analyze:   http://localhost:${port}/orbit/v2/analyze`);
     console.log('');
     console.log('   The audio file IS the message.');
     console.log('');
