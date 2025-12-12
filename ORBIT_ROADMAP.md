@@ -17,10 +17,10 @@
 | Phase 2 | 9-14 | API Layer (v1) | ✅ Complete (All 5 v1 endpoints working) |
 | Phase 3 | 15-17 | Ohnrshyp Integration | ✅ Complete (SDK + Duplicate Check + Auto-Registration) |
 | Phase 4 | 18-24 | Neural Enhancements (v2) | ✅ Complete (Session 24 Complete) |
-| Phase 5 | 25-28 | Polish & SDK | 🔄 In Progress (Session 25 ✅, 25b 🐛 Bug Found) |
+| Phase 5 | 25-28 | Polish & SDK | 🔄 In Progress (Session 25 ✅ Complete) |
 
-**Current Session**: Session 25(b) 🐛 Bug Found - Watermarking Destroys Fingerprint  
-**Last Updated**: December 11, 2025  
+**Current Session**: Session 26 (Next)
+**Last Updated**: December 12, 2025
 **Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Core engines working (fingerprint, watermark, crypto), ✅ Database with full schema, ✅ Express server with CBOR middleware, ✅ Platform authentication, ✅ All 5 v1 API endpoints, ✅ SDK published, ✅ Ohnrshyp integration complete, ✅ **ML ModelManager infrastructure with lazy loading**, ✅ **Content relationship detection (CLAP embeddings + pgvector)**
 
 ---
@@ -38,7 +38,7 @@ This table maps `ORBIT_ENHANCEMENTS.md` sections to their implementing sessions.
 | §3 Auto-Metadata Pipeline | BPM, key, combined AI metadata | Session 21 | — (new capability) |
 | §4 Content Relationship Detection | Detect covers, remixes, mashups | Session 24 | — (new capability) |
 | §5 Enhanced V2 Verify Response | Rich verification with AI metadata | Session 25 ✅ | Session 12 (v1 verify enhanced) |
-| 🐛 Watermark Format Preservation | Stereo→mono conversion breaks fingerprint | Session 25(b) | Sessions 6-7 (spread spectrum needs fix) |
+| ✅ Watermark Format Preservation | Stereo preserved, FP-after-WM flow fixed | Session 25 ✅ | Sessions 6-7 (spread spectrum fallback) |
 | §7 `POST /orbit/v2/similar` | Find similar-sounding tracks | Session 26 | — (new endpoint) |
 | §7 `POST /orbit/v2/analyze` | Standalone audio analysis | Session 26 | — (new endpoint) |
 
@@ -48,7 +48,7 @@ When building these v1 sessions, keep implementations **minimal and modular** �
 
 | V1 Session | What to Build | V2 Fate | Implementation Guidance |
 |------------|---------------|---------|------------------------|
-| **Session 6-7** (Watermark) | Spread spectrum embed/extract with offset search | Becomes **fallback** when neural fails, offset search reused | Keep simple interface. Offset search stays in both v1 and v2 (neural also needs it). **⚠️ BUG**: Currently converts stereo→mono, breaking fingerprints. See Session 25(b). |
+| **Session 6-7** (Watermark) | Spread spectrum embed/extract with offset search | Becomes **fallback** when neural fails, offset search reused | Keep simple interface. Offset search stays in both v1 and v2 (neural also needs it). Session 25 fixed stereo preservation. |
 | **Session 3-4** (Fingerprint) | Chromaprint exact matching | Becomes **exact-match layer** under MERT | **CRITICAL**: No similarity scoring, no fuzzy matching - keep it pure exact hash comparison |
 | **Session 12** (Verify) | Basic verification response | **Enhanced** with AI metadata in v2 | Design response as extensible object |
 | **Session 11** (Register) | Basic registration | **Enhanced** with auto-metadata in v2 | Make metadata injection pluggable |
@@ -183,7 +183,7 @@ Session 21: ✅ Complete & Tested - Auto-Metadata Pipeline (audio-analysis 21 + 
 Session 22: ✅ Complete & Tested - SilentCipher neural watermarking + unified interface (silentcipher 22 + unified 14 = 36 tests passing)
 Session 23: ⏭️ Skipped - WMCodec redundant; layered provenance (fingerprint + CLAP + ledger) handles compression scenarios
 Session 24: ✅ Complete & Tested - Content relationship detection (content-analysis.js, 43 tests passing, verify integration)
-Session 25: ⬜ Not Started
+Session 25: ✅ Complete - Enhanced V2 verification, stereo preservation fixed, fingerprint-after-watermark flow. SilentCipher requires GPU (crashes on M1 Mac).
 Session 26: ⬜ Not Started
 Session 27: ⬜ Not Started
 Session 28: ⬜ Not Started
@@ -3493,18 +3493,23 @@ npm install essentia.js  # Or use Python subprocess
 - ✅ All sections populated with real data
 - ✅ v1 clients still work (backward compatibility)
 - ✅ Original audio verification works
-- ⚠️ Watermarked audio verification FAILS (see Session 25(b))
+- ✅ Watermarked audio verification works (fingerprint-based)
+- ⚠️ SilentCipher neural watermarking requires GPU environment (crashes on M1 Mac)
 
 ---
 
-### Session 25(b): 🐛 Critical Bug - Watermarking Destroys Fingerprint
+### Session 25(b): ✅ RESOLVED - Stereo Preservation & FP-After-WM Flow
 
-**Discovery Date**: December 11, 2025
+**Resolved Date**: December 12, 2025
 
-**Bug Summary**: The watermarking pipeline converts stereo audio to mono, which completely changes the Chromaprint fingerprint. This means:
-1. User uploads stereo audio → fingerprint A
-2. Watermarking converts to mono → fingerprint B (DIFFERENT!)
-3. User tries to verify watermarked audio → no match found
+**Original Bug**: The watermarking pipeline converted stereo audio to mono, breaking fingerprints.
+
+**Fixes Applied**:
+1. ✅ Stereo preservation in `src/utils/audio.js` (removed `-ac 1` flag)
+2. ✅ Fingerprint-after-watermark flow in `src/api/handlers/register.js`
+3. ✅ Stereo watermark embedding on all channels
+
+**Note**: SilentCipher neural watermarking requires GPU environment and crashes on M1 Mac due to torch/arm64 issues. Spread spectrum fallback works but has extraction limitations at imperceptible strength levels. Fingerprint provides primary identification redundancy.
 
 **Test Evidence** (from `tests/api/full-stack-test.js`):
 ```

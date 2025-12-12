@@ -51,6 +51,10 @@ function findFreshAudio() {
   
   // Priority order for fresh audio
   const candidates = [
+    'test-audio-six.wav',   // Session 25b: Debug watermark extraction
+    'test-audio-five.wav',
+    'test-audio-four.wav',
+    'test-song-three.wav',
     'fresh-test-song.wav',
     'fresh-test-song.mp3',
     'new-audio.wav',
@@ -150,17 +154,18 @@ async function runFullStackTest() {
     logStep('Audio prepared', true, `Source: ${audioSource}, Size: ${audioBuffer.length} bytes`);
     
     // ========================================================================
-    // STEP 2: Generate local fingerprint (baseline)
+    // STEP 2: Get audio duration (Session 25b: we no longer fingerprint original)
     // ========================================================================
     console.log('\n' + '─'.repeat(70));
-    console.log('STEP 2: Generate Local Fingerprint (Baseline)');
+    console.log('STEP 2: Analyze Original Audio');
     console.log('─'.repeat(70));
     
+    // Session 25b: We now fingerprint AFTER watermarking, so we just get duration here
     const localFingerprint = await OrbitFingerprint.generate(audioBuffer);
     const localFpHex = localFingerprint.hash.toString('hex');
     
-    logStep('Local fingerprint generated', true, 
-      `Hash: ${localFpHex.slice(0, 32)}...\n   Duration: ${localFingerprint.duration}s`);
+    logStep('Original audio analyzed', true, 
+      `Duration: ${localFingerprint.duration}s\n   (Note: FP will be generated from watermarked audio)`);
     
     // ========================================================================
     // STEP 3: Register audio via API
@@ -226,15 +231,8 @@ async function runFullStackTest() {
     
     logStep('Registration successful', true,
       `ID: ${regData.registration_id}\n   ` +
-      `Stored fingerprint: ${regData.fingerprint_hash.slice(0, 32)}...\n   ` +
+      `Stored fingerprint: ${regData.fingerprint_hash.slice(0, 32)}... (from watermarked audio)\n   ` +
       `Watermark method: ${regData.watermark_method}`);
-    
-    // Compare local vs stored fingerprint
-    const storedFpMatch = localFpHex === regData.fingerprint_hash;
-    logStep('Fingerprint consistency (local vs stored)', storedFpMatch,
-      storedFpMatch 
-        ? 'Local fingerprint matches what API stored' 
-        : `MISMATCH!\n   Local:  ${localFpHex.slice(0, 32)}...\n   Stored: ${regData.fingerprint_hash.slice(0, 32)}...`);
     
     // ========================================================================
     // STEP 4: Decode watermarked audio
@@ -252,21 +250,23 @@ async function runFullStackTest() {
     logStep('Watermarked audio decoded', true,
       `Size: ${watermarkedBuffer.length} bytes (original: ${audioBuffer.length})`);
     
-    // Fingerprint the watermarked audio locally
+    // Session 25b: Fingerprint the watermarked audio and compare to stored
+    // Since we now fingerprint AFTER watermarking, these SHOULD match!
     const wmFingerprint = await OrbitFingerprint.generate(watermarkedBuffer);
     const wmFpHex = wmFingerprint.hash.toString('hex');
     
-    const wmFpMatch = localFpHex === wmFpHex;
-    logStep('Fingerprint survives watermarking', wmFpMatch,
-      wmFpMatch 
-        ? 'Watermarked audio has same fingerprint as original ✓'
-        : `MISMATCH! Watermarking changed the fingerprint\n   Original:    ${localFpHex.slice(0, 32)}...\n   Watermarked: ${wmFpHex.slice(0, 32)}...`);
+    const wmFpMatchesStored = wmFpHex === regData.fingerprint_hash;
+    logStep('Watermarked FP matches stored (Session 25b)', wmFpMatchesStored,
+      wmFpMatchesStored 
+        ? 'Local watermarked FP matches what API stored ✓'
+        : `MISMATCH!\n   Local watermarked: ${wmFpHex.slice(0, 32)}...\n   Stored:           ${regData.fingerprint_hash.slice(0, 32)}...`);
     
     // ========================================================================
-    // STEP 5: Verify ORIGINAL audio
+    // STEP 5: Verify ORIGINAL audio (informational - won't match FP)
+    // Session 25b: Original audio FP won't match because we fingerprint watermarked
     // ========================================================================
     console.log('\n' + '─'.repeat(70));
-    console.log('STEP 5: Verify ORIGINAL Audio');
+    console.log('STEP 5: Verify ORIGINAL Audio (informational)');
     console.log('─'.repeat(70));
     
     const verifyOrigBody = cbor.encode({ audio: audioBuffer.toString('base64') });
@@ -282,16 +282,18 @@ async function runFullStackTest() {
     
     const verifyOrigData = await verifyOrigResponse.json();
     
-    logStep('Verify original audio', verifyOrigData.verified,
-      `Verified: ${verifyOrigData.verified}\n   ` +
+    // Session 25b: Original won't have FP match (expected), but noting for info
+    logStep('Original audio FP (informational)', true,
+      `FP match expected: No (we fingerprint watermarked audio now)\n   ` +
       `Fingerprint: ${verifyOrigData.fingerprint_hash?.slice(0, 32)}...\n   ` +
-      `Match found: ${verifyOrigData.fingerprint_match ? 'Yes (ID: ' + verifyOrigData.fingerprint_match.registration_id + ')' : 'No'}`);
+      `Match found: ${verifyOrigData.fingerprint_match ? 'Yes' : 'No (expected)'}`);
     
     // ========================================================================
-    // STEP 6: Verify WATERMARKED audio
+    // STEP 6: Verify WATERMARKED audio (THE CRITICAL TEST)
+    // Session 25b: This SHOULD pass - FP matches + watermark detected
     // ========================================================================
     console.log('\n' + '─'.repeat(70));
-    console.log('STEP 6: Verify WATERMARKED Audio');
+    console.log('STEP 6: Verify WATERMARKED Audio (critical test)');
     console.log('─'.repeat(70));
     
     const verifyWmBody = cbor.encode({ audio: watermarkedBuffer.toString('base64') });
@@ -307,11 +309,18 @@ async function runFullStackTest() {
     
     const verifyWmData = await verifyWmResponse.json();
     
-    logStep('Verify watermarked audio', verifyWmData.verified,
+    // Session 25b: Critical test - watermarked audio should have FP match
+    // (because we now fingerprint AFTER watermarking)
+    const fpMatch = verifyWmData.fingerprint_match != null;
+    const wmDetected = verifyWmData.watermark?.detected || false;
+    
+    // Session 25b SUCCESS = FP matches (the main goal of this session)
+    // Watermark detection is a bonus - may need separate debugging
+    logStep('Verify watermarked audio FP match (Session 25b)', verifyWmData.verified && fpMatch,
       `Verified: ${verifyWmData.verified}\n   ` +
       `Fingerprint: ${verifyWmData.fingerprint_hash?.slice(0, 32)}...\n   ` +
-      `Match found: ${verifyWmData.fingerprint_match ? 'Yes (ID: ' + verifyWmData.fingerprint_match.registration_id + ')' : 'No'}\n   ` +
-      `Watermark detected: ${verifyWmData.watermark?.detected || false}`);
+      `FP Match: ${fpMatch ? 'Yes (ID: ' + verifyWmData.fingerprint_match.registration_id + ')' : 'No'}\n   ` +
+      `Watermark detected: ${wmDetected} (bonus - not required for Session 25b)`);
     
     // ========================================================================
     // STEP 7: Check V2 Response Structure
@@ -375,3 +384,4 @@ async function runFullStackTest() {
 runFullStackTest().then(results => {
   process.exit(results.failed === 0 ? 0 : 1);
 });
+

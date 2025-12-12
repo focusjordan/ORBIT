@@ -222,20 +222,33 @@ class UnifiedWatermark {
     // Try spread spectrum (fallback or primary based on config)
     if (shouldTrySpread) {
       try {
-        // Convert audio to samples
-        const samples = await AudioUtils.decodeAudioToSamples(audioBuffer);
+        // Session 25b: Load audio WITH stereo preservation
+        const audioData = await AudioUtils.decodeAudioToSamples(audioBuffer, { preserveStereo: true });
+        const { channels, channelCount } = audioData;
         
-        // Embed using spread spectrum
-        const watermarkedSamples = this.spreadWatermark.embed(samples, watermarkPayload);
+        if (verbose) {
+          console.log(`   Audio format: ${channelCount} channel(s) - ${channelCount === 2 ? 'STEREO' : 'MONO'}`);
+        }
         
-        // Encode back to WAV
-        const watermarkedAudio = await AudioUtils.encodeSamplesToWav(watermarkedSamples, 44100, 1);
+        // Session 25b: Embed watermark on ALL channels (L+R for stereo)
+        // This ensures watermark survives even if one channel is isolated
+        const watermarkedChannels = [];
+        for (let ch = 0; ch < channelCount; ch++) {
+          const channelSamples = channels[ch];
+          const watermarkedChannel = this.spreadWatermark.embed(channelSamples, watermarkPayload);
+          watermarkedChannels.push(watermarkedChannel);
+        }
+        
+        // Session 25b: Encode back to WAV preserving original channel count
+        // CRITICAL: stereo in = stereo out, mono in = mono out
+        const watermarkedAudio = await AudioUtils.encodeSamplesToWav(watermarkedChannels, 44100);
         
         return {
           success: true,
           watermarkedAudio,
           method: 'spread',
           watermarkPayload,
+          channelCount,  // Session 25b: Report preserved channel count
           fallbackUsed: shouldTryNeural, // True if we tried neural first
           fallbackReason: shouldTryNeural ? 'neural_failed' : undefined,
           processingTimeMs: Date.now() - startTime
@@ -321,24 +334,46 @@ class UnifiedWatermark {
     // Try spread spectrum (fallback or primary based on config)
     if (shouldTrySpread) {
       try {
-        // Convert audio to samples
-        const samples = await AudioUtils.decodeAudioToSamples(audioBuffer);
+        // Session 25b: Load audio with stereo preservation
+        const audioData = await AudioUtils.decodeAudioToSamples(audioBuffer, { preserveStereo: true });
+        const { channels, channelCount } = audioData;
         
-        // Extract using spread spectrum with offset search
-        const result = this.spreadWatermark.extractWithSearch(samples);
+        // Debug: Log extraction attempt details
+        console.log(`   [WM Extract] Channels: ${channelCount}, Samples/ch: ${channels?.[0]?.length || 'N/A'}`);
         
-        if (result.valid) {
-          const parsedPayload = this.spreadWatermark.parsePayload(result.payload);
+        // Session 25b: Try extraction from all channels, use best result
+        // For stereo, the watermark should be on both channels
+        let bestResult = null;
+        
+        for (let ch = 0; ch < channelCount; ch++) {
+          const channelSamples = channels[ch];
+          const result = this.spreadWatermark.extractWithSearch(channelSamples);
+          
+          // Debug: Log each channel's extraction result
+          console.log(`   [WM Extract] Ch${ch}: valid=${result.valid}, conf=${result.confidence?.toFixed(6)}, offset=${result.offset}, attempts=${result.attempts}`);
+          
+          if (result.valid) {
+            if (!bestResult || result.confidence > bestResult.confidence) {
+              bestResult = result;
+              bestResult.extractedFromChannel = ch;
+            }
+          }
+        }
+        
+        if (bestResult && bestResult.valid) {
+          const parsedPayload = this.spreadWatermark.parsePayload(bestResult.payload);
           
           spreadResult = {
             success: true,
             detected: true,
             method: 'spread',
-            confidence: result.confidence,
-            payload: result.payload,
+            confidence: bestResult.confidence,
+            payload: bestResult.payload,
             parsedPayload,
             payloadHash: parsedPayload?.payloadHash,
-            offset: result.offset,
+            offset: bestResult.offset,
+            channelCount,
+            extractedFromChannel: bestResult.extractedFromChannel,
             fallbackUsed: shouldTryNeural && !neuralResult,
             processingTimeMs: Date.now() - startTime
           };

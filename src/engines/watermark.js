@@ -29,7 +29,7 @@ class OrbitWatermark {
     
     this.secretKey = secretKey;
     this.CHIP_RATE = options.chipRate || 1000;       // Samples per bit
-    this.EMBED_STRENGTH = options.strength || 0.005; // Amplitude
+    this.EMBED_STRENGTH = options.strength || 0.005; // Amplitude (imperceptible)
     this.REPEAT_INTERVAL = options.repeatInterval || 30 * 44100; // Repeat every 30 seconds
     this.SEARCH_INTERVAL = options.searchInterval || 5 * 44100;  // Search every 5 seconds
     this.MAGIC = Buffer.from('ORBT');                // Magic bytes

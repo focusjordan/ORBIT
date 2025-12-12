@@ -6,18 +6,22 @@
  * 
  * Flow:
  * 1. Validate input (audio + required metadata)
- * 2. Generate fingerprint and check for duplicates
- * 3. Build CBOR payload with all metadata
- * 4. Sign payload with platform key
- * 5. Create watermark payload and embed into audio
- * 6. Insert registration into database
- * 7. Optionally compute audio embedding for similarity search
- * 8. Return registration ID, fingerprint, and watermarked audio
+ * 2. Embed watermark into audio
+ * 3. Generate fingerprint from WATERMARKED audio (Session 25b fix)
+ * 4. Check for duplicates
+ * 5. Build CBOR payload with all metadata
+ * 6. Sign payload with platform key
+ * 7. Insert registration into database
+ * 8. Optionally compute audio embedding for similarity search
+ * 9. Return registration ID, fingerprint, and watermarked audio
  * 
  * Session 19: Added optional semantic fingerprinting
  * Session 22: Switched from MERT (CC BY-NC 4.0) to CLAP embeddings (Apache 2.0)
  * - Set ORBIT_ENABLE_EMBEDDING_ON_REGISTER=true to auto-compute embeddings
  * - Or pass include_embedding: true in metadata for per-request control
+ * Session 25b: Fingerprint now generated from WATERMARKED audio, not original.
+ * - This ensures the fingerprint represents the distributed content
+ * - Fixes fingerprint mismatch after watermarking
  */
 
 const OrbitFingerprint = require('../../engines/fingerprint');
@@ -104,19 +108,86 @@ async function registerHandler(req, res) {
     }
     
     // ========================================================================
-    // 2. PROCESS AUDIO & GENERATE FINGERPRINT
+    // 2. EMBED WATERMARK INTO AUDIO (Session 25b: watermark FIRST)
     // ========================================================================
     
     console.log(`📁 Received ${audioBuffer.length} bytes of audio`);
     
-    // Generate fingerprint
-    console.log('🔍 Generating fingerprint...');
-    const fingerprint = await OrbitFingerprint.generate(audioBuffer);
+    const timestamp = Date.now();
+    
+    console.log('💧 Creating watermark...');
+    console.log(`   Method: ${getWatermarkMethod()} (ORBIT_WATERMARK_METHOD)`);
+    
+    // Create unified watermark instance (handles neural + spread spectrum)
+    const watermark = new UnifiedWatermark(config.orbit.secretKey);
+    
+    // Check audio duration before attempting watermark
+    const audioInfo = await AudioUtils.loadAudioSamples(audioBuffer, { targetSampleRate: 44100 });
+    console.log(`   Audio duration: ${audioInfo.duration.toFixed(1)}s`);
+    console.log(`   Audio channels: ${audioInfo.channelCount} (${audioInfo.channelCount === 2 ? 'stereo' : 'mono'})`);
+    
+    // For spread spectrum fallback, check minimum duration
+    const minDurationSpread = watermark.spreadWatermark.getMinimumDuration();
+    if (getWatermarkMethod() === 'spread' && audioInfo.duration < minDurationSpread) {
+      return res.orbitError(
+        'audio_too_short',
+        `Audio must be at least ${minDurationSpread.toFixed(1)} seconds for watermarking`,
+        400
+      );
+    }
+    
+    // Create a preliminary payload hash for watermarking
+    // (We'll create the full CBOR payload after we have the fingerprint)
+    const preliminaryPayloadHash = OrbitCrypto.hash(Buffer.from(
+      `${req.platform.id}:${timestamp}:${metadata.title}:${metadata.artist}`
+    )).slice(0, 16);
+    
+    // Prepare watermark payload data
+    const watermarkData = {
+      platform: req.platform.id,
+      timestamp: timestamp,
+      payloadHash: preliminaryPayloadHash
+    };
+    
+    console.log('💧 Embedding watermark...');
+    const embedResult = await watermark.embed(audioBuffer, watermarkData, {
+      verbose: process.env.ORBIT_ML_VERBOSE === 'true'
+    });
+    
+    if (!embedResult.success) {
+      return res.orbitError(
+        'watermark_failed',
+        'Failed to embed watermark into audio',
+        500
+      );
+    }
+    
+    const watermarkedAudio = embedResult.watermarkedAudio;
+    const watermarkPayload = embedResult.watermarkPayload;
+    const watermarkMethod = embedResult.method;
+    
+    console.log(`✅ Watermark embedded using ${watermarkMethod}`);
+    console.log(`   Watermarked audio size: ${watermarkedAudio.length} bytes`);
+    if (embedResult.sdr) {
+      console.log(`   SDR: ${embedResult.sdr.toFixed(1)}dB`);
+    }
+    if (embedResult.fallbackUsed) {
+      console.log(`   ⚠️  Fallback used: ${embedResult.fallbackReason}`);
+    }
+    
+    // ========================================================================
+    // 3. GENERATE FINGERPRINT FROM WATERMARKED AUDIO (Session 25b fix)
+    // ========================================================================
+    
+    // Session 25b: Fingerprint the WATERMARKED audio, not the original!
+    // This ensures the fingerprint represents what will actually be distributed.
+    console.log('🔍 Generating fingerprint from WATERMARKED audio...');
+    const fingerprint = await OrbitFingerprint.generate(watermarkedAudio);
     console.log(`✅ Fingerprint generated: ${fingerprint.hash.toString('hex').slice(0, 16)}...`);
     console.log(`   Duration: ${fingerprint.duration}s`);
     
     // ========================================================================
-    // 3. CHECK FOR DUPLICATES
+    // 4. CHECK FOR DUPLICATES
     // ========================================================================
     
     console.log('🔎 Checking for duplicates...');
@@ -147,12 +218,10 @@ async function registerHandler(req, res) {
     }
     
     // ========================================================================
-    // 4. BUILD CBOR PAYLOAD WITH FULL METADATA
+    // 5. BUILD CBOR PAYLOAD WITH FULL METADATA
     // ========================================================================
     
     console.log('📦 Building CBOR payload...');
-    
-    const timestamp = Date.now();
     
     // Build complete metadata object for CBOR payload
     // V2 extensibility: This structure can be extended with ai_metadata in Session 21
@@ -224,7 +293,7 @@ async function registerHandler(req, res) {
     console.log(`   CBOR payload size: ${payloadCbor.length} bytes`);
     
     // ========================================================================
-    // 5. SIGN PAYLOAD
+    // 6. SIGN PAYLOAD
     // ========================================================================
     
     console.log('🔏 Signing payload...');
@@ -245,66 +314,8 @@ async function registerHandler(req, res) {
     payloadData.signature = signature;
     const signedPayloadCbor = OrbitCrypto.encode(payloadData);
     
-    // ========================================================================
-    // 6. CREATE WATERMARK & EMBED INTO AUDIO
-    // ========================================================================
-    
-    console.log('💧 Creating watermark...');
-    console.log(`   Method: ${getWatermarkMethod()} (ORBIT_WATERMARK_METHOD)`);
-    
-    // Create unified watermark instance (handles neural + spread spectrum)
-    const watermark = new UnifiedWatermark(config.orbit.secretKey);
-    
-    // Create payload hash (16 bytes for spread spectrum, 5 bytes used for neural)
+    // Create final payload hash for storage (based on signed CBOR)
     const payloadHash = OrbitCrypto.hash(signedPayloadCbor).slice(0, 16);
-    
-    // Prepare watermark payload data
-    const watermarkData = {
-      platform: req.platform.id,
-      timestamp: timestamp,
-      payloadHash: payloadHash
-    };
-    
-    // Check audio duration before attempting watermark
-    // Note: Neural watermarking needs ~1s minimum, spread spectrum needs ~12s at default settings
-    const audioInfo = await AudioUtils.loadAudioSamples(audioBuffer, { targetSampleRate: 44100 });
-    console.log(`   Audio duration: ${audioInfo.duration.toFixed(1)}s`);
-    
-    // For spread spectrum fallback, check minimum duration
-    const minDurationSpread = watermark.spreadWatermark.getMinimumDuration();
-    if (getWatermarkMethod() === 'spread' && audioInfo.duration < minDurationSpread) {
-      return res.orbitError(
-        'audio_too_short',
-        `Audio must be at least ${minDurationSpread.toFixed(1)} seconds for watermarking`,
-        400
-      );
-    }
-    
-    console.log('💧 Embedding watermark...');
-    const embedResult = await watermark.embed(audioBuffer, watermarkData, {
-      verbose: process.env.ORBIT_ML_VERBOSE === 'true'
-    });
-    
-    if (!embedResult.success) {
-      return res.orbitError(
-        'watermark_failed',
-        'Failed to embed watermark into audio',
-        500
-      );
-    }
-    
-    const watermarkedAudio = embedResult.watermarkedAudio;
-    const watermarkPayload = embedResult.watermarkPayload;
-    const watermarkMethod = embedResult.method;
-    
-    console.log(`✅ Watermark embedded using ${watermarkMethod}`);
-    console.log(`   Watermarked audio size: ${watermarkedAudio.length} bytes`);
-    if (embedResult.sdr) {
-      console.log(`   SDR: ${embedResult.sdr.toFixed(1)}dB`);
-    }
-    if (embedResult.fallbackUsed) {
-      console.log(`   ⚠️  Fallback used: ${embedResult.fallbackReason}`);
-    }
     
     // ========================================================================
     // 7. CREATE ENTRY HASH & INSERT INTO DATABASE

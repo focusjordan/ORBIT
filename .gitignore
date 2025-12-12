@@ -42,8 +42,7 @@ models/
 *.wav
 *.mp3
 *.flac
-!tests/fixtures/*.mp3
-!tests/fixtures/*.wav
+# Note: test audio files in tests/fixtures/ are also ignored (too large for git)
 # Python virtual environments
 .venv/
 .venv-watermark/
