@@ -26,8 +26,96 @@ const nacl = require('tweetnacl');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+const { execSync } = require('child_process');
+
 const CREDENTIALS_FILE = path.join(__dirname, '../.test-platform-credentials.json');
 const TEST_PLATFORM_ID = 'test-platform';
+
+// Test audio configuration
+const TEST_AUDIO_DIR = path.join(__dirname, '../tests/fixtures');
+const TEST_AUDIO_FILE = path.join(TEST_AUDIO_DIR, 'test-audio-short.mp3');
+const TEST_AUDIO_FULL = path.join(TEST_AUDIO_DIR, 'test-audio.mp3');
+const AUDIO_DURATION_SHORT = 15;  // 15 seconds (minimum for spread spectrum is 11.6s)
+const AUDIO_DURATION_FULL = 30;   // 30 seconds for full tests
+
+/**
+ * Check if ffmpeg is available
+ */
+function checkFfmpeg() {
+  try {
+    execSync('ffmpeg -version', { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Generate test audio file using ffmpeg
+ * Creates a 440Hz sine wave tone (simple, royalty-free)
+ */
+function generateTestAudio(outputPath, duration) {
+  const filename = path.basename(outputPath);
+  console.log(`   Generating ${filename} (${duration}s)...`);
+  
+  try {
+    execSync(
+      `ffmpeg -f lavfi -i "sine=frequency=440:duration=${duration}" -af "volume=0.5" -ar 44100 -ac 2 -b:a 192k "${outputPath}" -y`,
+      { stdio: 'pipe' }
+    );
+    return true;
+  } catch (error) {
+    console.error(`   ❌ Failed to generate ${filename}:`, error.message);
+    return false;
+  }
+}
+
+/**
+ * Ensure test audio files exist
+ */
+function ensureTestAudio() {
+  console.log('🎵 Checking test audio files...');
+  
+  // Ensure fixtures directory exists
+  if (!fs.existsSync(TEST_AUDIO_DIR)) {
+    fs.mkdirSync(TEST_AUDIO_DIR, { recursive: true });
+  }
+  
+  const hasFfmpeg = checkFfmpeg();
+  if (!hasFfmpeg) {
+    console.log('   ⚠️  ffmpeg not found - cannot auto-generate audio');
+    console.log('   Install ffmpeg or manually add test audio to tests/fixtures/');
+    return false;
+  }
+  
+  let generated = false;
+  
+  // Check/generate short audio (15s for fast tests)
+  if (!fs.existsSync(TEST_AUDIO_FILE)) {
+    if (generateTestAudio(TEST_AUDIO_FILE, AUDIO_DURATION_SHORT)) {
+      generated = true;
+    }
+  } else {
+    console.log('   ✅ test-audio-short.mp3 exists');
+  }
+  
+  // Check/generate full audio (30s for full tests)
+  if (!fs.existsSync(TEST_AUDIO_FULL)) {
+    if (generateTestAudio(TEST_AUDIO_FULL, AUDIO_DURATION_FULL)) {
+      generated = true;
+    }
+  } else {
+    console.log('   ✅ test-audio.mp3 exists');
+  }
+  
+  if (generated) {
+    console.log('   ✅ Test audio generated\n');
+  } else {
+    console.log('');
+  }
+  
+  return true;
+}
 
 async function clearTestData() {
   console.log('🧹 Clearing test data...');
@@ -131,6 +219,9 @@ async function main() {
   console.log('═'.repeat(50) + '\n');
   
   try {
+    // Ensure test audio files exist (generate if missing)
+    ensureTestAudio();
+    
     // Always clear test data
     await clearTestData();
     
@@ -142,6 +233,7 @@ async function main() {
       console.log('\n✅ Test environment ready!\n');
       console.log('   Platform ID:', creds.platform_id);
       console.log('   Credentials:', CREDENTIALS_FILE);
+      console.log('   Audio fixtures: tests/fixtures/');
       console.log('\n   Run tests with: npm test\n');
     } else {
       console.log('\n✅ Test data cleared (clean only mode)\n');
@@ -156,3 +248,4 @@ async function main() {
 }
 
 main();
+
