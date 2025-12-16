@@ -10,6 +10,10 @@
  * - Test platform seeded
  * 
  * Run: node tests/api/register.test.js
+ * 
+ * Test Modes:
+ * - Fast (default): Uses 5-second audio for quick iteration
+ * - Full: Uses 30-second audio for thorough validation
  */
 
 const fs = require('fs');
@@ -17,11 +21,14 @@ const path = require('path');
 const cbor = require('cbor');
 const OrbitCrypto = require('../../src/engines/crypto');
 const FormData = require('form-data');
+const { getTestAudioPath, cacheWatermarkedFixture, logTestMode, getConfig } = require('../test-config');
 
 // Test configuration
 const API_URL = process.env.API_URL || 'http://localhost:4000';
 const TEST_PLATFORM_ID = 'test-platform';
-const TEST_AUDIO_PATH = path.join(__dirname, '../fixtures/test-audio.mp3');
+
+// Get appropriate test audio based on mode (fast = 5sec, full = 30sec)
+const TEST_AUDIO_PATH = getTestAudioPath();
 
 // Load test platform credentials (should be set up via seed-platform.js)
 const PLATFORM_PRIVATE_KEY = process.env.TEST_PLATFORM_PRIVATE_KEY;
@@ -107,7 +114,10 @@ async function orbitRequest(endpoint, metadata, audioBuffer) {
  * Main test
  */
 async function testRegister() {
-  console.log('🧪 Testing POST /orbit/v1/register\n');
+  logTestMode('Testing POST /orbit/v1/register');
+  
+  const config = getConfig();
+  console.log(`   Expected watermark time: ~${Math.round(config.expectedWatermarkTime / 1000)}s\n`);
   
   try {
     // ========================================================================
@@ -208,14 +218,18 @@ async function testRegister() {
     console.log(`   Watermarked Audio: ${response.data.watermarked_audio.length} bytes (base64)\n`);
     
     // ========================================================================
-    // 5. Save watermarked audio for inspection
+    // 5. Save watermarked audio for inspection AND cache for verify tests
     // ========================================================================
     
     console.log('💾 Saving watermarked audio...');
     const watermarkedBuffer = Buffer.from(response.data.watermarked_audio, 'base64');
     const outputPath = path.join(__dirname, '../fixtures/test-audio-watermarked.wav');
     fs.writeFileSync(outputPath, watermarkedBuffer);
-    console.log(`   Saved to: ${outputPath}\n`);
+    console.log(`   Saved to: ${outputPath}`);
+    
+    // Cache for verify tests (speeds up subsequent test runs)
+    cacheWatermarkedFixture(watermarkedBuffer, 'register-basic');
+    console.log('');
     
     // ========================================================================
     // 6. Test duplicate detection

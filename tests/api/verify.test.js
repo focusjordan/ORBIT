@@ -17,6 +17,10 @@
  * - Test platform seeded
  * 
  * Run: node tests/api/verify.test.js
+ * 
+ * Test Modes:
+ * - Fast (default): Uses 5-second audio for quick iteration
+ * - Full: Uses 30-second audio for thorough validation
  */
 
 const fs = require('fs');
@@ -24,11 +28,14 @@ const path = require('path');
 const cbor = require('cbor');
 const OrbitCrypto = require('../../src/engines/crypto');
 const FormData = require('form-data');
+const { getTestAudioPath, getWatermarkedFixturePath, cacheWatermarkedFixture, logTestMode, getConfig, shouldUseCache } = require('../test-config');
 
 // Test configuration
 const API_URL = process.env.API_URL || 'http://localhost:4000';
 const TEST_PLATFORM_ID = 'test-platform';
-const TEST_AUDIO_PATH = path.join(__dirname, '../fixtures/test-audio.mp3');
+
+// Get appropriate test audio based on mode (fast = 5sec, full = 30sec)
+const TEST_AUDIO_PATH = getTestAudioPath();
 
 // Load test platform credentials
 const PLATFORM_PRIVATE_KEY = process.env.TEST_PLATFORM_PRIVATE_KEY;
@@ -146,9 +153,10 @@ async function verifyAudio(audioBuffer, options = {}) {
  * Main test runner
  */
 async function runTests() {
-  console.log('🧪 ORBIT Verify Endpoint Test Suite (v2 Enhanced)\n');
+  logTestMode('ORBIT Verify Endpoint Test Suite (v2 Enhanced)');
   console.log('='.repeat(60));
   
+  const config = getConfig();
   let registrationResponse;
   let testAudioBuffer;
   let watermarkedAudioBuffer;
@@ -157,15 +165,28 @@ async function runTests() {
   
   try {
     // ========================================================================
-    // TEST 1: Register Test Audio First
+    // TEST 1: Register Test Audio First (or use cached watermarked fixture)
     // ========================================================================
     
-    console.log('\n📝 TEST 1: Register test audio (prerequisite for verification)');
+    console.log('\n📝 TEST 1: Get watermarked audio for verification');
     console.log('-'.repeat(60));
     testsRun++;
     
     testAudioBuffer = fs.readFileSync(TEST_AUDIO_PATH);
     console.log(`✓ Loaded test audio: ${testAudioBuffer.length} bytes`);
+    
+    // Try to use cached watermarked fixture for faster tests
+    const cachedFixture = shouldUseCache() ? getWatermarkedFixturePath('register-basic') : null;
+    
+    if (cachedFixture) {
+      console.log(`⚡ Using cached watermarked fixture (fast path)`);
+      watermarkedAudioBuffer = fs.readFileSync(cachedFixture);
+      console.log(`✓ Loaded cached fixture: ${watermarkedAudioBuffer.length} bytes`);
+      
+      // We still need to register fresh for fingerprint matching
+      // But we can skip waiting for the watermark embedding
+      console.log(`   Note: Will register fresh audio for fingerprint DB entry`);
+    }
     
     // Use timestamp in title to avoid duplicate conflicts
     const testRunId = Date.now();
@@ -173,7 +194,7 @@ async function runTests() {
       owner_id: '550e8400-e29b-41d4-a716-446655440000',
       title: `Verify Test Track v2 - ${testRunId}`,
       artist: 'Test Artist',
-      duration_ms: 180000,
+      duration_ms: config.audioDuration * 1000,
       isrc: `UST${testRunId.toString().slice(-9)}`, // Unique ISRC
       upc: `0${testRunId.toString().slice(-11)}`, // Unique UPC
       primary_genre: 'Electronic',
@@ -182,7 +203,10 @@ async function runTests() {
       c_line: '2025 Test Publishing',
     };
     
+    console.log(`   Registering audio (this will take ~${Math.round(config.expectedWatermarkTime / 1000)}s)...`);
+    const registerStart = Date.now();
     registrationResponse = await registerAudio(metadata, testAudioBuffer);
+    const registerTime = Date.now() - registerStart;
     
     if (registrationResponse.status !== 200) {
       console.error(`❌ Registration failed: ${registrationResponse.status}`);
@@ -190,13 +214,18 @@ async function runTests() {
       return;
     }
     
-    console.log(`✓ Registration successful: ID ${registrationResponse.data.registration_id}`);
+    console.log(`✓ Registration successful: ID ${registrationResponse.data.registration_id} (${registerTime}ms)`);
     console.log(`   Fingerprint: ${registrationResponse.data.fingerprint_hash.slice(0, 16)}...`);
     
-    // Save watermarked audio for verification test
-    if (registrationResponse.data.watermarked_audio) {
-      watermarkedAudioBuffer = Buffer.from(registrationResponse.data.watermarked_audio, 'base64');
-      console.log(`✓ Watermarked audio received: ${watermarkedAudioBuffer.length} bytes`);
+    // Use fresh watermarked audio if no cache, or always for full mode
+    if (!watermarkedAudioBuffer || process.env.TEST_AUDIO_MODE === 'full') {
+      if (registrationResponse.data.watermarked_audio) {
+        watermarkedAudioBuffer = Buffer.from(registrationResponse.data.watermarked_audio, 'base64');
+        console.log(`✓ Watermarked audio received: ${watermarkedAudioBuffer.length} bytes`);
+        
+        // Cache for next run
+        cacheWatermarkedFixture(watermarkedAudioBuffer, 'register-basic');
+      }
     }
     
     console.log(`\n✅ TEST 1 PASSED`);

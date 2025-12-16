@@ -1,0 +1,158 @@
+name: ORBIT Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # Unit tests - Fast, no external dependencies
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Install Chromaprint
+        run: sudo apt-get update && sudo apt-get install -y libchromaprint-tools ffmpeg
+      
+      - name: Create test audio fixture
+        run: |
+          # Generate a 30-second test tone if fixture doesn't exist
+          if [ ! -f tests/fixtures/test-audio.mp3 ]; then
+            ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3
+          fi
+      
+      - name: Run unit tests
+        run: npm run test:unit
+        env:
+          SKIP_API_TESTS: '1'
+          SKIP_ML_TESTS: '1'
+
+  # V1 Core tests - Needs PostgreSQL
+  v1-tests:
+    name: V1 Core Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: orbit
+          POSTGRES_PASSWORD: orbit
+          POSTGRES_DB: orbit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Install Chromaprint & FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y libchromaprint-tools ffmpeg
+      
+      - name: Create test audio fixtures
+        run: |
+          # Generate test audio files
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3 -y
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=30" tests/fixtures/test-audio-watermarked.wav -y
+          ffmpeg -f lavfi -i "sine=frequency=880:duration=30" tests/fixtures/test-audio-rhythm.wav -y
+      
+      - name: Setup environment
+        run: |
+          cp .env.example .env
+          echo "DATABASE_URL=postgres://orbit:orbit@localhost:5432/orbit_test" >> .env
+          echo "ORBIT_SECRET_KEY=test-secret-key-for-ci-$(date +%s)" >> .env
+      
+      - name: Run database migrations
+        run: npm run migrate
+        env:
+          DATABASE_URL: postgres://orbit:orbit@localhost:5432/orbit_test
+      
+      - name: Seed test platform
+        run: npm run seed:platform
+        env:
+          DATABASE_URL: postgres://orbit:orbit@localhost:5432/orbit_test
+      
+      - name: Start server in background
+        run: |
+          npm start &
+          sleep 5  # Wait for server to start
+        env:
+          DATABASE_URL: postgres://orbit:orbit@localhost:5432/orbit_test
+          PORT: 4000
+      
+      - name: Run V1 tests
+        run: npm run test:v1
+        env:
+          DATABASE_URL: postgres://orbit:orbit@localhost:5432/orbit_test
+          API_URL: http://localhost:4000
+          SKIP_ML_TESTS: '1'
+
+  # V2 ML tests - Needs models (slow, optional)
+  v2-ml-tests:
+    name: V2 ML Tests (Metadata Extraction)
+    runs-on: ubuntu-latest
+    # Only run on main branch or if explicitly requested
+    if: github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '[test-ml]')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      
+      - name: Create test audio fixtures
+        run: |
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=30" tests/fixtures/test-audio.mp3 -y
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=30" tests/fixtures/test-audio-watermarked.wav -y
+      
+      - name: Cache ML models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: ${{ runner.os }}-huggingface-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-huggingface-
+      
+      - name: Run V2 safe ML tests
+        run: npm run test:v2:safe
+        env:
+          SKIP_API_TESTS: '1'
+        timeout-minutes: 30  # ML model downloads can be slow

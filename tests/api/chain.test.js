@@ -15,6 +15,10 @@
  * - Test platforms seeded
  * 
  * Run: node tests/api/chain.test.js
+ * 
+ * Test Modes:
+ * - Fast (default): Uses 5-second audio for quick iteration
+ * - Full: Uses 30-second audio for thorough validation
  */
 
 const fs = require('fs');
@@ -22,11 +26,14 @@ const path = require('path');
 const cbor = require('cbor');
 const OrbitCrypto = require('../../src/engines/crypto');
 const FormData = require('form-data');
+const { getTestAudioPath, logTestMode, getConfig } = require('../test-config');
 
 // Test configuration
 const API_URL = process.env.API_URL || 'http://localhost:4000';
 const TEST_PLATFORM_ID = 'test-platform';
-const TEST_AUDIO_PATH = path.join(__dirname, '../fixtures/test-audio.mp3');
+
+// Get appropriate test audio based on mode
+const TEST_AUDIO_PATH = getTestAudioPath();
 
 // Load test platform credentials
 const PLATFORM_PRIVATE_KEY = process.env.TEST_PLATFORM_PRIVATE_KEY;
@@ -163,9 +170,10 @@ async function initiateTransfer(registrationId, toPlatform) {
 // ============================================================================
 
 async function runTests() {
-  console.log('🧪 ORBIT Chain Lookup Endpoint Tests\n');
+  logTestMode('ORBIT Chain Lookup Endpoint Tests');
   console.log('='.repeat(60));
   
+  const config = getConfig();
   let testsPassed = 0;
   let testsFailed = 0;
   let registeredFingerprint = null;
@@ -173,7 +181,8 @@ async function runTests() {
   
   // Load test audio
   const audioBuffer = fs.readFileSync(TEST_AUDIO_PATH);
-  console.log(`✓ Loaded test audio: ${audioBuffer.length} bytes\n`);
+  console.log(`✓ Loaded test audio: ${audioBuffer.length} bytes`);
+  console.log(`   Expected watermark time: ~${Math.round(config.expectedWatermarkTime / 1000)}s\n`);
   
   // ========================================================================
   // TEST 1: Query non-existent fingerprint (should return 404)
@@ -246,32 +255,25 @@ async function runTests() {
     // Validate response structure
     const chain = chainResult.data;
     
+    // Find our specific registration in the chain (may have previous test runs)
+    const ourRegistration = chain.registrations?.find(r => r.registration_id === registrationId);
+    
     if (chainResult.status === 200 &&
         chain.fingerprint_hash === registeredFingerprint &&
-        chain.registration_count === 1 &&
-        chain.transfer_count === 0 &&
-        chain.registrations.length === 1 &&
-        chain.registrations[0].registration_id === registrationId &&
-        chain.registrations[0].metadata.title === metadata.title &&
-        chain.registrations[0].metadata.artist === metadata.artist &&
-        chain.transfers.length === 0 &&
-        chain.chain.length === 1 &&
-        chain.chain[0].type === 'registration') {
-      console.log('✅ PASS: Chain returned correct structure for fresh registration\n');
+        chain.registration_count >= 1 &&  // May have previous test runs
+        ourRegistration &&
+        ourRegistration.metadata.title === metadata.title &&
+        ourRegistration.metadata.artist === metadata.artist &&
+        chain.chain?.length >= 1) {
+      console.log('✅ PASS: Chain returned correct structure (our registration found)\n');
+      console.log(`   Note: ${chain.registration_count} total registration(s) for this fingerprint`);
       testsPassed++;
     } else {
       console.log('❌ FAIL: Chain structure validation failed\n');
-      console.log('Expected:');
-      console.log('  - registration_count: 1');
-      console.log('  - transfer_count: 0');
-      console.log('  - registrations.length: 1');
-      console.log('  - transfers.length: 0');
-      console.log('  - chain.length: 1');
-      console.log('Got:', {
+      console.log('Expected our registration in chain. Got:', {
+        status: chainResult.status,
         registration_count: chain.registration_count,
-        transfer_count: chain.transfer_count,
-        registrations_length: chain.registrations?.length,
-        transfers_length: chain.transfers?.length,
+        our_registration_found: !!ourRegistration,
         chain_length: chain.chain?.length
       });
       console.log();

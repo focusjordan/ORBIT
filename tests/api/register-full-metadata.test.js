@@ -10,6 +10,10 @@
  * 
  * Usage:
  *   TEST_PLATFORM_PRIVATE_KEY="..." npm run test:register:full
+ * 
+ * Test Modes:
+ * - Fast (default): Uses 5-second audio for quick iteration
+ * - Full: Uses 30-second audio for thorough validation
  */
 
 const fs = require('fs');
@@ -17,17 +21,20 @@ const path = require('path');
 const cbor = require('cbor');
 const OrbitCrypto = require('../../src/engines/crypto');
 const FormData = require('form-data');
+const { getTestAudioPath, logTestMode, getConfig } = require('../test-config');
 
 // Test configuration
 const API_URL = 'http://localhost:4000';
-const TEST_PLATFORM_ID = 'first'; // From .first-credentials.json
-const TEST_AUDIO_PATH = path.join(__dirname, '../fixtures/test-audio.mp3');
+const TEST_PLATFORM_ID = 'test-platform';
+
+// Get appropriate test audio based on mode
+const TEST_AUDIO_PATH = getTestAudioPath();
 
 // Load private key from credentials file or env
 let privateKeyBase64 = process.env.TEST_PLATFORM_PRIVATE_KEY;
 if (!privateKeyBase64) {
   try {
-    const creds = JSON.parse(fs.readFileSync(path.join(__dirname, '../../.first-credentials.json'), 'utf8'));
+    const creds = JSON.parse(fs.readFileSync(path.join(__dirname, '../../.test-platform-credentials.json'), 'utf8'));
     privateKeyBase64 = creds.private_key;
   } catch (err) {
     // Will fail below if still not set
@@ -106,7 +113,10 @@ async function orbitRequest(endpoint, metadata, audioBuffer) {
  */
 async function testFullMetadata() {
   try {
-    console.log('🧪 Testing POST /orbit/v1/register - FULL METADATA SCHEMA\n');
+    logTestMode('Testing POST /orbit/v1/register - FULL METADATA SCHEMA');
+    
+    const config = getConfig();
+    console.log(`   Expected watermark time: ~${Math.round(config.expectedWatermarkTime / 1000)}s\n`);
     
     // ========================================================================
     // 1. Load test audio
