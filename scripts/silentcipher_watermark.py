@@ -186,9 +186,10 @@ def embed_watermark(audio_path, output_path, message, target_sr=44100):
     # Load model
     model, device, model_type = get_model(target_sr)
     
-    # Embed watermark
+    # Embed watermark - suppress stdout/stderr from silentcipher library
     # SilentCipher expects message as list of 5 integers [0-255]
-    encoded_audio, sdr = model.encode_wav(audio, sr, message)
+    with SuppressOutput():
+        encoded_audio, sdr = model.encode_wav(audio, sr, message)
     
     # Save output
     sf.write(output_path, encoded_audio, sr)
@@ -229,9 +230,10 @@ def extract_watermark(audio_path, target_sr=44100, phase_shift_decoding=True):
     # Load model
     model, device, model_type = get_model(target_sr)
     
-    # Extract watermark
+    # Extract watermark - suppress stdout/stderr from silentcipher library
     # phase_shift_decoding=True makes decoder more robust to audio crops
-    result = model.decode_wav(audio, sr, phase_shift_decoding=phase_shift_decoding)
+    with SuppressOutput():
+        result = model.decode_wav(audio, sr, phase_shift_decoding=phase_shift_decoding)
     
     # Status can be True, 'success', or truthy value depending on version
     status_ok = result.get('status') in (True, 'success', 'True') or result.get('status') == True
