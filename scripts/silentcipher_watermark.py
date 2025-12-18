@@ -99,6 +99,28 @@ class SuppressStderr:
             self._devnull.close()
 
 
+class SuppressOutput:
+    """Context manager to suppress both stdout and stderr during model operations."""
+    def __init__(self):
+        self._original_stdout = None
+        self._original_stderr = None
+        self._devnull = None
+    
+    def __enter__(self):
+        self._original_stdout = sys.stdout
+        self._original_stderr = sys.stderr
+        self._devnull = open(os.devnull, 'w')
+        sys.stdout = self._devnull
+        sys.stderr = self._devnull
+        return self
+    
+    def __exit__(self, *args):
+        sys.stdout = self._original_stdout
+        sys.stderr = self._original_stderr
+        if self._devnull:
+            self._devnull.close()
+
+
 def get_model(sample_rate=44100):
     """Load SilentCipher model for the given sample rate."""
     import silentcipher
@@ -116,8 +138,8 @@ def get_model(sample_rate=44100):
         # Resample to 44.1k if other sample rate
         model_type = '44.1k'
     
-    # Load model (cached after first download) - suppress progress bars
-    with SuppressStderr():
+    # Load model (cached after first download) - suppress all output
+    with SuppressOutput():
         model = silentcipher.get_model(
             model_type=model_type,
             device=device
