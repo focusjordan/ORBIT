@@ -557,6 +557,106 @@ class OrbitClient {
 
     return responseData;
   }
+
+  // ============================================================================
+  // V2 ENDPOINTS - AI-Powered Analysis
+  // ============================================================================
+
+  /**
+   * Find similar-sounding tracks via CLAP embeddings (v2)
+   * 
+   * Uses AI embeddings to find tracks that sound similar, even if they're
+   * pitch-shifted, time-stretched, or are covers/remixes.
+   * 
+   * @param {Buffer} audioBuffer - Binary audio data to find similar tracks for
+   * @param {Object} [options] - Search options
+   * @param {number} [options.threshold=0.5] - Similarity threshold (0-1)
+   * @param {number} [options.limit=20] - Maximum results (1-100)
+   * @param {boolean} [options.includeDerivatives=true] - Include covers/remixes
+   * 
+   * @returns {Promise<Object>} Similarity search results
+   * @returns {string} result.query_embedding_id - Unique query ID
+   * @returns {Array} result.results - Similar tracks with similarity scores
+   * @returns {Object} result.query_metadata - Detected genre/mood of query audio
+   * @returns {Object} result.summary - Result summary with counts
+   * 
+   * @example
+   * const audioBuffer = fs.readFileSync('track.mp3');
+   * const results = await client.similar(audioBuffer, {
+   *   threshold: 0.7,
+   *   limit: 10
+   * });
+   * 
+   * results.results.forEach(track => {
+   *   console.log(`${track.title} - ${track.artist} (${track.similarity.toFixed(2)})`);
+   * });
+   */
+  async similar(audioBuffer, options = {}) {
+    if (!Buffer.isBuffer(audioBuffer)) {
+      throw new Error('audioBuffer must be a Buffer');
+    }
+
+    const body = {
+      audio: audioBuffer.toString('base64'),
+      threshold: options.threshold ?? 0.5,
+      limit: options.limit ?? 20,
+      include_derivatives: options.includeDerivatives ?? true
+    };
+
+    return this._request('POST', '/orbit/v2/similar', body);
+  }
+
+  /**
+   * Analyze audio without registration (v2)
+   * 
+   * Get AI-powered analysis including genre, mood, BPM, key, instruments, 
+   * and vocal detection. Useful for previewing metadata before registration
+   * or for third-party analysis tools.
+   * 
+   * @param {Buffer} audioBuffer - Binary audio data to analyze
+   * @param {Object} [options] - Analysis options
+   * @param {Array<string>} [options.include] - Specific fields to include
+   *   Valid values: 'genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 
+   *   'fingerprint', 'embedding'
+   *   Default: all except 'embedding'
+   * 
+   * @returns {Promise<Object>} Analysis results
+   * @returns {Object} result.analysis - Analysis data
+   * @returns {Array} result.analysis.genre - Genre predictions with confidence
+   * @returns {Array} result.analysis.mood - Mood predictions with confidence
+   * @returns {Object} result.analysis.bpm - BPM with confidence
+   * @returns {Object} result.analysis.key - Musical key with confidence
+   * @returns {Array} result.analysis.instruments - Detected instruments
+   * @returns {Object} result.analysis.vocals - Vocal detection info
+   * @returns {Object} [result.embeddings] - CLAP embeddings (if requested)
+   * @returns {Object} [result.fingerprint] - Chromaprint hash (if requested)
+   * @returns {number} result.processing_time_ms - Processing time
+   * 
+   * @example
+   * const audioBuffer = fs.readFileSync('track.mp3');
+   * const analysis = await client.analyze(audioBuffer, {
+   *   include: ['genre', 'mood', 'bpm', 'key']
+   * });
+   * 
+   * console.log('Genre:', analysis.analysis.genre[0].label);
+   * console.log('Mood:', analysis.analysis.mood[0].label);
+   * console.log('BPM:', analysis.analysis.bpm.value);
+   */
+  async analyze(audioBuffer, options = {}) {
+    if (!Buffer.isBuffer(audioBuffer)) {
+      throw new Error('audioBuffer must be a Buffer');
+    }
+
+    const body = {
+      audio: audioBuffer.toString('base64')
+    };
+
+    if (options.include && Array.isArray(options.include)) {
+      body.include = options.include;
+    }
+
+    return this._request('POST', '/orbit/v2/analyze', body);
+  }
 }
 
 // Export for CommonJS
