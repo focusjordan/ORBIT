@@ -17,10 +17,10 @@
 | Phase 2 | 9-14 | API Layer (v1) | ✅ Complete (All 5 v1 endpoints working) |
 | Phase 3 | 15-17 | Ohnrshyp Integration | ✅ Complete (SDK + Duplicate Check + Auto-Registration) |
 | Phase 4 | 18-24 | Neural Enhancements (v2) | ✅ Complete (Session 24 Complete) |
-| Phase 5 | 25-30 | Polish, Integration, B2B & Positioning | 🔄 In Progress (Session 26 ✅ Complete) |
+| Phase 5 | 25-30 | Polish, Integration, B2B & Positioning | 🔄 In Progress (Session 28 ✅ Complete) |
 
-**Current Session**: Session 27.5 (Next)
-**Last Updated**: December 12, 2025
+**Current Session**: Session 29 (Ohnrshyp Integration)
+**Last Updated**: December 22, 2025
 **Prerequisites Met**: ✅ PostgreSQL running, ✅ Chromaprint installed, ✅ Core engines working (fingerprint, watermark, crypto), ✅ Database with full schema, ✅ Express server with CBOR middleware, ✅ Platform authentication, ✅ All 5 v1 API endpoints, ✅ SDK published, ✅ Ohnrshyp integration complete, ✅ **ML ModelManager infrastructure with lazy loading**, ✅ **Content relationship detection (CLAP embeddings + pgvector)**, ✅ **V2 API endpoints (similar + analyze)**
 
 ---
@@ -186,10 +186,11 @@ Session 24: ✅ Complete & Tested - Content relationship detection (content-anal
 Session 25: ✅ Complete - Enhanced V2 verification, stereo preservation fixed, fingerprint-after-watermark flow. SilentCipher requires GPU (crashes on M1 Mac).
 Session 26: ✅ Complete & Tested - V2 API endpoints (POST /orbit/v2/similar, POST /orbit/v2/analyze), 8 tests passing
 Session 27: ✅ Complete - Unified test runner (npm test), GitHub Actions CI workflow
-Session 27.5: ⬜ Not Started - Ohnrshyp Integration & Production Testing
-Session 28: ⬜ Not Started - Documentation & Use Case Guide
-Session 29: ⬜ Not Started - B2B Validation (Test Distributor Platform)
-Session 30: ⬜ Not Started - DRM Industry Comparison & Value Proposition
+Session 28: ✅ Complete - AWS EC2 Deployment with GPU (g4dn.xlarge, Tesla T4, SilentCipher working with Python 3.10 venv). Server running via PM2. Tests: 7/8 passing.
+Session 29: ⬜ Next - Ohnrshyp Integration (integrate SDK, add to upload flow, production testing)
+Session 30: ⬜ Not Started - Documentation & Use Case Guide
+Session 31: ⬜ Not Started - B2B Validation (Test Distributor Platform)
+Session 32: ⬜ Not Started - DRM Industry Comparison & Value Proposition
 ```
 
 **Status Legend:**
@@ -3648,13 +3649,57 @@ npm run test:v1       # ✅ V1 tests pass (with graceful skips for DB/server)
 
 ---
 
-### Session 27.5: Ohnrshyp Integration & Production Testing
+### Session 28: AWS EC2 Deployment ✅ COMPLETE
+
+**Goal**: Deploy ORBIT to AWS with GPU for SilentCipher neural watermarking
+
+**Prerequisites**: Session 27 complete ✅
+
+**Completed**: December 18, 2025
+
+**What We Did**:
+- [x] Launched EC2 g4dn.xlarge (Tesla T4 GPU, 15GB VRAM)
+- [x] Used Deep Learning AMI (Ubuntu 24.04, CUDA 13.0 pre-installed)
+- [x] Installed Node.js 20, Chromaprint, FFmpeg
+- [x] Set up PostgreSQL with pgvector in Docker
+- [x] Cloned ORBIT repo (private, used GitHub PAT)
+- [x] **Critical**: Created separate Python 3.10 venv for SilentCipher (torch<=2.0.0 requirement)
+- [x] Configured .env with all required variables
+- [x] Ran migrations and seeded Ohnrshyp platform
+- [x] Started server with PM2 (auto-restart on boot)
+- [x] Fixed stdout suppression in silentcipher_watermark.py
+- [x] Ran tests: **7/8 passed** (watermark detection expected to fail on synthetic audio)
+
+**Key Technical Details**:
+- Instance ID: `i-083a415ff9e01864d`
+- SilentCipher requires: Python 3.10 + torch==2.0.0 + numpy<2
+- Two venvs: `/opt/pytorch` (AMI default) + `.venv-watermark` (SilentCipher)
+- Cost: ~$0.53/hour - stop when not in use!
+
+**Credentials**:
+- SSH: `ssh -i ~/Desktop/orbit-key.pem ubuntu@<IP>`
+- Ohnrshyp creds: `/home/ubuntu/ORBIT/.ohnrshyp-credentials.json`
+
+**Reference Docs Created**:
+- `SESSION_29_HANDOFF.md` - Quick start for next session
+- `OHNRSHYP_INTEGRATION_HANDOFF.md` - Integration guide
+- `AWS_DEPLOYMENT_CHECKLIST.md` - Updated with actual steps
+
+---
+
+### Session 29: Ohnrshyp Integration & Production Testing
 
 **Goal**: Integrate ORBIT into Ohnrshyp and validate production use cases
 
-**Prerequisites**: Session 27 complete
+**Prerequisites**: Session 28 complete ✅ (ORBIT server running on AWS)
 
 **Context**: Sessions 15-17 created the SDK and middleware patterns. This session actually integrates them into the live Ohnrshyp platform.
+
+**Before Starting**:
+1. Start EC2 instance (AWS Console)
+2. Get new public IP (changes on restart unless Elastic IP)
+3. SSH in and verify: `pm2 status && curl http://localhost:4000/health`
+4. Get credentials: `cat .ohnrshyp-credentials.json`
 
 **Tasks**:
 - [ ] **Update Ohnrshyp Repository**:
@@ -3677,11 +3722,6 @@ npm run test:v1       # ✅ V1 tests pass (with graceful skips for DB/server)
   - [ ] Test duplicate detection with actual files
   - [ ] Test verification flow from track page
   - [ ] Validate AI metadata extraction accuracy
-- [ ] **Document Internal Use Cases**:
-  - [ ] Duplicate detection preventing re-uploads
-  - [ ] AI metadata auto-population
-  - [ ] Provenance tracking for uploaded content
-  - [ ] Content relationship detection
 
 **Commit Message**: `feat: ohnrshyp ORBIT integration`
 
@@ -3693,11 +3733,11 @@ npm run test:v1       # ✅ V1 tests pass (with graceful skips for DB/server)
 
 ---
 
-### Session 28: Documentation & Use Case Guide
+### Session 30: Documentation & Use Case Guide
 
 **Goal**: Complete documentation with internal value proposition
 
-**Prerequisites**: Session 27.5 complete
+**Prerequisites**: Session 29 complete
 
 **Tasks**:
 - [ ] **README.md**: Quick start guide for ORBIT
@@ -3734,7 +3774,7 @@ npm run test:v1       # ✅ V1 tests pass (with graceful skips for DB/server)
 
 ---
 
-### Session 29: B2B Validation - Test Distributor Platform
+### Session 31: B2B Validation - Test Distributor Platform
 
 **Goal**: Validate B2B transfer protocol with a second platform
 
