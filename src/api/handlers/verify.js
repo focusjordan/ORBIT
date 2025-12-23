@@ -189,6 +189,88 @@ async function verifyHandler(req, res) {
     console.log(`[Verify] Found ${matches.length} fingerprint match(es)`);
     
     // ========================================================================
+    // FAST PATH: New audio (no fingerprint match)
+    // Skip slow operations - registration will handle AI metadata & watermarking
+    // ========================================================================
+    
+    if (matches.length === 0) {
+      const processingTime = Date.now() - startTime;
+      console.log(`[Verify] No matches - new audio, returning fast path (${processingTime}ms)`);
+      
+      // Return minimal response for new audio
+      // Full analysis happens during registration, not duplicate check
+      return res.orbit({
+        verified: false,
+        
+        // Identity: only fingerprint (no matches to compare)
+        identity: {
+          fingerprint_hash: fingerprintData.hash.toString('hex'),
+          chromaprint_match: null,
+          clap_embedding_id: null,
+          semantic_match: null,
+        },
+        
+        // No watermark check for new uploads (they won't have one)
+        watermark: {
+          detected: false,
+          valid: false,
+          skipped: true,
+          reason: 'new_audio_fast_path',
+        },
+        
+        // No AI metadata during verify - done during registration
+        ai_extracted_metadata: {
+          skipped: true,
+          reason: 'new_audio_fast_path',
+          note: 'AI metadata extracted during registration',
+        },
+        
+        // No content analysis during verify - available via /orbit/v2/similar
+        content_analysis: {
+          skipped: true,
+          reason: 'new_audio_fast_path',
+          note: 'Similar content search available via POST /orbit/v2/similar',
+        },
+        
+        // Provenance: none (new audio)
+        provenance: {
+          origin: null,
+          transfers: [],
+          chain_integrity: null,
+        },
+        
+        // Not a duplicate
+        duplicate_of: null,
+        
+        // Confidence: low (unregistered)
+        confidence_summary: {
+          identity_confidence: 0,
+          watermark_confidence: 0,
+          metadata_confidence: 0,
+          signature_valid: false,
+          overall_score: 0,
+          overall_verification: 'NONE',
+        },
+        
+        // V1 compatibility fields
+        fingerprint_hash: fingerprintData.hash.toString('hex'),
+        fingerprint_match: null,
+        metadata: null,
+        origin: null,
+        transfers: [],
+        
+        // Timing
+        processing_time_ms: processingTime,
+        fast_path: true,
+      }, 200);
+    }
+    
+    // ========================================================================
+    // SLOW PATH: Potential duplicate (fingerprint matched)
+    // Full verification needed for matched audio
+    // ========================================================================
+    
+    // ========================================================================
     // 4. EXTRACT WATERMARK
     // ========================================================================
     
@@ -353,64 +435,8 @@ async function verifyHandler(req, res) {
     }
     
     // ========================================================================
-    // 7. HANDLE NO MATCHES (unregistered audio)
-    // ========================================================================
-    
-    if (matches.length === 0) {
-      console.log(`[Verify] No fingerprint matches found - checking for similar content...`);
-      
-      // Run content analysis to find similar works
-      if (includeContentAnalysis) {
-        try {
-          const contentResult = await contentAnalysis.findRelatedContent(audioBuffer, {
-            threshold: 0.50,
-            limit: 10,
-            verbose,
-          });
-          
-          response.content_analysis = {
-            is_derivative: contentResult.is_derivative,
-            similar_works: contentResult.similar_works,
-            relationship_counts: contentResult.relationship_counts || {},
-            analysis_time_ms: contentResult.processing_time_ms,
-          };
-          
-          if (contentResult.is_derivative) {
-            console.log(`[Verify] Unregistered audio has ${contentResult.total_found} similar works (possible derivative)`);
-          }
-        } catch (contentError) {
-          console.warn(`[Verify] Content analysis failed: ${contentError.message}`);
-          response.content_analysis = {
-            error: contentError.message,
-            is_derivative: false,
-            similar_works: [],
-          };
-        }
-      }
-      
-      // Calculate confidence summary for unregistered audio
-      response.confidence_summary = calculateConfidenceSummary({
-        fingerprintMatch: null,
-        watermarkResult,
-        signatureValid: false,
-        aiMetadata,
-        contentAnalysisResult: response.content_analysis,
-      });
-      
-      response.processing_time_ms = Date.now() - startTime;
-      
-      // V1 compatibility: also include 'metadata' at top level (null for unregistered)
-      response.metadata = null;
-      response.origin = null;
-      response.transfers = [];
-      response.fingerprint_hash = fingerprintData.hash.toString('hex');
-      response.fingerprint_match = null;
-      
-      return res.orbit(response, 200);
-    }
-    
-    // ========================================================================
-    // 8. PROCESS MATCHES AND BUILD PROVENANCE
+    // 7. PROCESS MATCHES AND BUILD PROVENANCE
+    // Note: matches.length === 0 case handled in fast path above
     // ========================================================================
     
     // Get the first (oldest) registration for primary match
