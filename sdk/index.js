@@ -195,7 +195,7 @@ class OrbitClient {
    * @param {Object} metadata - Audio metadata
    * @param {string} metadata.title - Track title (required)
    * @param {string} metadata.artist - Artist name (required)
-   * @param {number} metadata.duration_ms - Duration in milliseconds (required)
+   * @param {number} [metadata.duration_ms] - Duration in milliseconds (optional - ORBIT extracts from audio)
    * @param {string} [metadata.isrc] - International Standard Recording Code
    * @param {string} [metadata.upc] - Universal Product Code
    * @param {string} [metadata.p_line] - ℗ Sound recording copyright
@@ -255,8 +255,8 @@ class OrbitClient {
       throw new Error('ownerId is required');
     }
 
-    // Validate required fields
-    const required = ['title', 'artist', 'duration_ms'];
+    // Validate required fields (duration_ms is optional - ORBIT extracts from audio)
+    const required = ['title', 'artist'];
     for (const field of required) {
       if (!metadata[field]) {
         throw new Error(`metadata.${field} is required`);

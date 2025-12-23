@@ -97,7 +97,45 @@ async function registerHandler(req, res) {
       return res.orbitError('missing_owner', 'owner_id is required in metadata', 400);
     }
     
-    // Validate metadata
+    // ========================================================================
+    // 2. LOAD AUDIO & EXTRACT TECHNICAL METADATA (before validation)
+    // ========================================================================
+    // ORBIT extracts duration and other technical info from the audio itself.
+    // This allows clients to skip local metadata extraction (which may fail
+    // on certain formats). ORBIT uses FFmpeg which handles all formats.
+    
+    console.log(`📁 Received ${audioBuffer.length} bytes of audio`);
+    
+    const timestamp = Date.now();
+    
+    console.log('🔍 Loading audio and extracting technical metadata...');
+    
+    // Create unified watermark instance (handles neural + spread spectrum)
+    const watermark = new UnifiedWatermark(config.orbit.secretKey);
+    
+    // Load audio samples - this also gives us duration
+    const audioInfo = await AudioUtils.loadAudioSamples(audioBuffer, { targetSampleRate: 44100 });
+    console.log(`   Audio duration: ${audioInfo.duration.toFixed(1)}s`);
+    console.log(`   Audio channels: ${audioInfo.channelCount} (${audioInfo.channelCount === 2 ? 'stereo' : 'mono'})`);
+    
+    // Inject duration_ms if not provided by client (ORBIT calculates from audio)
+    if (!metadata.duration_ms) {
+      metadata.duration_ms = Math.round(audioInfo.duration * 1000);
+      console.log(`   ✅ Extracted duration_ms: ${metadata.duration_ms}ms`);
+    }
+    
+    // Inject channel count and sample rate if not provided
+    if (!metadata.channels) {
+      metadata.channels = audioInfo.channelCount;
+    }
+    if (!metadata.sample_rate) {
+      metadata.sample_rate = audioInfo.sampleRate;
+    }
+    
+    // ========================================================================
+    // 3. VALIDATE METADATA (after technical extraction)
+    // ========================================================================
+    
     const validation = validateMetadata(metadata);
     if (!validation.valid) {
       return res.orbitError(
@@ -108,23 +146,11 @@ async function registerHandler(req, res) {
     }
     
     // ========================================================================
-    // 2. EMBED WATERMARK INTO AUDIO (Session 25b: watermark FIRST)
+    // 4. EMBED WATERMARK INTO AUDIO (Session 25b: watermark FIRST)
     // ========================================================================
-    
-    console.log(`📁 Received ${audioBuffer.length} bytes of audio`);
-    
-    const timestamp = Date.now();
     
     console.log('💧 Creating watermark...');
     console.log(`   Method: ${getWatermarkMethod()} (ORBIT_WATERMARK_METHOD)`);
-    
-    // Create unified watermark instance (handles neural + spread spectrum)
-    const watermark = new UnifiedWatermark(config.orbit.secretKey);
-    
-    // Check audio duration before attempting watermark
-    const audioInfo = await AudioUtils.loadAudioSamples(audioBuffer, { targetSampleRate: 44100 });
-    console.log(`   Audio duration: ${audioInfo.duration.toFixed(1)}s`);
-    console.log(`   Audio channels: ${audioInfo.channelCount} (${audioInfo.channelCount === 2 ? 'stereo' : 'mono'})`);
     
     // For spread spectrum fallback, check minimum duration
     const minDurationSpread = watermark.spreadWatermark.getMinimumDuration();
@@ -176,7 +202,7 @@ async function registerHandler(req, res) {
     }
     
     // ========================================================================
-    // 3. GENERATE FINGERPRINT FROM WATERMARKED AUDIO (Session 25b fix)
+    // 5. GENERATE FINGERPRINT FROM WATERMARKED AUDIO (Session 25b fix)
     // ========================================================================
     
     // Session 25b: Fingerprint the WATERMARKED audio, not the original!
@@ -187,7 +213,7 @@ async function registerHandler(req, res) {
     console.log(`   Duration: ${fingerprint.duration}s`);
     
     // ========================================================================
-    // 4. CHECK FOR DUPLICATES
+    // 6. CHECK FOR DUPLICATES
     // ========================================================================
     
     console.log('🔎 Checking for duplicates...');
@@ -218,7 +244,7 @@ async function registerHandler(req, res) {
     }
     
     // ========================================================================
-    // 5. BUILD CBOR PAYLOAD WITH FULL METADATA
+    // 7. BUILD CBOR PAYLOAD WITH FULL METADATA
     // ========================================================================
     
     console.log('📦 Building CBOR payload...');
@@ -293,7 +319,7 @@ async function registerHandler(req, res) {
     console.log(`   CBOR payload size: ${payloadCbor.length} bytes`);
     
     // ========================================================================
-    // 6. SIGN PAYLOAD
+    // 8. SIGN PAYLOAD
     // ========================================================================
     
     console.log('🔏 Signing payload...');
@@ -318,7 +344,7 @@ async function registerHandler(req, res) {
     const payloadHash = OrbitCrypto.hash(signedPayloadCbor).slice(0, 16);
     
     // ========================================================================
-    // 7. CREATE ENTRY HASH & INSERT INTO DATABASE
+    // 9. CREATE ENTRY HASH & INSERT INTO DATABASE
     // ========================================================================
     
     console.log('💾 Calculating entry hash...');
@@ -397,7 +423,7 @@ async function registerHandler(req, res) {
     console.log(`✅ Registration complete! ID: ${registration.id}`);
     
     // ========================================================================
-    // 8. OPTIONAL: COMPUTE AUDIO EMBEDDING (Session 22 - CLAP)
+    // 10. OPTIONAL: COMPUTE AUDIO EMBEDDING (Session 22 - CLAP)
     // Uses CLAP embeddings (Apache 2.0) instead of MERT (non-commercial)
     // ========================================================================
     
@@ -448,7 +474,7 @@ async function registerHandler(req, res) {
     }
     
     // ========================================================================
-    // 9. BUILD & RETURN RESPONSE
+    // 11. BUILD & RETURN RESPONSE
     // ========================================================================
     
     const responseTime = Date.now() - startTime;
