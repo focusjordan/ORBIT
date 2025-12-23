@@ -148,6 +148,16 @@ def get_model(sample_rate=44100):
     return model, device, model_type
 
 
+def cleanup_gpu():
+    """Explicitly release GPU memory to prevent memory leaks between calls."""
+    import gc
+    import torch
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+
+
 def embed_watermark(audio_path, output_path, message, target_sr=44100):
     """
     Embed a watermark message into an audio file.
@@ -164,6 +174,7 @@ def embed_watermark(audio_path, output_path, message, target_sr=44100):
     import librosa
     import soundfile as sf
     import numpy as np
+    import torch
     
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f'Audio file not found: {audio_path}')
@@ -175,34 +186,43 @@ def embed_watermark(audio_path, output_path, message, target_sr=44100):
         if not 0 <= val <= 255:
             raise ValueError(f'Message[{i}] must be 0-255, got {val}')
     
-    # Load audio
-    audio, sr = librosa.load(audio_path, sr=target_sr, mono=True)
-    duration = len(audio) / sr
-    
-    # Minimum duration check (SilentCipher needs at least ~1 second)
-    if duration < 1.0:
-        raise ValueError(f'Audio too short: {duration:.2f}s (minimum 1.0s)')
-    
-    # Load model
-    model, device, model_type = get_model(target_sr)
-    
-    # Embed watermark - suppress stdout/stderr from silentcipher library
-    # SilentCipher expects message as list of 5 integers [0-255]
-    with SuppressOutput():
-        encoded_audio, sdr = model.encode_wav(audio, sr, message)
-    
-    # Save output
-    sf.write(output_path, encoded_audio, sr)
-    
-    return {
-        'success': True,
-        'sdr': float(sdr),  # Signal-to-Distortion Ratio (higher = better quality)
-        'message': message,
-        'duration': duration,
-        'sample_rate': sr,
-        'device': device,
-        'model_type': model_type
-    }
+    try:
+        # Load audio
+        audio, sr = librosa.load(audio_path, sr=target_sr, mono=True)
+        duration = len(audio) / sr
+        
+        # Minimum duration check (SilentCipher needs at least ~1 second)
+        if duration < 1.0:
+            raise ValueError(f'Audio too short: {duration:.2f}s (minimum 1.0s)')
+        
+        # Load model
+        model, device, model_type = get_model(target_sr)
+        
+        # Embed watermark - suppress stdout/stderr from silentcipher library
+        # SilentCipher expects message as list of 5 integers [0-255]
+        with SuppressOutput():
+            encoded_audio, sdr = model.encode_wav(audio, sr, message)
+        
+        # Save output
+        sf.write(output_path, encoded_audio, sr)
+        
+        # Clean up model and GPU memory
+        del model
+        del audio
+        del encoded_audio
+        
+        return {
+            'success': True,
+            'sdr': float(sdr),  # Signal-to-Distortion Ratio (higher = better quality)
+            'message': message,
+            'duration': duration,
+            'sample_rate': sr,
+            'device': device,
+            'model_type': model_type
+        }
+    finally:
+        # Always clean up GPU memory
+        cleanup_gpu()
 
 
 def extract_watermark(audio_path, target_sr=44100, phase_shift_decoding=True):
@@ -223,47 +243,55 @@ def extract_watermark(audio_path, target_sr=44100, phase_shift_decoding=True):
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f'Audio file not found: {audio_path}')
     
-    # Load audio
-    audio, sr = librosa.load(audio_path, sr=target_sr, mono=True)
-    duration = len(audio) / sr
-    
-    # Load model
-    model, device, model_type = get_model(target_sr)
-    
-    # Extract watermark - suppress stdout/stderr from silentcipher library
-    # phase_shift_decoding=True makes decoder more robust to audio crops
-    with SuppressOutput():
-        result = model.decode_wav(audio, sr, phase_shift_decoding=phase_shift_decoding)
-    
-    # Status can be True, 'success', or truthy value depending on version
-    status_ok = result.get('status') in (True, 'success', 'True') or result.get('status') == True
-    
-    if status_ok and result.get('messages'):
-        # Get the first (and typically only) message
-        message = result['messages'][0] if result['messages'] else None
-        confidence = result['confidences'][0] if result['confidences'] else 0.0
+    try:
+        # Load audio
+        audio, sr = librosa.load(audio_path, sr=target_sr, mono=True)
+        duration = len(audio) / sr
         
-        return {
-            'success': True,
-            'detected': True,
-            'message': list(message) if message is not None else None,
-            'confidence': float(confidence),
-            'duration': duration,
-            'sample_rate': sr,
-            'device': device,
-            'model_type': model_type
-        }
-    else:
-        return {
-            'success': True,
-            'detected': False,
-            'message': None,
-            'confidence': 0.0,
-            'duration': duration,
-            'sample_rate': sr,
-            'device': device,
-            'status_detail': str(result.get('status', 'unknown'))
-        }
+        # Load model
+        model, device, model_type = get_model(target_sr)
+        
+        # Extract watermark - suppress stdout/stderr from silentcipher library
+        # phase_shift_decoding=True makes decoder more robust to audio crops
+        with SuppressOutput():
+            result = model.decode_wav(audio, sr, phase_shift_decoding=phase_shift_decoding)
+        
+        # Clean up model
+        del model
+        del audio
+        
+        # Status can be True, 'success', or truthy value depending on version
+        status_ok = result.get('status') in (True, 'success', 'True') or result.get('status') == True
+        
+        if status_ok and result.get('messages'):
+            # Get the first (and typically only) message
+            message = result['messages'][0] if result['messages'] else None
+            confidence = result['confidences'][0] if result['confidences'] else 0.0
+            
+            return {
+                'success': True,
+                'detected': True,
+                'message': list(message) if message is not None else None,
+                'confidence': float(confidence),
+                'duration': duration,
+                'sample_rate': sr,
+                'device': device,
+                'model_type': model_type
+            }
+        else:
+            return {
+                'success': True,
+                'detected': False,
+                'message': None,
+                'confidence': 0.0,
+                'duration': duration,
+                'sample_rate': sr,
+                'device': device,
+                'status_detail': str(result.get('status', 'unknown'))
+            }
+    finally:
+        # Always clean up GPU memory
+        cleanup_gpu()
 
 
 def check_environment():
