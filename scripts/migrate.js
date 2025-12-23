@@ -75,8 +75,8 @@ CREATE TABLE IF NOT EXISTS orbit_registrations (
   territories JSONB,                      -- ["US", "GB", "WW", ...]
   preview_start_ms INTEGER,
   
-  -- Ownership
-  owner_id UUID NOT NULL,
+  -- Ownership (TEXT to support various ID formats: UUIDs, MongoDB ObjectIds, etc.)
+  owner_id TEXT NOT NULL,
   origin_platform VARCHAR(32) NOT NULL REFERENCES orbit_platforms(id),
   origin_timestamp TIMESTAMPTZ NOT NULL,
   origin_signature BYTEA NOT NULL,
