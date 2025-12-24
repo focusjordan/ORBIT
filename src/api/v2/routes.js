@@ -2,6 +2,7 @@
  * ORBIT API v2 Routes
  * 
  * Session 26 - V2 Search & Analysis Endpoints
+ * Session 32 - Security Hardening (GPU-intensive rate limits)
  * 
  * New endpoints for v2:
  * - POST /orbit/v2/similar  - Find similar-sounding tracks via CLAP embeddings
@@ -20,6 +21,9 @@ const clap = require('../../ml/clap');
 const OrbitFingerprint = require('../../engines/fingerprint');
 
 const router = express.Router();
+
+// Get GPU-intensive rate limiter from app (set in index.js)
+const getGpuLimiter = (req) => req.app.get('gpuIntensiveLimiter');
 
 // ============================================================================
 // POST /orbit/v2/similar - Similarity Search
@@ -527,16 +531,27 @@ router.get('/info', (req, res) => {
  * POST /orbit/v2/similar
  * Find similar-sounding tracks via CLAP embeddings
  * Auth: Optional (public query, platform context may influence results)
+ * Session 32: GPU-intensive rate limit (10/min)
  */
-router.post('/similar', optionalAuth, similarHandler);
+router.post('/similar', 
+  (req, res, next) => getGpuLimiter(req)(req, res, next), // GPU rate limit
+  optionalAuth, 
+  similarHandler
+);
 
 /**
  * POST /orbit/v2/analyze
  * Standalone audio analysis without registration
  * Auth: Optional (public analysis, platform context may influence limits)
+ * Session 32: GPU-intensive rate limit (10/min)
  */
-router.post('/analyze', optionalAuth, analyzeHandler);
+router.post('/analyze', 
+  (req, res, next) => getGpuLimiter(req)(req, res, next), // GPU rate limit
+  optionalAuth, 
+  analyzeHandler
+);
 
 module.exports = router;
+
 
 

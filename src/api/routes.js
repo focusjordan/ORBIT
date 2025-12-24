@@ -10,12 +10,17 @@
  * - POST /orbit/v1/transfer   - Initiate B2B transfer
  * - POST /orbit/v1/accept     - Accept incoming transfer
  * - GET  /orbit/v1/chain/:fp  - Get full custody chain
+ * 
+ * Session 32: Security Hardening
+ * - GPU-intensive endpoints have stricter rate limits
+ * - Input sanitization validates field lengths
  */
 
 const express = require('express');
 const config = require('../config');
 const { platformAuth, optionalAuth } = require('./middleware/auth');
 const { registerUpload, parseCborMetadata } = require('./middleware/multipart');
+const { sanitizeInput } = require('./middleware/sanitize');
 
 // Import handlers
 const registerHandler = require('./handlers/register');
@@ -24,6 +29,9 @@ const transferHandlers = require('./handlers/transfer');
 const chainHandler = require('./handlers/chain');
 
 const router = express.Router();
+
+// Get GPU-intensive rate limiter from app (set in index.js)
+const getGpuLimiter = (req) => req.app.get('gpuIntensiveLimiter');
 
 // ============================================================================
 // Protocol Info Endpoint
@@ -80,17 +88,23 @@ router.post('/auth-test', platformAuth, (req, res) => {
  * Note: Uses multipart instead of pure CBOR due to cbor library
  * limitations with payloads >200KB. Metadata still uses CBOR.
  * 
+ * Session 32: GPU-intensive rate limit (10/min) + input sanitization
+ * 
  * Middleware order:
- * 1. registerUpload: Parse multipart (metadata + audio files)
- * 2. parseCborMetadata: Decode CBOR metadata → req.parsedMetadata
- * 3. platformAuth: Verify signature using req.parsedMetadata
- * 4. registerHandler: Process registration
+ * 1. GPU rate limiter: Protect against abuse
+ * 2. registerUpload: Parse multipart (metadata + audio files)
+ * 3. parseCborMetadata: Decode CBOR metadata → req.parsedMetadata
+ * 4. sanitizeInput: Validate field lengths
+ * 5. platformAuth: Verify signature using req.parsedMetadata
+ * 6. registerHandler: Process registration
  */
 router.post('/register', 
-  registerUpload,        // 1. Parse multipart (metadata + audio)
-  parseCborMetadata,     // 2. Decode CBOR metadata → req.parsedMetadata
-  platformAuth,          // 3. Authenticate platform (uses req.parsedMetadata)
-  registerHandler        // 4. Process registration
+  (req, res, next) => getGpuLimiter(req)(req, res, next), // 1. GPU rate limit
+  registerUpload,        // 2. Parse multipart (metadata + audio)
+  parseCborMetadata,     // 3. Decode CBOR metadata → req.parsedMetadata
+  sanitizeInput,         // 4. Validate field lengths
+  platformAuth,          // 5. Authenticate platform (uses req.parsedMetadata)
+  registerHandler        // 6. Process registration
 );
 
 /**
@@ -99,11 +113,17 @@ router.post('/register',
  * Handler: Session 12 ✅
  * Auth: Optional (verification works for anyone, platform context optional)
  * 
+ * Session 32: GPU-intensive rate limit (10/min)
+ * 
  * Request: CBOR/JSON with base64-encoded audio
  * Response: Complete provenance information including fingerprint match,
  *           watermark validation, signature verification, and metadata
  */
-router.post('/verify', optionalAuth, verifyHandler);
+router.post('/verify', 
+  (req, res, next) => getGpuLimiter(req)(req, res, next), // GPU rate limit
+  optionalAuth, 
+  verifyHandler
+);
 
 /**
  * POST /orbit/v1/transfer

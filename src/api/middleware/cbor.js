@@ -191,15 +191,44 @@ function cborResponseHelper(req, res, next) {
   
   /**
    * Send error response
+   * Session 32: Sanitizes error messages for 500 errors in production
+   * 
    * @param {string} error - Error type
    * @param {string} message - Error message
    * @param {number} status - HTTP status code (default 400)
+   * @param {Object} details - Additional error details (hidden in prod for 500s)
    */
   res.orbitError = function(error, message, status = 400, details = null) {
-    const response = { error, message };
-    if (details) {
-      response.details = details;
+    const isProd = process.env.NODE_ENV === 'production';
+    const isServerError = status >= 500;
+    
+    // In production, sanitize 500 error messages to prevent information disclosure
+    let sanitizedMessage = message;
+    let sanitizedDetails = details;
+    
+    if (isProd && isServerError) {
+      // Log full error server-side
+      console.error(`[OrbitError] ${status} ${error}: ${message}`, details);
+      
+      // Return generic message to client
+      sanitizedMessage = 'An internal error occurred. Please try again later.';
+      sanitizedDetails = null;
     }
+    
+    const response = { 
+      error, 
+      message: sanitizedMessage,
+    };
+    
+    if (sanitizedDetails) {
+      response.details = sanitizedDetails;
+    }
+    
+    // Add request ID for error tracking
+    if (isServerError) {
+      response.request_id = `err_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    }
+    
     res.orbit(response, status);
   };
   

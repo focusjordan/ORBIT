@@ -124,28 +124,11 @@ async function runTests() {
     console.assert(res2.body.error === 'missing_signature', `Expected missing_signature, got ${res2.body.error}`);
     console.log('   ✅ Correctly rejected request without signature\n');
     
-    // Test 3: Request with unknown platform
-    console.log('Test 3: Request with unknown platform');
+    // Test 3: Request with platform and signature but no API key
+    // Session 32: API key is now required
+    console.log('Test 3: Request with platform and signature but no API key');
     const fakeSignature = Buffer.alloc(64).fill(0).toString('base64');
-    const res3 = await makeRequest({
-      hostname: 'localhost',
-      port: PORT,
-      path: '/orbit/v1/auth-test',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-ORBIT-Platform': 'unknown-platform',
-        'X-ORBIT-Signature': fakeSignature,
-      },
-    }, { test: 'data' });
-    
-    console.assert(res3.status === 401, `Expected 401, got ${res3.status}`);
-    console.assert(res3.body.error === 'unknown_platform', `Expected unknown_platform, got ${res3.body.error}`);
-    console.log('   ✅ Correctly rejected unknown platform\n');
-    
-    // Test 4: Request with invalid signature
-    console.log('Test 4: Request with invalid signature');
-    const res4 = await makeRequest({
+    const res3a = await makeRequest({
       hostname: 'localhost',
       port: PORT,
       path: '/orbit/v1/auth-test',
@@ -157,12 +140,69 @@ async function runTests() {
       },
     }, { test: 'data' });
     
+    console.assert(res3a.status === 401, `Expected 401, got ${res3a.status}`);
+    console.assert(res3a.body.error === 'missing_api_key', `Expected missing_api_key, got ${res3a.body.error}`);
+    console.log('   ✅ Correctly rejected request without API key\n');
+    
+    // Test 4: Request with unknown platform (all headers present)
+    console.log('Test 4: Request with unknown platform');
+    const res3 = await makeRequest({
+      hostname: 'localhost',
+      port: PORT,
+      path: '/orbit/v1/auth-test',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-ORBIT-Platform': 'unknown-platform',
+        'X-ORBIT-Signature': fakeSignature,
+        'X-ORBIT-API-Key': 'fake-api-key',
+      },
+    }, { test: 'data' });
+    
+    console.assert(res3.status === 401, `Expected 401, got ${res3.status}`);
+    console.assert(res3.body.error === 'unknown_platform', `Expected unknown_platform, got ${res3.body.error}`);
+    console.log('   ✅ Correctly rejected unknown platform\n');
+    
+    // Test 5: Request with invalid API key
+    console.log('Test 5: Request with invalid API key');
+    const res4a = await makeRequest({
+      hostname: 'localhost',
+      port: PORT,
+      path: '/orbit/v1/auth-test',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-ORBIT-Platform': testPlatform.id,
+        'X-ORBIT-Signature': fakeSignature,
+        'X-ORBIT-API-Key': 'wrong-api-key',
+      },
+    }, { test: 'data' });
+    
+    console.assert(res4a.status === 401, `Expected 401, got ${res4a.status}`);
+    console.assert(res4a.body.error === 'invalid_api_key', `Expected invalid_api_key, got ${res4a.body.error}`);
+    console.log('   ✅ Correctly rejected invalid API key\n');
+    
+    // Test 6: Request with valid API key but invalid signature
+    console.log('Test 6: Request with valid API key but invalid signature');
+    const res4 = await makeRequest({
+      hostname: 'localhost',
+      port: PORT,
+      path: '/orbit/v1/auth-test',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-ORBIT-Platform': testPlatform.id,
+        'X-ORBIT-Signature': fakeSignature,
+        'X-ORBIT-API-Key': testPlatform.apiKey,
+      },
+    }, { test: 'data' });
+    
     console.assert(res4.status === 401, `Expected 401, got ${res4.status}`);
     console.assert(res4.body.error === 'invalid_signature', `Expected invalid_signature, got ${res4.body.error}`);
     console.log('   ✅ Correctly rejected invalid signature\n');
     
-    // Test 5: Request with valid signature
-    console.log('Test 5: Request with valid signature');
+    // Test 7: Request with valid signature and API key
+    console.log('Test 7: Request with valid signature and API key');
     const requestBody = { test: 'authenticated request', timestamp: Date.now() };
     const signature = OrbitCrypto.sign(requestBody, testPlatform.privateKey);
     
@@ -175,16 +215,18 @@ async function runTests() {
         'Content-Type': 'application/json',
         'X-ORBIT-Platform': testPlatform.id,
         'X-ORBIT-Signature': signature.toString('base64'),
+        'X-ORBIT-API-Key': testPlatform.apiKey,
       },
     }, requestBody);
     
     console.assert(res5.status === 200, `Expected 200, got ${res5.status}`);
     console.assert(res5.body.authenticated === true, 'Expected authenticated: true');
     console.assert(res5.body.platform.id === testPlatform.id, 'Expected platform ID to match');
-    console.log('   ✅ Successfully authenticated request\n');
+    console.assert(res5.body.platform.apiKeyValid === true, 'Expected apiKeyValid: true');
+    console.log('   ✅ Successfully authenticated request with two-factor auth\n');
     
-    // Test 6: Request with wrong body (signature mismatch)
-    console.log('Test 6: Request with tampered body');
+    // Test 8: Request with wrong body (signature mismatch)
+    console.log('Test 8: Request with tampered body');
     const res6 = await makeRequest({
       hostname: 'localhost',
       port: PORT,
@@ -194,6 +236,7 @@ async function runTests() {
         'Content-Type': 'application/json',
         'X-ORBIT-Platform': testPlatform.id,
         'X-ORBIT-Signature': signature.toString('base64'), // reuse old signature
+        'X-ORBIT-API-Key': testPlatform.apiKey,
       },
     }, { test: 'different body' }); // but with different body
     
@@ -201,8 +244,8 @@ async function runTests() {
     console.assert(res6.body.error === 'invalid_signature', `Expected invalid_signature, got ${res6.body.error}`);
     console.log('   ✅ Correctly rejected tampered body\n');
     
-    // Test 7: Protected endpoint without auth
-    console.log('Test 7: Protected endpoint (register) without auth');
+    // Test 9: Protected endpoint without auth
+    console.log('Test 9: Protected endpoint (register) without auth');
     const res7 = await makeRequest({
       hostname: 'localhost',
       port: PORT,
@@ -214,8 +257,8 @@ async function runTests() {
     console.assert(res7.status === 401, `Expected 401, got ${res7.status}`);
     console.log('   ✅ Register endpoint requires auth\n');
     
-    // Test 8: Optional auth endpoint (verify) without auth
-    console.log('Test 8: Optional auth endpoint (verify) without auth');
+    // Test 10: Optional auth endpoint (verify) without auth
+    console.log('Test 10: Optional auth endpoint (verify) without auth');
     const res8 = await makeRequest({
       hostname: 'localhost',
       port: PORT,
@@ -224,8 +267,9 @@ async function runTests() {
       headers: { 'Content-Type': 'application/json' },
     }, { audio: 'base64data' });
     
-    // Should return 501 (not implemented) not 401 (unauthorized)
-    console.assert(res8.status === 501, `Expected 501, got ${res8.status}`);
+    // Should return 400 (bad request - missing audio) not 401 (unauthorized)
+    // because optionalAuth allows anonymous access to verify
+    console.assert(res8.status === 400, `Expected 400, got ${res8.status}`);
     console.log('   ✅ Verify endpoint allows anonymous access\n');
     
     console.log('═══════════════════════════════════════════════════════\n');
@@ -242,6 +286,7 @@ async function runTests() {
 }
 
 runTests();
+
 
 
 
