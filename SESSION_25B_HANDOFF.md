@@ -152,3 +152,4 @@ node tests/api/full-stack-test.js
 2. **Then:** Either increase strength OR add ECC based on what logs reveal
 3. **Finally:** Fix test logic to properly fail when watermark isn't detected
 
+
