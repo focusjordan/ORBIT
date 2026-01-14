@@ -34,6 +34,9 @@ const AudioUtils = require('../../utils/audio');
 // CLAP for audio embeddings (Apache 2.0 licensed - commercially safe)
 const clap = require('../../ml/clap');
 
+// AI music detection (multi-signal analysis)
+const aiDetection = require('../../ml/ai-detection');
+
 /**
  * Validate required metadata fields
  * @param {Object} metadata - Metadata object from request
@@ -474,7 +477,41 @@ async function registerHandler(req, res) {
     }
     
     // ========================================================================
-    // 11. BUILD & RETURN RESPONSE
+    // 11. AI MUSIC DETECTION (Always runs - advisory signals for review)
+    // Multi-signal detection using CLAP semantic probe + anomaly analysis
+    // Results are informational only - does not block registration
+    // ========================================================================
+    
+    let aiDetectionResult = null;
+    
+    try {
+      console.log('🤖 Running AI music detection...');
+      
+      aiDetectionResult = await aiDetection.detectAI(audioBuffer, {
+        metadata: metadata,
+        analysisResult: null, // Audio analysis not yet integrated inline
+        verbose: process.env.ORBIT_ML_VERBOSE === 'true',
+      });
+      
+      console.log(`✅ AI Detection: score=${(aiDetectionResult.score * 100).toFixed(1)}%, recommendation=${aiDetectionResult.recommendation}`);
+      
+      // Log flags if any detected
+      const allFlags = aiDetection.getAllFlags(aiDetectionResult);
+      if (allFlags.length > 0) {
+        console.log(`   Flags: ${allFlags.join(', ')}`);
+      }
+      
+    } catch (aiDetectionError) {
+      console.log(`⚠️  AI detection failed (non-fatal): ${aiDetectionError.message}`);
+      aiDetectionResult = {
+        score: null,
+        recommendation: 'DETECTION_ERROR',
+        error: aiDetectionError.message,
+      };
+    }
+    
+    // ========================================================================
+    // 12. BUILD & RETURN RESPONSE
     // ========================================================================
     
     const responseTime = Date.now() - startTime;
@@ -521,6 +558,22 @@ async function registerHandler(req, res) {
           similarity: parseFloat(s.similarity.toFixed(4)),
           relationship: clap.classifyRelationship(s.similarity).relationship
         }));
+      }
+    }
+    
+    // Add AI detection results (always present)
+    if (aiDetectionResult) {
+      response.ai_detection = {
+        score: aiDetectionResult.score,
+        recommendation: aiDetectionResult.recommendation,
+        signals: aiDetectionResult.signals,
+        flags: aiDetection.getAllFlags(aiDetectionResult),
+        processing_time_ms: aiDetectionResult.processing_time_ms,
+      };
+      
+      // Add error if detection failed
+      if (aiDetectionResult.error) {
+        response.ai_detection.error = aiDetectionResult.error;
       }
     }
     
