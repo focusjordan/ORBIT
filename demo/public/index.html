@@ -577,19 +577,48 @@ body {
         (data.tracks || []).forEach(function(t) {
           html += '<div class="card" style="padding:14px">';
           html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
-          html += '<strong style="font-size:0.9rem">' + esc(t.title) + '</strong>';
+          var titleParts = [];
+          if (t.track_number) titleParts.push('#' + t.track_number);
+          titleParts.push(esc(t.title));
+          html += '<strong style="font-size:0.9rem">' + titleParts.join(' ') + '</strong>';
           if (t.isrc) html += tag(t.isrc, true);
           html += '</div>';
           html += '<div style="font-size:0.8rem;color:var(--text-dim)">' + esc(t.artist) + '</div>';
           var meta = [];
           if (t.primary_genre) meta.push(t.primary_genre);
+          if (t.language) meta.push('Lang: ' + t.language.toUpperCase());
           if (t.duration_display || t.duration_ms) meta.push(t.duration_display || (t.duration_ms / 1000).toFixed(0) + 's');
-          if (t.p_line) meta.push('℗ ' + t.p_line);
+          if (t.parental_advisory) meta.push(t.parental_advisory === 'explicit' ? 'Explicit' : (t.parental_advisory === 'clean' ? 'Clean' : 'No Advisory'));
+          if (t.sound_recording_type) meta.push(t.sound_recording_type);
           if (meta.length) html += '<div style="margin-top:6px" class="tags">' + meta.map(function(m) { return tag(m); }).join('') + '</div>';
+          var tech = [];
+          if (t.audio_codec) tech.push(t.audio_codec);
+          if (t.sample_rate) tech.push((t.sample_rate / 1000) + ' kHz');
+          if (t.bits_per_sample) tech.push(t.bits_per_sample + '-bit');
+          if (t.channels) tech.push(t.channels === 2 ? 'Stereo' : (t.channels === 1 ? 'Mono' : t.channels + 'ch'));
+          if (tech.length) html += '<div style="margin-top:6px" class="tags">' + tech.map(function(m) { return tag(m); }).join('') + '</div>';
+          var rights = [];
+          if (t.p_line) rights.push('℗ ' + t.p_line);
+          if (t.c_line) rights.push('© ' + t.c_line);
+          if (rights.length) html += '<div style="margin-top:6px" class="tags">' + rights.map(function(r) { return tag(r); }).join('') + '</div>';
           var contribs = [];
           if (t.composers && t.composers.length) contribs.push('Composers: ' + t.composers.join(', '));
+          if (t.lyricists && t.lyricists.length) contribs.push('Lyricists: ' + t.lyricists.join(', '));
+          if (t.writers && t.writers.length) contribs.push('Writers: ' + t.writers.join(', '));
           if (t.producers && t.producers.length) contribs.push('Producers: ' + t.producers.join(', '));
           if (contribs.length) html += '<div style="margin-top:6px;font-size:0.72rem;color:var(--text-dim)">' + contribs.join(' &middot; ') + '</div>';
+          var relInfo = [];
+          if (t.album_title) relInfo.push('Album: ' + t.album_title);
+          if (t.label) relInfo.push('Label: ' + t.label);
+          if (t.release_date) relInfo.push('Released: ' + t.release_date);
+          if (t.original_release_date && t.original_release_date !== t.release_date) relInfo.push('Original: ' + t.original_release_date);
+          if (t.catalog_number) relInfo.push('Cat#: ' + t.catalog_number);
+          if (relInfo.length) html += '<div style="margin-top:6px;font-size:0.72rem;color:var(--text-dim)">' + relInfo.join(' &middot; ') + '</div>';
+          var dealInfo = [];
+          if (t.deal && t.deal.commercial_model) dealInfo.push('Model: ' + t.deal.commercial_model);
+          if (t.deal && t.deal.start_date) dealInfo.push('Start: ' + t.deal.start_date);
+          if (t.territories && t.territories.length) dealInfo.push('Territories: ' + t.territories.join(', '));
+          if (dealInfo.length) html += '<div style="margin-top:6px;font-size:0.72rem;color:var(--text-dim)">' + dealInfo.join(' &middot; ') + '</div>';
           html += '</div>';
         });
 
@@ -601,7 +630,14 @@ body {
           if (data.release.label) rm.push('Label: ' + data.release.label);
           if (data.release.upc) rm.push('UPC: ' + data.release.upc);
           if (data.release.release_date) rm.push('Release: ' + data.release.release_date);
+          if (data.release.original_release_date && data.release.original_release_date !== data.release.release_date) rm.push('Original: ' + data.release.original_release_date);
+          if (data.release.parental_advisory) rm.push('Advisory: ' + data.release.parental_advisory);
           if (rm.length) html += '<div style="margin-top:6px;font-size:0.78rem;color:var(--text-dim)">' + rm.join(' &middot; ') + '</div>';
+          var dealRm = [];
+          if (data.release.deal && data.release.deal.commercial_model) dealRm.push('Model: ' + data.release.deal.commercial_model);
+          if (data.release.deal && data.release.deal.start_date) dealRm.push('Start: ' + data.release.deal.start_date);
+          if (data.territories && data.territories.length) dealRm.push('Territories: ' + data.territories.join(', '));
+          if (dealRm.length) html += '<div style="margin-top:6px;font-size:0.78rem;color:var(--text-dim)">' + dealRm.join(' &middot; ') + '</div>';
           html += '</div>';
         }
 

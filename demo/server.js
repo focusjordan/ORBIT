@@ -343,8 +343,10 @@ app.post('/api/parse-ddex', async (_req, res) => {
       label: rm.label,
       upc: rm.upc,
       release_date: rm.release_date,
+      original_release_date: rm.original_release_date,
       parental_advisory: rm.parental_advisory,
       artist: tracks.length > 0 ? tracks[0].artist : null,
+      deal: rm.deal || null,
     };
 
     res.json({

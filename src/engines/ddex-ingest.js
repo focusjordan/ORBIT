@@ -157,14 +157,29 @@ function extractSoundRecording(sr) {
   const cLines = toArray(sr.CLine);
   const cLine = cLines.length > 0 ? textOf(cLines[0].CLineText) : null;
 
-  // Audio file reference
+  // Sound recording type (e.g., "MusicalWorkSoundRecording")
+  const soundRecordingType = textOf(sr.SoundRecordingType) || null;
+
+  // Track-level parental advisory
+  const trackParentalAdvisory = mapParentalWarning(textOf(sr.ParentalWarningType));
+
+  // Audio file reference + technical details
   const techDetails = toArray(details.TechnicalSoundRecordingDetails || sr.TechnicalSoundRecordingDetails);
   let audioFilename = null;
+  let audioCodec = null;
+  let channels = null;
+  let sampleRate = null;
+  let bitsPerSample = null;
   if (techDetails.length > 0) {
-    const files = toArray(techDetails[0].File);
+    const td = techDetails[0];
+    const files = toArray(td.File);
     if (files.length > 0) {
       audioFilename = textOf(files[0].FileName) || textOf(files[0].URI) || null;
     }
+    audioCodec = textOf(td.AudioCodecType) || null;
+    channels = textOf(td.NumberOfChannels) ? parseInt(textOf(td.NumberOfChannels), 10) : null;
+    sampleRate = textOf(td.SamplingRate) ? parseInt(textOf(td.SamplingRate), 10) : null;
+    bitsPerSample = textOf(td.BitsPerSample) ? parseInt(textOf(td.BitsPerSample), 10) : null;
   }
 
   // Contributors by role
@@ -193,6 +208,15 @@ function extractSoundRecording(sr) {
   // Resource reference key (used to link tracks to releases)
   const resourceRef = textOf(sr.ResourceReference) || textOf(sr['@_ResourceReference']) || null;
 
+  // Human-readable duration (e.g., "2:28")
+  let durationDisplay = null;
+  if (duration) {
+    const totalSec = Math.round(duration / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    durationDisplay = m + ':' + String(s).padStart(2, '0');
+  }
+
   return {
     resourceRef,
     metadata: {
@@ -200,10 +224,17 @@ function extractSoundRecording(sr) {
       artist,
       isrc,
       duration_ms: duration,
+      duration_display: durationDisplay,
       p_line: pLine,
       c_line: cLine,
       primary_genre: primaryGenre,
       language,
+      parental_advisory: trackParentalAdvisory,
+      sound_recording_type: soundRecordingType,
+      audio_codec: audioCodec,
+      channels,
+      sample_rate: sampleRate,
+      bits_per_sample: bitsPerSample,
       composers: composers.length > 0 ? composers : null,
       lyricists: lyricists.length > 0 ? lyricists : null,
       producers: producers.length > 0 ? producers : null,
@@ -328,6 +359,36 @@ function extractTerritories(dealList) {
 }
 
 // ============================================================================
+// DEAL TERMS EXTRACTION
+// ============================================================================
+
+/**
+ * Extract deal terms (commercial model, validity period) from DealList.
+ */
+function extractDealTerms(dealList) {
+  if (!dealList) return null;
+
+  const deals = toArray(dealList.ReleaseDeal);
+  if (deals.length === 0) return null;
+
+  const terms = toArray(deals[0].Deal || deals[0].DealTerms);
+  if (terms.length === 0) return null;
+
+  const dt = terms[0].DealTerms || terms[0];
+  const commercialModel = textOf(dt.CommercialModelType) || null;
+
+  let startDate = null;
+  if (dt.ValidityPeriod) {
+    startDate = textOf(dt.ValidityPeriod.StartDate) || null;
+  }
+
+  return {
+    commercial_model: commercialModel,
+    start_date: startDate,
+  };
+}
+
+// ============================================================================
 // MAIN PARSE FUNCTION
 // ============================================================================
 
@@ -384,23 +445,26 @@ function parse(xml) {
     releaseMetadata = extractRelease(mainRelease);
   }
 
-  // Extract territories
+  // Extract territories and deal terms
   const territories = extractTerritories(msg.DealList);
+  const dealTerms = extractDealTerms(msg.DealList);
 
-  // Merge release-level metadata into each track
+  // Merge release-level metadata into each track.
+  // Track-level parental_advisory takes precedence over release-level.
   const enrichedTracks = tracks.map(t => {
     const trackNumber = releaseMetadata.trackOrder[t.resourceRef] || null;
 
     return {
       metadata: {
         ...t.metadata,
+        parental_advisory: t.metadata.parental_advisory || releaseMetadata.parental_advisory,
         album_title: releaseMetadata.album_title,
         label: releaseMetadata.label,
         catalog_number: releaseMetadata.catalog_number,
         release_date: releaseMetadata.release_date,
         original_release_date: releaseMetadata.original_release_date,
-        parental_advisory: releaseMetadata.parental_advisory,
         territories,
+        deal: dealTerms,
         track_number: trackNumber,
       },
       audio_filename: t.audio_filename,
@@ -414,7 +478,7 @@ function parse(xml) {
   const { trackOrder, ...releaseClean } = releaseMetadata;
 
   return {
-    release_metadata: { ...releaseClean, territories },
+    release_metadata: { ...releaseClean, territories, deal: dealTerms },
     tracks: enrichedTracks,
     ern_version: version,
     parsed_at: new Date().toISOString(),
@@ -446,4 +510,5 @@ module.exports = {
   extractSoundRecording,
   extractRelease,
   extractTerritories,
+  extractDealTerms,
 };
