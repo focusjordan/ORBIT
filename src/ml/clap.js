@@ -131,10 +131,12 @@ const INSTRUMENT_PROMPTS = [
  * Vocal presence detection prompts
  */
 const VOCAL_PROMPTS = [
-  { label: 'vocals_present', prompt: 'music with singing and vocals' },
-  { label: 'instrumental', prompt: 'instrumental music without vocals' },
-  { label: 'male_vocals', prompt: 'music with male singer' },
-  { label: 'female_vocals', prompt: 'music with female singer' },
+  { label: 'vocals_present', prompt: 'human voice singing words and lyrics over music' },
+  { label: 'vocals_present', prompt: 'vocal melody with lyrics over instrumental accompaniment' },
+  { label: 'instrumental', prompt: 'instrumental music without any singing or human voice' },
+  { label: 'instrumental', prompt: 'purely instrumental performance with no vocals' },
+  { label: 'male_vocals', prompt: 'male voice singing or rapping' },
+  { label: 'female_vocals', prompt: 'female voice singing or crooning' },
 ];
 
 // ==========================================
@@ -580,16 +582,16 @@ async function detectVocals(input, options = {}) {
   // Run classification
   const results = await classifyWithLabels(input, candidateLabels, { verbose });
   
-  // Map back to our labels
+  // Aggregate scores by label (take max across prompts sharing a label)
   const mappedResults = {};
   for (const r of results) {
     const promptEntry = VOCAL_PROMPTS.find(p => p.prompt === r.label);
     if (promptEntry) {
-      mappedResults[promptEntry.label] = r.confidence;
+      const prev = mappedResults[promptEntry.label] || 0;
+      mappedResults[promptEntry.label] = Math.max(prev, r.confidence);
     }
   }
   
-  // Find vocal presence scores
   const vocalScore = mappedResults.vocals_present || 0;
   const instrumentalScore = mappedResults.instrumental || 0;
   const maleScore = mappedResults.male_vocals || 0;
