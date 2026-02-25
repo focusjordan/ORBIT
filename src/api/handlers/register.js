@@ -37,6 +37,9 @@ const clap = require('../../ml/clap');
 // AI music detection (multi-signal analysis)
 const aiDetection = require('../../ml/ai-detection');
 
+// Catalog check (AcoustID + MusicBrainz known-work detection)
+const catalogCheck = require('../../engines/catalog-check');
+
 /**
  * Validate required metadata fields
  * @param {Object} metadata - Metadata object from request
@@ -244,6 +247,45 @@ async function registerHandler(req, res) {
       
       // Different platform registered it - log warning but allow (multi-platform allowed)
       console.log(`⚠️  Audio already registered by ${existingRegistrations[0].origin_platform}, allowing multi-platform registration`);
+    }
+    
+    // ========================================================================
+    // 6a. CATALOG CHECK (AcoustID + MusicBrainz known-work detection)
+    // Cross-references fingerprint against ~30M known recordings via AcoustID,
+    // then corroborates submitted metadata against MusicBrainz.
+    // Advisory only — does not block registration.
+    // ========================================================================
+    
+    let catalogResult = null;
+    
+    try {
+      console.log('🔎 Running catalog check (AcoustID + MusicBrainz)...');
+      catalogResult = await catalogCheck.check({
+        fingerprintRaw: fingerprint.raw,
+        duration: fingerprint.duration,
+        metadata: {
+          title: metadata.title,
+          artist: metadata.artist,
+          isrc: metadata.isrc || null,
+          label: metadata.label || null,
+        },
+      });
+      
+      if (catalogResult.status === 'no_match') {
+        console.log('✅ Catalog check: no known-work match (likely original)');
+      } else if (catalogResult.status === 'verified_known_work') {
+        console.log(`✅ Catalog check: verified known work — "${catalogResult.musicbrainz?.title}" by ${catalogResult.musicbrainz?.artist}`);
+        console.log(`   Corroboration score: ${catalogResult.corroboration?.score}`);
+      } else if (catalogResult.status === 'known_work_unverified') {
+        console.log(`⚠️  Catalog check: KNOWN WORK but metadata does not corroborate`);
+        console.log(`   AcoustID matched: "${catalogResult.musicbrainz?.title}" by ${catalogResult.musicbrainz?.artist}`);
+        console.log(`   Corroboration score: ${catalogResult.corroboration?.score}`);
+      } else if (catalogResult.status === 'unavailable') {
+        console.log(`⚠️  Catalog check unavailable: ${catalogResult.error}`);
+      }
+    } catch (catalogError) {
+      console.log(`⚠️  Catalog check failed (non-fatal): ${catalogError.message}`);
+      catalogResult = { status: 'unavailable', error: catalogError.message };
     }
     
     // ========================================================================
@@ -575,6 +617,11 @@ async function registerHandler(req, res) {
       if (aiDetectionResult.error) {
         response.ai_detection.error = aiDetectionResult.error;
       }
+    }
+    
+    // Add catalog check results (known-work detection)
+    if (catalogResult) {
+      response.catalog_check = catalogResult;
     }
     
     res.orbit(response);

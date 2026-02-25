@@ -62,6 +62,19 @@ const config = {
     },
   },
 
+  // AcoustID settings (catalog check — known-work detection)
+  acoustid: {
+    apiKey: process.env.ACOUSTID_API_KEY || null,
+    baseUrl: 'https://api.acoustid.org/v2',
+    minScore: 0.7,
+  },
+
+  // MusicBrainz settings (catalog check — metadata corroboration)
+  musicbrainz: {
+    baseUrl: 'https://musicbrainz.org/ws/2',
+    userAgent: 'ORBIT/1.0.0 (https://github.com/orbit-protocol)',
+  },
+
   // Logging settings
   logging: {
     level: process.env.LOG_LEVEL || 'debug',
@@ -83,6 +96,11 @@ function validateConfig() {
   // Check for ORBIT node private key
   if (!config.orbit.privateKey) {
     warnings.push('ORBIT_PRIVATE_KEY not set - this node cannot sign payloads');
+  }
+
+  // Check for AcoustID API key (catalog check)
+  if (!config.acoustid.apiKey) {
+    warnings.push('ACOUSTID_API_KEY not set - catalog check (known-work detection) will be unavailable');
   }
   
   // Check for database URL
