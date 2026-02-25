@@ -585,14 +585,38 @@ async function detectAI(audioInput, options = {}) {
       wCatalog  = 0;
     }
 
-    const combinedScore =
+    const weightedScore =
       (semanticScore * wSemantic) +
       (anomalyScore  * wAnomaly) +
       (metadataScore * wMetadata) +
       (catalogScore  * wCatalog);
-    
+
+    // Signal-override floors: certain flag combinations are strong enough
+    // to override the weighted average. Self-declaration isn't a heuristic —
+    // it's the uploader telling you the content is AI.
+    const metaFlags = metadataPatterns.flags;
+    const anomalyFlags = result.signals.anomalies?.flags || [];
+    const forensicHits = anomalyFlags.filter(f =>
+      ['FREQ_CUTOFF_16K', 'LOW_PHASE_ENTROPY', 'SPECTRAL_SMEARING', 'METRONOMIC_TIMING'].includes(f));
+
+    let scoreFloor = 0;
+    if (metaFlags.includes('AI_SELF_DECLARED') && forensicHits.length >= 1) {
+      scoreFloor = 0.75;
+    } else if (metaFlags.includes('AI_SELF_DECLARED')) {
+      scoreFloor = 0.60;
+    } else if (metaFlags.includes('AI_TEXT_INDICATOR') && forensicHits.length >= 1) {
+      scoreFloor = 0.55;
+    } else if (forensicHits.length >= 2) {
+      scoreFloor = 0.45;
+    }
+
+    const combinedScore = Math.max(weightedScore, scoreFloor);
+
     result.score = Math.round(combinedScore * 1000) / 1000;
     result.weights_used = { semantic: wSemantic, anomaly: wAnomaly, metadata: wMetadata, catalog: wCatalog };
+    if (scoreFloor > 0 && scoreFloor > weightedScore) {
+      result.score_floor_applied = scoreFloor;
+    }
     
     // Determine recommendation
     if (result.score >= thresholds.likelyAI) {
