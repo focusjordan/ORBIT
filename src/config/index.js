@@ -86,35 +86,31 @@ const config = {
  * Warns in development, throws in production
  */
 function validateConfig() {
+  const errors = [];
   const warnings = [];
   
-  // Check for default secret key
-  if (config.orbit.secretKey === 'development-secret-key-change-in-production') {
-    warnings.push('ORBIT_SECRET_KEY is using default value - set a secure key for production');
+  // Required in production
+  if (config.server.isProd && config.orbit.secretKey === 'development-secret-key-change-in-production') {
+    errors.push('ORBIT_SECRET_KEY is using default value - set a secure key for production');
   }
   
-  // Check for ORBIT node private key
+  // Optional — warn but don't block startup
   if (!config.orbit.privateKey) {
     warnings.push('ORBIT_PRIVATE_KEY not set - this node cannot sign payloads');
   }
 
-  // Check for AcoustID API key (catalog check)
   if (!config.acoustid.apiKey) {
     warnings.push('ACOUSTID_API_KEY not set - catalog check (known-work detection) will be unavailable');
   }
   
-  // Check for database URL
   if (!process.env.DATABASE_URL) {
     warnings.push('DATABASE_URL not set - using default local connection');
   }
   
-  // Log warnings
-  if (warnings.length > 0) {
-    if (config.server.isProd) {
-      throw new Error(`Configuration errors:\n${warnings.map(w => `  - ${w}`).join('\n')}`);
-    } else {
-      warnings.forEach(w => console.warn(`⚠️  Config warning: ${w}`));
-    }
+  warnings.forEach(w => console.warn(`⚠️  Config warning: ${w}`));
+  
+  if (errors.length > 0) {
+    throw new Error(`Configuration errors:\n${errors.map(e => `  - ${e}`).join('\n')}`);
   }
 }
 
