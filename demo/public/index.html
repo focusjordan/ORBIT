@@ -439,13 +439,15 @@ body {
       }
     }
 
-    async function runAnalysis(blob, resultsId, side) {
+    async function runAnalysis(blob, resultsId, side, trackMeta) {
       var el = $('#' + resultsId);
       el.innerHTML = '<div class="loading-inline"><span class="spinner"></span>Analyzing...</div>';
       addLogMsg('--- ' + side + ' track analysis ---');
 
       var fd = new FormData();
       fd.append('audio', blob, 'track');
+      if (trackMeta && trackMeta.title) fd.append('title', trackMeta.title);
+      if (trackMeta && trackMeta.artist) fd.append('artist', trackMeta.artist);
 
       try {
         var res = await fetch('/api/analyze', { method: 'POST', body: fd });
@@ -460,15 +462,24 @@ body {
       }
     }
 
-    $('#ai-analyze-btn').addEventListener('click', function() { if (aiBlob) runAnalysis(aiBlob, 'ai-results', 'ai'); });
-    $('#human-analyze-btn').addEventListener('click', function() { if (humanBlob) runAnalysis(humanBlob, 'human-results', 'human'); });
+    function getSelectedMeta(selectId) {
+      var sel = $('#' + selectId);
+      if (!sel || !sel.value) return {};
+      var t = state.demoTracks.find(function(tr) { return tr.filename === sel.value; });
+      return t ? { title: t.title, artist: t.artist } : {};
+    }
+
+    $('#ai-analyze-btn').addEventListener('click', function() { if (aiBlob) runAnalysis(aiBlob, 'ai-results', 'ai', getSelectedMeta('ai-track-select')); });
+    $('#human-analyze-btn').addEventListener('click', function() { if (humanBlob) runAnalysis(humanBlob, 'human-results', 'human', getSelectedMeta('human-track-select')); });
   }
 
   function renderAnalysisResult(data) {
     var a = data.analysis || {};
     var ai = data.ai_detection;
+    var cc = data.catalog_check;
     var html = '';
 
+    // AI Detection badge and scores
     if (ai && ai.recommendation) {
       var rec = ai.recommendation;
       var type = rec === 'LIKELY_HUMAN' ? 'success' : rec === 'REVIEW' ? 'warning' : 'error';
@@ -481,6 +492,7 @@ body {
       if (ai.signals) {
         if (ai.signals.semantic) html += confBar('Semantic Probe', Math.round((ai.signals.semantic.aiScore || 0) * 100), 'var(--accent-2)');
         if (ai.signals.anomalies) html += confBar('Anomaly Score', Math.round((ai.signals.anomalies.anomalyScore || 0) * 100), 'var(--yellow)');
+        if (ai.signals.catalog && ai.signals.catalog.provenanceScore > 0) html += confBar('Provenance', Math.round((ai.signals.catalog.provenanceScore || 0) * 100), 'var(--red)');
       }
 
       if (ai.flags && ai.flags.length > 0) {
@@ -488,6 +500,24 @@ body {
         ai.flags.forEach(function(f) { html += tag(f, true); });
         html += '</div>';
       }
+    }
+
+    // Catalog check result
+    if (cc && cc.status && cc.status !== 'no_match' && cc.status !== 'unavailable') {
+      var ccType = cc.status === 'verified_known_work' ? 'success' : 'warning';
+      var ccLabel = cc.status === 'verified_known_work' ? 'Known Work Verified' : 'Known Work — Metadata Mismatch';
+      html += '<div style="margin-top:10px;padding:10px;border-radius:var(--radius);background:var(--surface-2);border:1px solid var(--border)">';
+      html += '<div style="margin-bottom:6px">' + badge(ccLabel, ccType) + '</div>';
+      if (cc.musicbrainz) {
+        html += '<div style="font-size:0.78rem">AcoustID matched: <strong>' + esc(cc.musicbrainz.title) + '</strong> by ' + esc(cc.musicbrainz.artist) + '</div>';
+      }
+      if (cc.corroboration) {
+        html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:3px">Corroboration: ' + Math.round(cc.corroboration.score * 100) + '%';
+        html += ' (title: ' + (cc.corroboration.title_match ? 'match' : 'no') + ', artist: ' + (cc.corroboration.artist_match ? 'match' : 'no') + ')</div>';
+      }
+      html += '</div>';
+    } else if (cc && cc.status === 'no_match') {
+      html += '<div style="margin-top:10px;font-size:0.72rem;color:var(--text-dim)">Catalog: No known-work match</div>';
     }
 
     if (a.genre && a.genre.length > 0) {

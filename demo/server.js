@@ -183,20 +183,45 @@ app.post('/api/analyze', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
 
-    const result = await client.analyze(req.file.buffer, {
-      include: ['genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 'ai_detection'],
-    });
-    const data = result.data || result;
+    const apiUrl = process.env.ORBIT_API_URL;
+    const audio64 = req.file.buffer.toString('base64');
 
+    // Send JSON directly to ORBIT API (bypasses SDK's CBOR encoding which
+    // breaks on large files). The analyze endpoint uses optionalAuth so no
+    // signature is required.
+    const trackMeta = {};
+    if (req.body.title) trackMeta.title = req.body.title;
+    if (req.body.artist) trackMeta.artist = req.body.artist;
+
+    const orbitRes = await fetch(`${apiUrl}/orbit/v2/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audio: audio64,
+        include: ['genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 'fingerprint', 'ai_detection', 'catalog_check'],
+        metadata: trackMeta,
+      }),
+    });
+
+    const data = await orbitRes.json();
+
+    if (!orbitRes.ok) {
+      console.error('  [analyze] ORBIT API error:', orbitRes.status, JSON.stringify(data).slice(0, 300));
+      return res.status(orbitRes.status).json({ error: data.error?.message || data.message || 'Analysis failed' });
+    }
+
+    const d = data.data || data;
     res.json({
-      analysis: data.analysis || data,
-      ai_detection: data.ai_detection || null,
-      processing_time_ms: data.processing_time_ms,
-      processing_log: data.processing_log || [],
+      analysis: d.analysis || d,
+      ai_detection: d.ai_detection || null,
+      catalog_check: d.catalog_check || null,
+      fingerprint: d.fingerprint || null,
+      processing_time_ms: d.processing_time_ms,
+      processing_log: d.processing_log || [],
     });
   } catch (err) {
-    const status = err.status || 500;
-    res.status(status).json({ error: err.message, details: err.details || null });
+    console.error('  [analyze] Error:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

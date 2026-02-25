@@ -20,6 +20,7 @@ const metadataExtractor = require('../../ml/metadata-extractor');
 const clap = require('../../ml/clap');
 const OrbitFingerprint = require('../../engines/fingerprint');
 const aiDetection = require('../../ml/ai-detection');
+const catalogCheck = require('../../engines/catalog-check');
 
 const router = express.Router();
 
@@ -328,7 +329,7 @@ async function analyzeHandler(req, res) {
     }
     
     // Parse include array (default: all)
-    const ALL_INCLUDES = ['genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 'fingerprint', 'embedding', 'ai_detection'];
+    const ALL_INCLUDES = ['genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 'fingerprint', 'embedding', 'ai_detection', 'catalog_check'];
     let includeSet;
     
     if (include && Array.isArray(include)) {
@@ -358,8 +359,9 @@ async function analyzeHandler(req, res) {
                       includeSet.has('instruments') || includeSet.has('vocals');
     const needsAudioAnalysis = includeSet.has('bpm') || includeSet.has('key');
     const needsEmbedding = includeSet.has('embedding');
-    const needsFingerprint = includeSet.has('fingerprint');
+    const needsFingerprint = includeSet.has('fingerprint') || includeSet.has('catalog_check');
     const needsAiDetection = includeSet.has('ai_detection');
+    const needsCatalogCheck = includeSet.has('catalog_check');
     
     // ========================================================================
     // 3. RUN METADATA EXTRACTION
@@ -409,7 +411,42 @@ async function analyzeHandler(req, res) {
     }
     
     // ========================================================================
-    // 4a. AI DETECTION (if requested)
+    // 4a. CATALOG CHECK (AcoustID + MusicBrainz, if requested)
+    // ========================================================================
+    
+    let catalogResult = null;
+    
+    if (needsCatalogCheck && fingerprintData) {
+      try {
+        log('🔎 Running catalog check (AcoustID + MusicBrainz)...');
+        const submittedMeta = req.body.metadata || {};
+        catalogResult = await catalogCheck.check({
+          fingerprintRaw: fingerprintData.raw,
+          duration: fingerprintData.duration,
+          metadata: {
+            title: submittedMeta.title || null,
+            artist: submittedMeta.artist || null,
+            isrc: submittedMeta.isrc || null,
+            label: submittedMeta.label || null,
+          },
+        });
+        
+        if (catalogResult.status === 'no_match') {
+          log('✅ Catalog check: no known-work match');
+        } else if (catalogResult.status === 'verified_known_work') {
+          log(`✅ Catalog check: verified known work — "${catalogResult.musicbrainz?.title}" by ${catalogResult.musicbrainz?.artist}`);
+        } else if (catalogResult.status === 'known_work_unverified') {
+          log(`⚠️  Catalog check: KNOWN WORK but metadata mismatch`);
+          log(`   AcoustID matched: "${catalogResult.musicbrainz?.title}" by ${catalogResult.musicbrainz?.artist}`);
+        }
+      } catch (catErr) {
+        log(`⚠️  Catalog check failed (non-fatal): ${catErr.message}`);
+        catalogResult = { status: 'unavailable', error: catErr.message };
+      }
+    }
+    
+    // ========================================================================
+    // 4b. AI DETECTION (if requested)
     // ========================================================================
     
     let aiDetectionResult = null;
@@ -418,8 +455,9 @@ async function analyzeHandler(req, res) {
       try {
         log('🤖 Running AI music detection...');
         aiDetectionResult = await aiDetection.detectAI(audioBuffer, {
-          metadata: {},
-          analysisResult: null,
+          metadata: req.body.metadata || {},
+          analysisResult: metadataResult,
+          catalogResult: catalogResult,
           verbose,
         });
         
@@ -523,6 +561,10 @@ async function analyzeHandler(req, res) {
       if (aiDetectionResult.error) {
         response.ai_detection.error = aiDetectionResult.error;
       }
+    }
+    
+    if (catalogResult) {
+      response.catalog_check = catalogResult;
     }
     
     log(`⏱️  Analysis complete in ${response.processing_time_ms}ms`);

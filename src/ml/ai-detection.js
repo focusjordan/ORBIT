@@ -37,16 +37,17 @@ const clap = require('./clap');
 const AI_DETECTION_CONFIG = {
   // Weights for combining signals (must sum to 1.0)
   weights: {
-    semantic: 0.50,    // CLAP zero-shot probe (strongest signal)
-    anomaly: 0.30,     // Audio analysis anomalies
-    metadata: 0.20,    // Metadata/behavioral patterns
+    semantic: 0.30,    // CLAP zero-shot probe
+    anomaly: 0.20,     // Audio analysis anomalies
+    metadata: 0.15,    // Metadata/behavioral patterns
+    catalog: 0.35,     // AcoustID provenance mismatch (strongest signal for covers)
   },
   
   // Thresholds for recommendations
   thresholds: {
-    likelyAI: 0.70,    // Score >= 0.70 → LIKELY_AI
-    review: 0.40,      // Score >= 0.40 → REVIEW
-    // Below 0.40 → LIKELY_HUMAN
+    likelyAI: 0.55,    // Score >= 0.55 → LIKELY_AI (lowered -- catalog signal is decisive)
+    review: 0.30,      // Score >= 0.30 → REVIEW
+    // Below 0.30 → LIKELY_HUMAN
   },
   
   // Anomaly detection thresholds
@@ -302,6 +303,59 @@ function checkMetadataPatterns(metadata, durationSeconds) {
 }
 
 // ============================================================================
+// SIGNAL 4: CATALOG PROVENANCE MISMATCH
+// ============================================================================
+
+/**
+ * Check for provenance mismatch using AcoustID catalog results.
+ * 
+ * If AcoustID matches a known work but the metadata doesn't corroborate
+ * (different artist, no ISRC, low corroboration score), this is a strong
+ * signal of an AI cover or unauthorized derivative.
+ * 
+ * @param {Object|null} catalogResult - Result from catalog-check.check()
+ * @returns {{provenanceScore: number, flags: string[], details: Object}}
+ */
+function checkCatalogProvenance(catalogResult) {
+  const flags = [];
+  const details = {};
+  let provenanceScore = 0;
+  
+  if (!catalogResult || catalogResult.status === 'unavailable') {
+    return { provenanceScore: 0, flags: ['CATALOG_UNAVAILABLE'], details: {} };
+  }
+  
+  if (catalogResult.status === 'no_match') {
+    return { provenanceScore: 0, flags: [], details: { status: 'no_match' } };
+  }
+  
+  // AcoustID matched a known work
+  details.acoustid_score = catalogResult.acoustid?.score;
+  details.known_title = catalogResult.musicbrainz?.title || null;
+  details.known_artist = catalogResult.musicbrainz?.artist || null;
+  
+  if (catalogResult.status === 'known_work_unverified') {
+    // AcoustID matches but metadata doesn't corroborate -- strong AI cover signal
+    flags.push('KNOWN_WORK_METADATA_MISMATCH');
+    provenanceScore = 0.85;
+    
+    details.corroboration_score = catalogResult.corroboration?.score || 0;
+    details.title_match = catalogResult.corroboration?.title_match || false;
+    details.artist_match = catalogResult.corroboration?.artist_match || false;
+  } else if (catalogResult.status === 'verified_known_work') {
+    // Metadata matches -- likely a legitimate upload of the known work
+    details.corroboration_score = catalogResult.corroboration?.score || 0;
+    provenanceScore = 0;
+  }
+  
+  return {
+    provenanceScore: Math.min(1, Math.round(provenanceScore * 1000) / 1000),
+    flags,
+    details,
+  };
+}
+
+// ============================================================================
 // COMBINED DETECTION
 // ============================================================================
 
@@ -332,6 +386,7 @@ async function detectAI(audioInput, options = {}) {
   const {
     metadata = {},
     analysisResult = null,
+    catalogResult = null,
     verbose = process.env.ORBIT_ML_VERBOSE === 'true',
   } = options;
   
@@ -352,6 +407,7 @@ async function detectAI(audioInput, options = {}) {
       semantic: null,
       anomalies: null,
       metadata: null,
+      catalog: null,
     },
     processing_time_ms: 0,
   };
@@ -388,15 +444,22 @@ async function detectAI(audioInput, options = {}) {
     // Signal 3: Metadata patterns
     const duration = analysisResult?.duration || 
                      (metadata.duration_ms ? metadata.duration_ms / 1000 : 0);
-    const metadataResult = checkMetadataPatterns(metadata, duration);
-    result.signals.metadata = metadataResult;
-    const metadataScore = metadataResult.suspicionScore;
+    const metadataPatterns = checkMetadataPatterns(metadata, duration);
+    result.signals.metadata = metadataPatterns;
+    const metadataScore = metadataPatterns.suspicionScore;
+    
+    // Signal 4: Catalog provenance mismatch
+    let catalogScore = 0;
+    const catalogSignal = checkCatalogProvenance(catalogResult);
+    result.signals.catalog = catalogSignal;
+    catalogScore = catalogSignal.provenanceScore;
     
     // Combine scores with weights
     const combinedScore = 
       (semanticScore * weights.semantic) +
       (anomalyScore * weights.anomaly) +
-      (metadataScore * weights.metadata);
+      (metadataScore * weights.metadata) +
+      (catalogScore * weights.catalog);
     
     result.score = Math.round(combinedScore * 1000) / 1000;
     
@@ -480,6 +543,9 @@ function getAllFlags(detectionResult) {
   if (detectionResult.signals?.metadata?.flags) {
     flags.push(...detectionResult.signals.metadata.flags);
   }
+  if (detectionResult.signals?.catalog?.flags) {
+    flags.push(...detectionResult.signals.catalog.flags);
+  }
   
   return flags;
 }
@@ -496,6 +562,7 @@ module.exports = {
   probeAIGenerated,
   checkAudioAnomalies,
   checkMetadataPatterns,
+  checkCatalogProvenance,
   
   // Utility functions
   shouldReview,

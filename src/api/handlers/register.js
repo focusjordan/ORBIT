@@ -539,7 +539,8 @@ async function registerHandler(req, res) {
       
       aiDetectionResult = await aiDetection.detectAI(audioBuffer, {
         metadata: metadata,
-        analysisResult: null, // Audio analysis not yet integrated inline
+        analysisResult: null,
+        catalogResult: catalogResult,
         verbose: process.env.ORBIT_ML_VERBOSE === 'true',
       });
       
