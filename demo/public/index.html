@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORBIT — Audio Provenance Protocol</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --surface-2: #1a1a26;
+  --border: #2a2a3a;
+  --text: #e0e0e8;
+  --text-dim: #8888a0;
+  --accent: #00d4aa;
+  --accent-glow: rgba(0, 212, 170, 0.15);
+  --accent-2: #00b4d8;
+  --red: #ff4466;
+  --yellow: #ffaa22;
+  --green: #00d68f;
+  --radius: 8px;
+  --transition: 0.2s ease;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Layout */
+.container { max-width: 760px; margin: 0 auto; padding: 40px 24px 60px; }
+
+/* Header */
+.header { text-align: center; margin-bottom: 40px; }
+.header h1 { font-size: 2rem; font-weight: 700; letter-spacing: 0.08em; color: var(--accent); }
+.header p { color: var(--text-dim); font-size: 0.85rem; margin-top: 6px; letter-spacing: 0.04em; }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; background: var(--text-dim); }
+.status-dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.status-dot.err { background: var(--red); box-shadow: 0 0 6px var(--red); }
+.status-line { font-size: 0.75rem; color: var(--text-dim); margin-top: 10px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 2px; margin-bottom: 24px; background: var(--surface); border-radius: var(--radius); padding: 3px; }
+.tab-btn {
+  flex: 1; padding: 10px 0; border: none; background: none; color: var(--text-dim);
+  font-size: 0.85rem; font-weight: 600; cursor: pointer; border-radius: 6px; transition: var(--transition);
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { background: var(--surface-2); color: var(--accent); }
+
+/* Panels */
+.panel { display: none; animation: fadeIn 0.3s ease; }
+.panel.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Card */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 16px; }
+
+/* Drop Zone */
+.dropzone {
+  border: 2px dashed var(--border); border-radius: var(--radius); padding: 36px 20px;
+  text-align: center; cursor: pointer; transition: var(--transition); position: relative;
+}
+.dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: var(--accent-glow); }
+.dropzone-label { color: var(--text-dim); font-size: 0.85rem; }
+.dropzone-label strong { color: var(--text); display: block; margin-bottom: 4px; font-size: 0.95rem; }
+.dropzone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.file-name { margin-top: 10px; font-size: 0.8rem; color: var(--accent); word-break: break-all; }
+
+/* Form fields */
+.field { margin-top: 14px; }
+.field label { display: block; font-size: 0.75rem; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+.field input {
+  width: 100%; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); font-size: 0.9rem; outline: none; transition: var(--transition);
+}
+.field input:focus { border-color: var(--accent); }
+.field input::placeholder { color: var(--text-dim); opacity: 0.6; }
+.row { display: flex; gap: 12px; }
+.row .field { flex: 1; }
+
+/* Buttons */
+.btn {
+  display: block; width: 100%; margin-top: 20px; padding: 12px; border: none; border-radius: 6px;
+  font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: var(--transition);
+  background: var(--accent); color: var(--bg); letter-spacing: 0.02em;
+}
+.btn:hover { filter: brightness(1.1); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
+
+/* Loading */
+.loading { display: none; text-align: center; padding: 32px 16px; }
+.loading.active { display: block; animation: fadeIn 0.3s ease; }
+.spinner { display: inline-block; width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { margin-top: 14px; color: var(--text-dim); font-size: 0.85rem; }
+.loading-sub { color: var(--text-dim); font-size: 0.75rem; margin-top: 4px; opacity: 0.7; }
+
+/* Results */
+.results { display: none; animation: fadeIn 0.4s ease; }
+.results.active { display: block; }
+
+.result-hero { text-align: center; padding: 20px 0 16px; }
+.result-hero .badge {
+  display: inline-block; padding: 6px 18px; border-radius: 20px; font-size: 0.85rem;
+  font-weight: 700; letter-spacing: 0.04em;
+}
+.badge.success { background: rgba(0, 214, 143, 0.15); color: var(--green); }
+.badge.warning { background: rgba(255, 170, 34, 0.15); color: var(--yellow); }
+.badge.error { background: rgba(255, 68, 102, 0.15); color: var(--red); }
+
+.result-grid { display: grid; gap: 1px; background: var(--border); border-radius: var(--radius); overflow: hidden; margin-top: 16px; }
+.result-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--surface); }
+.result-row .label { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+.result-row .value { font-size: 0.85rem; text-align: right; word-break: break-all; max-width: 65%; }
+
+/* Tags */
+.tags { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.tag {
+  display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.tag.accent { border-color: var(--accent); color: var(--accent); }
+
+/* Confidence bars */
+.conf-bar-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.conf-label { font-size: 0.8rem; min-width: 110px; }
+.conf-bar { flex: 1; height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.conf-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.5s ease; }
+.conf-pct { font-size: 0.75rem; color: var(--text-dim); min-width: 40px; text-align: right; }
+
+/* Download link */
+.download-link {
+  display: inline-block; margin-top: 12px; padding: 8px 16px; border-radius: 6px; font-size: 0.8rem;
+  font-weight: 600; background: var(--surface-2); border: 1px solid var(--border); color: var(--accent);
+  text-decoration: none; transition: var(--transition);
+}
+.download-link:hover { border-color: var(--accent); background: var(--accent-glow); }
+
+/* Error display */
+.error-msg { display: none; margin-top: 16px; padding: 14px; background: rgba(255,68,102,0.08); border: 1px solid rgba(255,68,102,0.2); border-radius: var(--radius); color: var(--red); font-size: 0.85rem; }
+.error-msg.active { display: block; animation: fadeIn 0.3s ease; }
+
+/* Catalog check section */
+.catalog-section { margin-top: 16px; padding: 14px; border-radius: var(--radius); }
+.catalog-section.verified { background: rgba(0, 214, 143, 0.06); border: 1px solid rgba(0, 214, 143, 0.2); }
+.catalog-section.no-match { background: rgba(0, 212, 170, 0.04); border: 1px solid var(--border); }
+.catalog-section.flagged { background: rgba(255, 170, 34, 0.06); border: 1px solid rgba(255, 170, 34, 0.2); }
+.catalog-title { font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.catalog-detail { font-size: 0.75rem; color: var(--text-dim); }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>ORBIT</h1>
+    <p>Origin-Based Identity &amp; Rights Transfer Protocol</p>
+    <div class="status-line"><span id="statusDot" class="status-dot"></span><span id="statusText">Connecting...</span></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="register">Register</button>
+    <button class="tab-btn" data-tab="verify">Verify</button>
+    <button class="tab-btn" data-tab="analyze">Analyze</button>
+  </div>
+
+  <!-- ================================================================== -->
+  <!-- REGISTER TAB -->
+  <!-- ================================================================== -->
+  <div id="panel-register" class="panel active">
+    <div class="card" id="reg-form">
+      <div class="dropzone" id="reg-dropzone">
+        <div class="dropzone-label"><strong>Drop audio file here</strong>or click to select (MP3, WAV, FLAC)</div>
+        <input type="file" id="reg-file" accept="audio/*">
+        <div class="file-name" id="reg-filename"></div>
+      </div>
+      <div class="field"><label>Title *</label><input type="text" id="reg-title" placeholder="Midnight Drive"></div>
+      <div class="field"><label>Artist *</label><input type="text" id="reg-artist" placeholder="The Neon Collective"></div>
+      <div class="row">
+        <div class="field"><label>ISRC</label><input type="text" id="reg-isrc" placeholder="USRC12400001"></div>
+        <div class="field"><label>Genre</label><input type="text" id="reg-genre" placeholder="Electronic"></div>
+      </div>
+      <button class="btn" id="reg-btn" disabled>Register</button>
+    </div>
+    <div class="loading" id="reg-loading">
+      <div class="spinner"></div>
+      <div class="loading-text">Registering audio with ORBIT...</div>
+      <div class="loading-sub">Fingerprinting, watermarking, AI analysis, and catalog check (~12s)</div>
+    </div>
+    <div class="error-msg" id="reg-error"></div>
+    <div class="results" id="reg-results"></div>
+  </div>
+
+  <!-- ================================================================== -->
+  <!-- VERIFY TAB -->
+  <!-- ================================================================== -->
+  <div id="panel-verify" class="panel">
+    <div class="card" id="ver-form">
+      <div class="dropzone" id="ver-dropzone">
+        <div class="dropzone-label"><strong>Drop audio file to verify</strong>or click to select</div>
+        <input type="file" id="ver-file" accept="audio/*">
+        <div class="file-name" id="ver-filename"></div>
+      </div>
+      <button class="btn" id="ver-btn" disabled>Verify</button>
+    </div>
+    <div class="loading" id="ver-loading">
+      <div class="spinner"></div>
+      <div class="loading-text">Verifying audio provenance...</div>
+      <div class="loading-sub">Checking fingerprint, watermark, and ledger</div>
+    </div>
+    <div class="error-msg" id="ver-error"></div>
+    <div class="results" id="ver-results"></div>
+  </div>
+
+  <!-- ================================================================== -->
+  <!-- ANALYZE TAB -->
+  <!-- ================================================================== -->
+  <div id="panel-analyze" class="panel">
+    <div class="card" id="ana-form">
+      <div class="dropzone" id="ana-dropzone">
+        <div class="dropzone-label"><strong>Drop audio file to analyze</strong>or click to select</div>
+        <input type="file" id="ana-file" accept="audio/*">
+        <div class="file-name" id="ana-filename"></div>
+      </div>
+      <button class="btn" id="ana-btn" disabled>Analyze</button>
+    </div>
+    <div class="loading" id="ana-loading">
+      <div class="spinner"></div>
+      <div class="loading-text">Running AI analysis...</div>
+      <div class="loading-sub">Genre, mood, BPM, key, instruments, vocals</div>
+    </div>
+    <div class="error-msg" id="ana-error"></div>
+    <div class="results" id="ana-results"></div>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ---------- Utilities ----------
+
+  const $ = (sel) => document.querySelector(sel);
+  const show = (el) => el.classList.add('active');
+  const hide = (el) => el.classList.remove('active');
+
+  function truncHash(h, len) {
+    if (!h) return 'N/A';
+    const s = typeof h === 'string' ? h : '';
+    return s.length > len ? s.slice(0, len) + '...' : s;
+  }
+
+  function row(label, value) {
+    return '<div class="result-row"><span class="label">' + label + '</span><span class="value">' + value + '</span></div>';
+  }
+
+  function badge(text, type) {
+    return '<span class="badge ' + type + '">' + text + '</span>';
+  }
+
+  function tag(text, isAccent) {
+    return '<span class="tag' + (isAccent ? ' accent' : '') + '">' + text + '</span>';
+  }
+
+  function confBar(label, pct) {
+    return '<div class="conf-bar-wrap"><span class="conf-label">' + label + '</span>' +
+      '<div class="conf-bar"><div class="conf-fill" style="width:' + pct + '%"></div></div>' +
+      '<span class="conf-pct">' + pct + '%</span></div>';
+  }
+
+  function escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ---------- Status check ----------
+
+  async function checkStatus() {
+    try {
+      const res = await fetch('/api/status');
+      if (!res.ok) throw new Error();
+      const d = await res.json();
+      $('#statusDot').className = 'status-dot ok';
+      $('#statusText').textContent = 'Connected to ' + (d.server || 'ORBIT');
+    } catch {
+      $('#statusDot').className = 'status-dot err';
+      $('#statusText').textContent = 'Server unreachable';
+    }
+  }
+  checkStatus();
+
+  // ---------- Tab switching ----------
+
+  document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+      document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      $('#panel-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ---------- Dropzone helpers ----------
+
+  function setupDropzone(dzId, fileId, nameId, btnId) {
+    var dz = $(dzId);
+    var fi = $(fileId);
+    var nm = $(nameId);
+    var bt = $(btnId);
+
+    dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', function() { dz.classList.remove('dragover'); });
+    dz.addEventListener('drop', function(e) {
+      e.preventDefault(); dz.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        fi.files = e.dataTransfer.files;
+        nm.textContent = e.dataTransfer.files[0].name;
+        bt.disabled = false;
+      }
+    });
+    fi.addEventListener('change', function() {
+      if (fi.files.length > 0) { nm.textContent = fi.files[0].name; bt.disabled = false; }
+    });
+  }
+
+  setupDropzone('#reg-dropzone', '#reg-file', '#reg-filename', '#reg-btn');
+  setupDropzone('#ver-dropzone', '#ver-file', '#ver-filename', '#ver-btn');
+  setupDropzone('#ana-dropzone', '#ana-file', '#ana-filename', '#ana-btn');
+
+  // ---------- REGISTER ----------
+
+  $('#reg-btn').addEventListener('click', async function() {
+    var fileInput = $('#reg-file');
+    if (!fileInput.files.length) return;
+
+    var title = $('#reg-title').value.trim();
+    var artist = $('#reg-artist').value.trim();
+    if (!title || !artist) { showError('#reg-error', 'Title and artist are required.'); return; }
+
+    hideAll('reg'); show($('#reg-loading'));
+    $('#reg-btn').disabled = true;
+
+    var fd = new FormData();
+    fd.append('audio', fileInput.files[0]);
+    fd.append('title', title);
+    fd.append('artist', artist);
+    var isrc = $('#reg-isrc').value.trim();
+    var genre = $('#reg-genre').value.trim();
+    if (isrc) fd.append('isrc', isrc);
+    if (genre) fd.append('genre', genre);
+
+    try {
+      var res = await fetch('/api/register', { method: 'POST', body: fd });
+      var data = await res.json();
+      hide($('#reg-loading'));
+
+      if (!res.ok || data.error) { showError('#reg-error', data.error || 'Registration failed'); $('#reg-btn').disabled = false; return; }
+
+      renderRegResult(data);
+    } catch (err) {
+      hide($('#reg-loading'));
+      showError('#reg-error', 'Network error: ' + err.message);
+      $('#reg-btn').disabled = false;
+    }
+  });
+
+  function renderRegResult(d) {
+    var html = '<div class="result-hero">' + badge('Registered', 'success') + '</div>';
+    html += '<div class="result-grid">';
+    html += row('Registration ID', '<strong>' + d.registration_id + '</strong>');
+    html += row('Fingerprint', truncHash(d.fingerprint_hash, 20));
+    html += row('Timestamp', d.registered_at || 'N/A');
+    if (d.processing_time_ms) html += row('Processing Time', d.processing_time_ms + ' ms');
+    html += '</div>';
+
+    // AI analysis tags from metadata
+    if (d.metadata) {
+      var tags = '';
+      if (d.metadata.primary_genre) tags += tag(d.metadata.primary_genre, true);
+      if (d.metadata.isrc) tags += tag(d.metadata.isrc, false);
+      if (tags) html += '<div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">' + tags + '</div>';
+    }
+
+    // AI detection
+    if (d.ai_detection && d.ai_detection.recommendation) {
+      var rec = d.ai_detection.recommendation;
+      var aiType = rec === 'LIKELY_HUMAN' ? 'success' : rec === 'REVIEW' ? 'warning' : 'error';
+      html += '<div style="margin-top:12px">' +
+        '<div class="result-grid">' +
+        row('AI Detection', badge(rec, aiType)) +
+        (d.ai_detection.score != null ? row('AI Score', (d.ai_detection.score * 100).toFixed(1) + '%') : '') +
+        '</div></div>';
+    }
+
+    // Catalog check
+    if (d.catalog_check) {
+      html += renderCatalogCheck(d.catalog_check);
+    }
+
+    // Download link
+    if (d.has_watermarked_audio && d.watermarked_audio_b64) {
+      html += '<div style="text-align:center">' +
+        '<a class="download-link" id="dl-watermarked" href="#" download="watermarked.wav">Download Watermarked File</a></div>';
+    }
+
+    $('#reg-results').innerHTML = html;
+    show($('#reg-results'));
+
+    if (d.has_watermarked_audio && d.watermarked_audio_b64) {
+      try {
+        var raw = atob(d.watermarked_audio_b64);
+        var arr = new Uint8Array(raw.length);
+        for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+        var blob = new Blob([arr], { type: 'audio/wav' });
+        var url = URL.createObjectURL(blob);
+        var dl = document.getElementById('dl-watermarked');
+        dl.href = url;
+        var origName = $('#reg-file').files[0] ? $('#reg-file').files[0].name : 'audio';
+        var ext = origName.lastIndexOf('.') > 0 ? origName.substring(origName.lastIndexOf('.')) : '.wav';
+        var baseName = origName.lastIndexOf('.') > 0 ? origName.substring(0, origName.lastIndexOf('.')) : origName;
+        dl.download = baseName + '.orbit' + ext;
+      } catch(e) { /* download unavailable */ }
+    }
+  }
+
+  function renderCatalogCheck(cc) {
+    var status = cc.status;
+    var cls = 'no-match';
+    var icon = '&#9679;';
+    var title = 'Catalog Check';
+    var detail = '';
+
+    if (status === 'verified_known_work') {
+      cls = 'verified'; icon = '&#10003;'; title = 'Verified Known Work';
+      if (cc.musicbrainz) detail = escHtml(cc.musicbrainz.title) + ' by ' + escHtml(cc.musicbrainz.artist);
+      if (cc.corroboration) detail += ' &mdash; corroboration: ' + (cc.corroboration.score * 100).toFixed(0) + '%';
+    } else if (status === 'known_work_unverified') {
+      cls = 'flagged'; icon = '&#9888;'; title = 'Known Work &mdash; Metadata Mismatch';
+      if (cc.musicbrainz) detail = 'AcoustID matched: ' + escHtml(cc.musicbrainz.title) + ' by ' + escHtml(cc.musicbrainz.artist);
+    } else if (status === 'no_match') {
+      icon = '&#10003;'; title = 'No Known-Work Match';
+      detail = 'Likely original content';
+    } else {
+      title = 'Catalog Check'; detail = status || 'Unavailable';
+    }
+
+    return '<div class="catalog-section ' + cls + '">' +
+      '<div class="catalog-title"><span>' + icon + '</span> ' + escHtml(title) + '</div>' +
+      (detail ? '<div class="catalog-detail">' + detail + '</div>' : '') +
+      '</div>';
+  }
+
+  // ---------- VERIFY ----------
+
+  $('#ver-btn').addEventListener('click', async function() {
+    var fileInput = $('#ver-file');
+    if (!fileInput.files.length) return;
+
+    hideAll('ver'); show($('#ver-loading'));
+    $('#ver-btn').disabled = true;
+
+    var fd = new FormData();
+    fd.append('audio', fileInput.files[0]);
+
+    try {
+      var res = await fetch('/api/verify', { method: 'POST', body: fd });
+      var data = await res.json();
+      hide($('#ver-loading'));
+
+      if (!res.ok || data.error) { showError('#ver-error', data.error || 'Verification failed'); $('#ver-btn').disabled = false; return; }
+
+      renderVerResult(data);
+    } catch (err) {
+      hide($('#ver-loading'));
+      showError('#ver-error', 'Network error: ' + err.message);
+      $('#ver-btn').disabled = false;
+    }
+  });
+
+  function renderVerResult(d) {
+    var verified = d.verified;
+    var html = '<div class="result-hero">' +
+      badge(verified ? 'VERIFIED' : 'NOT REGISTERED', verified ? 'success' : 'warning') +
+      '</div>';
+
+    html += '<div class="result-grid">';
+
+    if (d.origin) {
+      html += row('Origin Platform', escHtml(d.origin.platform));
+      html += row('Registered', d.origin.timestamp || 'N/A');
+      html += row('Signature', d.origin.signature_valid ? '<span style="color:var(--green)">Valid</span>' : '<span style="color:var(--red)">Invalid</span>');
+    }
+
+    if (d.watermark) {
+      var wmStatus = d.watermark.detected
+        ? (d.watermark.valid ? '<span style="color:var(--green)">Detected &amp; Valid</span>' : '<span style="color:var(--yellow)">Detected, Invalid</span>')
+        : '<span style="color:var(--text-dim)">Not Detected</span>';
+      html += row('Watermark', wmStatus);
+    }
+
+    if (d.metadata) {
+      html += row('Title', escHtml(d.metadata.title));
+      html += row('Artist', escHtml(d.metadata.artist));
+      if (d.metadata.isrc) html += row('ISRC', escHtml(d.metadata.isrc));
+      if (d.metadata.primary_genre) html += row('Genre', escHtml(d.metadata.primary_genre));
+    }
+
+    if (d.fingerprint_match) {
+      html += row('Registration ID', d.fingerprint_match.registration_id);
+      if (d.fingerprint_match.similarity != null) {
+        html += row('Match Confidence', (d.fingerprint_match.similarity * 100).toFixed(1) + '%');
+      }
+    }
+
+    if (d.duplicate_of) {
+      html += row('Duplicate Of', '<span style="color:var(--yellow)">' + d.duplicate_of + '</span>');
+    }
+
+    html += '</div>';
+
+    // AI detection
+    if (d.ai_detection && d.ai_detection.recommendation) {
+      var rec = d.ai_detection.recommendation;
+      var aiType = rec === 'LIKELY_HUMAN' ? 'success' : rec === 'REVIEW' ? 'warning' : 'error';
+      html += '<div style="margin-top:12px"><div class="result-grid">' +
+        row('AI Detection', badge(rec, aiType)) +
+        (d.ai_detection.score != null ? row('AI Score', (d.ai_detection.score * 100).toFixed(1) + '%') : '') +
+        '</div></div>';
+    }
+
+    $('#ver-results').innerHTML = html;
+    show($('#ver-results'));
+    $('#ver-btn').disabled = false;
+  }
+
+  // ---------- ANALYZE ----------
+
+  $('#ana-btn').addEventListener('click', async function() {
+    var fileInput = $('#ana-file');
+    if (!fileInput.files.length) return;
+
+    hideAll('ana'); show($('#ana-loading'));
+    $('#ana-btn').disabled = true;
+
+    var fd = new FormData();
+    fd.append('audio', fileInput.files[0]);
+
+    try {
+      var res = await fetch('/api/analyze', { method: 'POST', body: fd });
+      var data = await res.json();
+      hide($('#ana-loading'));
+
+      if (!res.ok || data.error) { showError('#ana-error', data.error || 'Analysis failed'); $('#ana-btn').disabled = false; return; }
+
+      renderAnaResult(data);
+    } catch (err) {
+      hide($('#ana-loading'));
+      showError('#ana-error', 'Network error: ' + err.message);
+      $('#ana-btn').disabled = false;
+    }
+  });
+
+  function renderAnaResult(d) {
+    var a = d.analysis || d;
+    var html = '<div class="result-hero">' + badge('Analysis Complete', 'success') + '</div>';
+
+    // Genre predictions
+    if (a.genre && a.genre.length > 0) {
+      html += '<div class="card"><div style="font-size:0.75rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">Genre</div>';
+      for (var i = 0; i < Math.min(a.genre.length, 5); i++) {
+        var g = a.genre[i];
+        var pct = Math.round((g.confidence || 0) * 100);
+        html += confBar(escHtml(g.label), pct);
+      }
+      html += '</div>';
+    }
+
+    // Mood
+    if (a.mood && a.mood.length > 0) {
+      html += '<div class="card"><div style="font-size:0.75rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">Mood</div>';
+      for (var j = 0; j < Math.min(a.mood.length, 5); j++) {
+        var m = a.mood[j];
+        var pctM = Math.round((m.confidence || 0) * 100);
+        html += confBar(escHtml(m.label), pctM);
+      }
+      html += '</div>';
+    }
+
+    // BPM, Key, Instruments, Vocals
+    html += '<div class="result-grid">';
+    if (a.bpm) {
+      var bpmConf = a.bpm.confidence ? ' (' + Math.round(a.bpm.confidence * 100) + '%)' : '';
+      html += row('BPM', a.bpm.value + bpmConf);
+    }
+    if (a.key) {
+      var keyVal = a.key.value || a.key.label || 'N/A';
+      var keyConf = a.key.confidence ? ' (' + Math.round(a.key.confidence * 100) + '%)' : '';
+      html += row('Key', escHtml(keyVal) + keyConf);
+    }
+    if (a.instruments && a.instruments.length > 0) {
+      var insts = a.instruments.slice(0, 5).map(function(inst) {
+        if (typeof inst === 'string') return tag(inst, false);
+        return tag(escHtml(inst.label) + ' ' + Math.round((inst.confidence || 0) * 100) + '%', false);
+      }).join('');
+      html += '<div class="result-row"><span class="label">Instruments</span><span class="value"><div class="tags">' + insts + '</div></span></div>';
+    }
+    if (a.vocals) {
+      var vDesc = a.vocals.detected
+        ? 'Detected' + (a.vocals.type ? ' (' + escHtml(a.vocals.type) + ')' : '')
+        : 'None detected';
+      html += row('Vocals', vDesc);
+    }
+    html += '</div>';
+
+    if (d.processing_time_ms) {
+      html += '<div style="text-align:center;margin-top:12px;font-size:0.75rem;color:var(--text-dim)">Processed in ' + d.processing_time_ms + ' ms</div>';
+    }
+
+    // AI detection from analyze
+    if (d.ai_detection && d.ai_detection.recommendation) {
+      var rec = d.ai_detection.recommendation;
+      var aiType = rec === 'LIKELY_HUMAN' ? 'success' : rec === 'REVIEW' ? 'warning' : 'error';
+      html += '<div style="margin-top:12px"><div class="result-grid">' +
+        row('AI Detection', badge(rec, aiType)) +
+        (d.ai_detection.score != null ? row('AI Score', (d.ai_detection.score * 100).toFixed(1) + '%') : '') +
+        '</div></div>';
+    }
+
+    $('#ana-results').innerHTML = html;
+    show($('#ana-results'));
+    $('#ana-btn').disabled = false;
+  }
+
+  // ---------- Helpers ----------
+
+  function hideAll(prefix) {
+    hide($('#' + prefix + '-loading'));
+    hide($('#' + prefix + '-error'));
+    hide($('#' + prefix + '-results'));
+  }
+
+  function showError(sel, msg) {
+    var el = $(sel);
+    el.textContent = msg;
+    show(el);
+  }
+
+})();
+</script>
+</body>
+</html>
