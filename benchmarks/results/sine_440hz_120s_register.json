@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "registration_id": "7",
+  "fingerprint_hash": "efea9b4d8ca8d296926e942e6126d9e6127f3f0258f76ce4c8168fd24f991556",
+  "watermark_hash": "1b001ce73f197497f7ca672939d169f1",
+  "watermark_method": "silentcipher",
+  "registered_at": "2026-02-23T20:30:46.766Z",
+  "watermarked_file": "benchmarks/audio/sine_440hz_120s.orbit.wav",
+  "processing_time_ms": 8292,
+  "ai_detection": null,
+  "catalog_check": null
+}

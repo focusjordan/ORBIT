@@ -1,0 +1,72 @@
+{
+  "analysis": {
+    "genre": [
+      {
+        "label": "electronic",
+        "confidence": 0.1999557912349701
+      },
+      {
+        "label": "hip_hop",
+        "confidence": 0.04274825006723404
+      },
+      {
+        "label": "rock",
+        "confidence": 0.012466435320675373
+      }
+    ],
+    "mood": [
+      {
+        "label": "happy",
+        "confidence": 0.012019721791148186
+      },
+      {
+        "label": "sad",
+        "confidence": 0.019048679620027542
+      },
+      {
+        "label": "energetic",
+        "confidence": 0.6050004363059998
+      }
+    ],
+    "instruments": [
+      {
+        "label": "synthesizer",
+        "confidence": 0.16189101338386536
+      },
+      {
+        "label": "choir",
+        "confidence": 0.25064823031425476
+      }
+    ],
+    "vocals": {
+      "present": false,
+      "confidence": 0.4850236773490906,
+      "gender": null,
+      "genderConfidence": null
+    },
+    "bpm": {
+      "value": 123,
+      "confidence": 0.946
+    },
+    "key": {
+      "value": "C# minor",
+      "key": "C#",
+      "mode": "minor",
+      "confidence": 0.8686
+    },
+    "energy": 1,
+    "loudness_db": -14.4,
+    "danceability": 0.9584,
+    "duration": 30
+  },
+  "processing_time_ms": 6645,
+  "extraction_status": {
+    "clap": "success",
+    "audioAnalysis": "success",
+    "embedding": "disabled"
+  },
+  "fingerprint": {
+    "chromaprint_hash": "9a5cba32d58cb6103bbb965bc9393b43f690201c7c44564e32bba06bedae9668",
+    "duration": 30
+  }
+}

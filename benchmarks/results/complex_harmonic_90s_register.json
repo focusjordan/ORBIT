@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "registration_id": "16",
+  "fingerprint_hash": "f36e5e3da2560a85dee73b3f879d3b3b980c424b860caa251667b7ee708494b1",
+  "watermark_hash": "3afee29eb3a7b2de336a5b58888794d5",
+  "watermark_method": "silentcipher",
+  "registered_at": "2026-02-23T20:54:01.027Z",
+  "watermarked_file": "benchmarks/audio/complex_harmonic_90s.orbit.wav",
+  "processing_time_ms": 7900,
+  "ai_detection": null,
+  "catalog_check": null
+}

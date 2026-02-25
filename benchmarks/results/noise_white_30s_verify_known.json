@@ -1,0 +1,59 @@
+{
+  "verified": true,
+  "fingerprint_hash": "28218192c78dcd46e1cf7c9805e5888efe4be4d6444c3bd484aaaf580f51f521",
+  "fingerprint_match": {
+    "registration_id": "9",
+    "similarity": 1,
+    "matched_at": "2026-02-23T20:36:11.102Z"
+  },
+  "watermark": {
+    "detected": false,
+    "valid": false,
+    "method": null,
+    "confidence": 0,
+    "payload_hash": null,
+    "fallback_attempted": false
+  },
+  "metadata": {
+    "isrc": null,
+    "upc": null,
+    "title": "noise_white_30s",
+    "artist": "ORBIT Benchmark",
+    "duration_ms": 30000,
+    "p_line": null,
+    "c_line": null,
+    "primary_genre": "Test",
+    "secondary_genre": null,
+    "language": null,
+    "album_title": null,
+    "track_number": null,
+    "release_date": null,
+    "label": null,
+    "version": null,
+    "parental_advisory": null,
+    "bitrate": null,
+    "sample_rate": 44100,
+    "channels": 1,
+    "format": "wav",
+    "featured_artists": null,
+    "composers": null,
+    "lyricists": null,
+    "writers": null,
+    "producers": null,
+    "remixer": null,
+    "iswc": null,
+    "territories": null,
+    "preview_start_ms": null
+  },
+  "origin": {
+    "platform": "ohnrshyp",
+    "owner_id": "ohnrshyp",
+    "timestamp": "2026-02-23T20:36:04.265Z",
+    "signature_valid": false,
+    "registered_at": "2026-02-23T20:36:11.102Z"
+  },
+  "transfers": [],
+  "duplicate_of": null,
+  "ai_detection": null,
+  "processing_time_ms": 127935
+}

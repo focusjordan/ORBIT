@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "registration_id": "12",
+  "fingerprint_hash": "9e53cd9813194e11082896bf00f22746268816d22e18b73f423e9ca93e0784c6",
+  "watermark_hash": "33a65b00751ae9e125cc8eb6bcb1c28a",
+  "watermark_method": "silentcipher",
+  "registered_at": "2026-02-23T20:43:29.816Z",
+  "watermarked_file": "benchmarks/audio/synth_ambient_30s.orbit.wav",
+  "processing_time_ms": 6902,
+  "ai_detection": null,
+  "catalog_check": null
+}
