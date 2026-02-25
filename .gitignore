@@ -46,3 +46,8 @@ models/
 # Python virtual environments
 .venv/
 .venv-watermark/
+
+# Benchmarks (results, scripts, handoff docs — may contain credentials)
+benchmarks/
+benchmarks.md
+BENCHMARK_HANDOFF.md

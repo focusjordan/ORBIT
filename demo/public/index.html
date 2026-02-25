@@ -101,6 +101,11 @@ body {
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-text { margin-top: 14px; color: var(--text-dim); font-size: 0.85rem; }
 .loading-sub { color: var(--text-dim); font-size: 0.75rem; margin-top: 4px; opacity: 0.7; }
+.loading-steps { margin-top: 18px; text-align: left; display: inline-block; }
+.loading-step { font-size: 0.8rem; padding: 4px 0; color: var(--text-dim); opacity: 0.35; transition: all 0.4s ease; }
+.loading-step.active { color: var(--accent); opacity: 1; }
+.loading-step.done { color: var(--green); opacity: 0.7; }
+.loading-step .step-icon { display: inline-block; width: 18px; text-align: center; margin-right: 6px; }
 
 /* Results */
 .results { display: none; animation: fadeIn 0.4s ease; }
@@ -154,6 +159,20 @@ body {
 .catalog-section.flagged { background: rgba(255, 170, 34, 0.06); border: 1px solid rgba(255, 170, 34, 0.2); }
 .catalog-title { font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
 .catalog-detail { font-size: 0.75rem; color: var(--text-dim); }
+
+/* Track selector */
+.track-selector { margin-bottom: 14px; }
+.track-selector label { display: block; font-size: 0.75rem; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+.track-selector select {
+  width: 100%; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); font-size: 0.9rem; outline: none; transition: var(--transition);
+  cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238888a0' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+}
+.track-selector select:focus { border-color: var(--accent); }
+.track-selector select option { background: var(--surface); color: var(--text); }
+.track-loading-msg { font-size: 0.75rem; color: var(--accent); margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -179,8 +198,13 @@ body {
   <!-- ================================================================== -->
   <div id="panel-register" class="panel active">
     <div class="card" id="reg-form">
+      <div class="track-selector">
+        <label>Demo Track Library</label>
+        <select id="reg-track-select"><option value="">Select a track...</option></select>
+        <div class="track-loading-msg" id="reg-track-msg"></div>
+      </div>
       <div class="dropzone" id="reg-dropzone">
-        <div class="dropzone-label"><strong>Drop audio file here</strong>or click to select (MP3, WAV, FLAC)</div>
+        <div class="dropzone-label"><strong>Drop audio file here</strong> or click to select (MP3, WAV, FLAC)</div>
         <input type="file" id="reg-file" accept="audio/*">
         <div class="file-name" id="reg-filename"></div>
       </div>
@@ -194,8 +218,9 @@ body {
     </div>
     <div class="loading" id="reg-loading">
       <div class="spinner"></div>
-      <div class="loading-text">Registering audio with ORBIT...</div>
-      <div class="loading-sub">Fingerprinting, watermarking, AI analysis, and catalog check (~12s)</div>
+      <div class="loading-text" id="reg-loading-text">Uploading audio...</div>
+      <div class="loading-sub" id="reg-loading-sub">Preparing file for processing</div>
+      <div class="loading-steps" id="reg-loading-steps"></div>
     </div>
     <div class="error-msg" id="reg-error"></div>
     <div class="results" id="reg-results"></div>
@@ -206,8 +231,13 @@ body {
   <!-- ================================================================== -->
   <div id="panel-verify" class="panel">
     <div class="card" id="ver-form">
+      <div class="track-selector">
+        <label>Demo Track Library</label>
+        <select id="ver-track-select"><option value="">Select a track...</option></select>
+        <div class="track-loading-msg" id="ver-track-msg"></div>
+      </div>
       <div class="dropzone" id="ver-dropzone">
-        <div class="dropzone-label"><strong>Drop audio file to verify</strong>or click to select</div>
+        <div class="dropzone-label"><strong>Drop audio file to verify</strong> or click to select</div>
         <input type="file" id="ver-file" accept="audio/*">
         <div class="file-name" id="ver-filename"></div>
       </div>
@@ -227,8 +257,13 @@ body {
   <!-- ================================================================== -->
   <div id="panel-analyze" class="panel">
     <div class="card" id="ana-form">
+      <div class="track-selector">
+        <label>Demo Track Library</label>
+        <select id="ana-track-select"><option value="">Select a track...</option></select>
+        <div class="track-loading-msg" id="ana-track-msg"></div>
+      </div>
       <div class="dropzone" id="ana-dropzone">
-        <div class="dropzone-label"><strong>Drop audio file to analyze</strong>or click to select</div>
+        <div class="dropzone-label"><strong>Drop audio file to analyze</strong> or click to select</div>
         <input type="file" id="ana-file" accept="audio/*">
         <div class="file-name" id="ana-filename"></div>
       </div>
@@ -300,6 +335,100 @@ body {
   }
   checkStatus();
 
+  // ---------- Demo track library ----------
+
+  var demoTracks = [];
+  var demoBlobCache = {};
+  var activeDemo = { reg: null, ver: null, ana: null };
+
+  async function loadTrackList() {
+    try {
+      var res = await fetch('/api/demo-tracks');
+      var data = await res.json();
+      demoTracks = data.tracks || [];
+      populateSelects();
+    } catch (e) { /* track list unavailable, dropzone still works */ }
+  }
+
+  function populateSelects() {
+    ['reg', 'ver', 'ana'].forEach(function(prefix) {
+      var sel = $('#' + prefix + '-track-select');
+      demoTracks.forEach(function(t) {
+        var opt = document.createElement('option');
+        opt.value = t.filename;
+        opt.textContent = t.title + ' \u2014 ' + t.artist + ' (' + t.size_mb + ' MB)';
+        sel.appendChild(opt);
+      });
+    });
+  }
+
+  function findTrackMeta(filename) {
+    for (var i = 0; i < demoTracks.length; i++) {
+      if (demoTracks[i].filename === filename) return demoTracks[i];
+    }
+    return null;
+  }
+
+  async function loadDemoTrack(prefix, filename) {
+    var msgEl = $('#' + prefix + '-track-msg');
+    var nameEl = $('#' + prefix + '-filename');
+    var btnEl = $('#' + prefix + '-btn');
+
+    msgEl.textContent = 'Loading track...';
+
+    try {
+      var blob;
+      if (demoBlobCache[filename]) {
+        blob = demoBlobCache[filename];
+      } else {
+        var res = await fetch('/api/demo-tracks/' + encodeURIComponent(filename));
+        if (!res.ok) throw new Error('Failed to load');
+        blob = await res.blob();
+        demoBlobCache[filename] = blob;
+      }
+
+      activeDemo[prefix] = { blob: blob, filename: filename };
+      nameEl.textContent = filename;
+      btnEl.disabled = false;
+      msgEl.textContent = '';
+
+      if (prefix === 'reg') {
+        var meta = findTrackMeta(filename);
+        if (meta) {
+          $('#reg-title').value = meta.title;
+          $('#reg-artist').value = meta.artist;
+          $('#reg-genre').value = meta.genre;
+        }
+      }
+    } catch (e) {
+      msgEl.textContent = 'Failed to load track';
+      activeDemo[prefix] = null;
+    }
+  }
+
+  ['reg', 'ver', 'ana'].forEach(function(prefix) {
+    $('#' + prefix + '-track-select').addEventListener('change', function() {
+      if (this.value) loadDemoTrack(prefix, this.value);
+    });
+  });
+
+  function getAudioFormData(prefix) {
+    var fd = new FormData();
+    var demo = activeDemo[prefix];
+    var fileInput = $('#' + prefix + '-file');
+
+    if (demo && demo.blob) {
+      fd.append('audio', demo.blob, demo.filename);
+    } else if (fileInput.files.length > 0) {
+      fd.append('audio', fileInput.files[0]);
+    } else {
+      return null;
+    }
+    return fd;
+  }
+
+  loadTrackList();
+
   // ---------- Tab switching ----------
 
   document.querySelectorAll('.tab-btn').forEach(function(btn) {
@@ -313,7 +442,7 @@ body {
 
   // ---------- Dropzone helpers ----------
 
-  function setupDropzone(dzId, fileId, nameId, btnId) {
+  function setupDropzone(dzId, fileId, nameId, btnId, prefix) {
     var dz = $(dzId);
     var fi = $(fileId);
     var nm = $(nameId);
@@ -327,32 +456,74 @@ body {
         fi.files = e.dataTransfer.files;
         nm.textContent = e.dataTransfer.files[0].name;
         bt.disabled = false;
+        activeDemo[prefix] = null;
+        $('#' + prefix + '-track-select').value = '';
       }
     });
     fi.addEventListener('change', function() {
-      if (fi.files.length > 0) { nm.textContent = fi.files[0].name; bt.disabled = false; }
+      if (fi.files.length > 0) {
+        nm.textContent = fi.files[0].name;
+        bt.disabled = false;
+        activeDemo[prefix] = null;
+        $('#' + prefix + '-track-select').value = '';
+      }
     });
   }
 
-  setupDropzone('#reg-dropzone', '#reg-file', '#reg-filename', '#reg-btn');
-  setupDropzone('#ver-dropzone', '#ver-file', '#ver-filename', '#ver-btn');
-  setupDropzone('#ana-dropzone', '#ana-file', '#ana-filename', '#ana-btn');
+  setupDropzone('#reg-dropzone', '#reg-file', '#reg-filename', '#reg-btn', 'reg');
+  setupDropzone('#ver-dropzone', '#ver-file', '#ver-filename', '#ver-btn', 'ver');
+  setupDropzone('#ana-dropzone', '#ana-file', '#ana-filename', '#ana-btn', 'ana');
 
-  // ---------- REGISTER ----------
+  // ---------- REGISTER (with progressive loading steps) ----------
+
+  var regSteps = [
+    { label: 'Uploading audio',            time: 0,    sub: 'Sending file to ORBIT server' },
+    { label: 'Generating fingerprint',     time: 1500, sub: 'Creating acoustic identity via Chromaprint' },
+    { label: 'Embedding watermark',        time: 4000, sub: 'SilentCipher psychoacoustic watermark' },
+    { label: 'Running AI analysis',        time: 6500, sub: 'Genre, mood, BPM, key, instruments, vocals' },
+    { label: 'Checking catalog',           time: 9000, sub: 'Matching against 30M known recordings' },
+    { label: 'Finalizing registration',    time: 11000, sub: 'Writing to provenance ledger' },
+  ];
+  var regStepTimers = [];
+
+  function startRegSteps() {
+    var stepsEl = $('#reg-loading-steps');
+    stepsEl.innerHTML = regSteps.map(function(s, i) {
+      return '<div class="loading-step' + (i === 0 ? ' active' : '') + '" id="reg-step-' + i + '">' +
+        '<span class="step-icon">' + (i === 0 ? '&#9656;' : '&#8226;') + '</span>' + escHtml(s.label) + '</div>';
+    }).join('');
+    $('#reg-loading-text').textContent = regSteps[0].label + '...';
+    $('#reg-loading-sub').textContent = regSteps[0].sub;
+
+    for (var i = 1; i < regSteps.length; i++) {
+      (function(idx) {
+        regStepTimers.push(setTimeout(function() {
+          for (var j = 0; j < idx; j++) {
+            var prev = $('#reg-step-' + j);
+            if (prev) { prev.className = 'loading-step done'; prev.querySelector('.step-icon').innerHTML = '&#10003;'; }
+          }
+          var cur = $('#reg-step-' + idx);
+          if (cur) { cur.className = 'loading-step active'; cur.querySelector('.step-icon').innerHTML = '&#9656;'; }
+          $('#reg-loading-text').textContent = regSteps[idx].label + '...';
+          $('#reg-loading-sub').textContent = regSteps[idx].sub;
+        }, regSteps[idx].time));
+      })(i);
+    }
+  }
+
+  function stopRegSteps() {
+    regStepTimers.forEach(function(t) { clearTimeout(t); });
+    regStepTimers = [];
+  }
 
   $('#reg-btn').addEventListener('click', async function() {
-    var fileInput = $('#reg-file');
-    if (!fileInput.files.length) return;
+    var fd = getAudioFormData('reg');
+    if (!fd) return;
 
     var title = $('#reg-title').value.trim();
     var artist = $('#reg-artist').value.trim();
     if (!title || !artist) { showError('#reg-error', 'Title and artist are required.'); return; }
 
-    hideAll('reg'); show($('#reg-loading'));
-    $('#reg-btn').disabled = true;
-
-    var fd = new FormData();
-    fd.append('audio', fileInput.files[0]);
     fd.append('title', title);
     fd.append('artist', artist);
     var isrc = $('#reg-isrc').value.trim();
@@ -360,15 +531,21 @@ body {
     if (isrc) fd.append('isrc', isrc);
     if (genre) fd.append('genre', genre);
 
+    hideAll('reg'); show($('#reg-loading'));
+    startRegSteps();
+    $('#reg-btn').disabled = true;
+
     try {
       var res = await fetch('/api/register', { method: 'POST', body: fd });
       var data = await res.json();
+      stopRegSteps();
       hide($('#reg-loading'));
 
       if (!res.ok || data.error) { showError('#reg-error', data.error || 'Registration failed'); $('#reg-btn').disabled = false; return; }
 
       renderRegResult(data);
     } catch (err) {
+      stopRegSteps();
       hide($('#reg-loading'));
       showError('#reg-error', 'Network error: ' + err.message);
       $('#reg-btn').disabled = false;
@@ -426,7 +603,8 @@ body {
         var url = URL.createObjectURL(blob);
         var dl = document.getElementById('dl-watermarked');
         dl.href = url;
-        var origName = $('#reg-file').files[0] ? $('#reg-file').files[0].name : 'audio';
+        var origName = (activeDemo.reg && activeDemo.reg.filename) ? activeDemo.reg.filename
+          : ($('#reg-file').files[0] ? $('#reg-file').files[0].name : 'audio');
         var ext = origName.lastIndexOf('.') > 0 ? origName.substring(origName.lastIndexOf('.')) : '.wav';
         var baseName = origName.lastIndexOf('.') > 0 ? origName.substring(0, origName.lastIndexOf('.')) : origName;
         dl.download = baseName + '.orbit' + ext;
@@ -464,14 +642,11 @@ body {
   // ---------- VERIFY ----------
 
   $('#ver-btn').addEventListener('click', async function() {
-    var fileInput = $('#ver-file');
-    if (!fileInput.files.length) return;
+    var fd = getAudioFormData('ver');
+    if (!fd) return;
 
     hideAll('ver'); show($('#ver-loading'));
     $('#ver-btn').disabled = true;
-
-    var fd = new FormData();
-    fd.append('audio', fileInput.files[0]);
 
     try {
       var res = await fetch('/api/verify', { method: 'POST', body: fd });
@@ -547,14 +722,11 @@ body {
   // ---------- ANALYZE ----------
 
   $('#ana-btn').addEventListener('click', async function() {
-    var fileInput = $('#ana-file');
-    if (!fileInput.files.length) return;
+    var fd = getAudioFormData('ana');
+    if (!fd) return;
 
     hideAll('ana'); show($('#ana-loading'));
     $('#ana-btn').disabled = true;
-
-    var fd = new FormData();
-    fd.append('audio', fileInput.files[0]);
 
     try {
       var res = await fetch('/api/analyze', { method: 'POST', body: fd });
@@ -616,8 +788,8 @@ body {
       html += '<div class="result-row"><span class="label">Instruments</span><span class="value"><div class="tags">' + insts + '</div></span></div>';
     }
     if (a.vocals) {
-      var vDesc = a.vocals.detected
-        ? 'Detected' + (a.vocals.type ? ' (' + escHtml(a.vocals.type) + ')' : '')
+      var vDesc = a.vocals.present
+        ? 'Detected' + (a.vocals.gender ? ' (' + escHtml(a.vocals.gender) + ')' : '')
         : 'None detected';
       html += row('Vocals', vDesc);
     }

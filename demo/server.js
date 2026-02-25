@@ -7,7 +7,24 @@ const express = require('express');
 const multer = require('multer');
 const { OrbitClient } = require('@ohnrshyp/orbit-sdk');
 
+const fs = require('fs');
 const PORT = process.env.DEMO_PORT || 3000;
+
+// ---------------------------------------------------------------------------
+// Demo Track Library
+// ---------------------------------------------------------------------------
+
+const DEMO_AUDIO_DIR = path.resolve(__dirname, '..', 'audio-under-230');
+
+const TRACK_META = {
+  'Symphony.wav':                          { title: 'Symphony',              artist: 'Jordan Kugler', genre: 'Orchestral' },
+  'lil bounce.wav':                        { title: 'Lil Bounce',            artist: 'Jordan Kugler', genre: 'Hip-Hop' },
+  '9-29-23-It\'s A Dirty Job.wav':         { title: "It's A Dirty Job",      artist: 'Jordan Kugler', genre: 'Hip-Hop' },
+  '7-4-21-One Two One Two.wav':            { title: 'One Two One Two',       artist: 'Jordan Kugler', genre: 'Hip-Hop' },
+  '7-1-2023-I Can\'t Believe It Snippet.wav': { title: "I Can't Believe It", artist: 'Jordan Kugler', genre: 'R&B' },
+  '7-2-19-She A Bop.wav':                  { title: 'She A Bop',             artist: 'Jordan Kugler', genre: 'Pop' },
+  '11-4-19-The Birds Instrumental.wav':    { title: 'The Birds',             artist: 'Jordan Kugler', genre: 'Instrumental' },
+};
 
 // ---------------------------------------------------------------------------
 // SDK Client
@@ -49,27 +66,78 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 // ---------------------------------------------------------------------------
+// GET /api/demo-tracks — list available demo audio files
+// ---------------------------------------------------------------------------
+
+app.get('/api/demo-tracks', (_req, res) => {
+  try {
+    if (!fs.existsSync(DEMO_AUDIO_DIR)) {
+      return res.json({ tracks: [] });
+    }
+    const files = fs.readdirSync(DEMO_AUDIO_DIR)
+      .filter(f => /\.(wav|mp3|flac)$/i.test(f))
+      .sort();
+
+    const tracks = files.map(filename => {
+      const meta = TRACK_META[filename] || {};
+      const stat = fs.statSync(path.join(DEMO_AUDIO_DIR, filename));
+      return {
+        filename,
+        title: meta.title || filename.replace(/\.\w+$/, ''),
+        artist: meta.artist || '',
+        genre: meta.genre || '',
+        size_mb: (stat.size / (1024 * 1024)).toFixed(1),
+      };
+    });
+
+    res.json({ tracks });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/demo-tracks/:filename — serve a demo audio file
+// ---------------------------------------------------------------------------
+
+app.get('/api/demo-tracks/:filename', (req, res) => {
+  const filePath = path.join(DEMO_AUDIO_DIR, req.params.filename);
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(path.resolve(DEMO_AUDIO_DIR) + path.sep)) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+  if (!fs.existsSync(resolved)) {
+    return res.status(404).json({ error: 'Track not found' });
+  }
+  res.setHeader('Content-Type', 'audio/wav');
+  res.setHeader('Content-Disposition', `attachment; filename="${req.params.filename}"`);
+  fs.createReadStream(resolved).pipe(res);
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/status
 // ---------------------------------------------------------------------------
 
 app.get('/api/status', async (_req, res) => {
+  const apiUrl = process.env.ORBIT_API_URL;
   try {
-    const apiUrl = process.env.ORBIT_API_URL;
-    const [healthRes, infoRes] = await Promise.all([
-      fetch(`${apiUrl}/health`, { signal: AbortSignal.timeout(5000) }),
-      fetch(`${apiUrl}/orbit/v1/info`, { signal: AbortSignal.timeout(5000) }),
-    ]);
-
+    const healthRes = await fetch(`${apiUrl}/health`, { signal: AbortSignal.timeout(10000) });
     const health = await healthRes.json();
-    const info = await infoRes.json();
+
+    let info = null;
+    try {
+      const infoRes = await fetch(`${apiUrl}/orbit/v1/info`, { signal: AbortSignal.timeout(10000) });
+      info = await infoRes.json();
+    } catch (_) { /* info endpoint is optional */ }
 
     res.json({
       connected: true,
       server: apiUrl,
       health,
-      info: info.data || info,
+      info: info ? (info.data || info) : null,
     });
   } catch (err) {
+    console.error('  Status check failed:', err.message);
     res.status(502).json({ error: `Cannot reach ORBIT server: ${err.message}` });
   }
 });

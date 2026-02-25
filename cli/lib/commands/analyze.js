@@ -81,8 +81,8 @@ const cmd = new Command('analyze')
 
         if (analysis.vocals) {
           const v = analysis.vocals;
-          const desc = v.detected
-            ? `detected${v.type ? ' (' + v.type + ')' : ''}`
+          const desc = v.present
+            ? `detected${v.gender ? ' (' + v.gender + ')' : ''}`
             : 'none detected';
           out.field(command, 'Vocals', desc);
         }

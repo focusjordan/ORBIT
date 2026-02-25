@@ -143,7 +143,9 @@ async function checkPythonEnvironment() {
       const proc = spawn(SILENTCIPHER_CONFIG.pythonCommand, [
         SILENTCIPHER_CONFIG.scriptPath,
         'check'
-      ]);
+      ], {
+        cwd: path.dirname(SILENTCIPHER_CONFIG.scriptPath),
+      });
       
       let stdout = '';
       let stderr = '';
@@ -274,6 +276,7 @@ async function embed(input, payloadHash, options = {}) {
         '--message', messageStr,
         '--sample-rate', String(SILENTCIPHER_CONFIG.sampleRate),
       ], {
+        cwd: path.dirname(SILENTCIPHER_CONFIG.scriptPath),
         timeout: SILENTCIPHER_CONFIG.embedTimeout,
       });
       
@@ -405,6 +408,7 @@ async function extract(input, options = {}) {
       }
       
       const proc = spawn(SILENTCIPHER_CONFIG.pythonCommand, args, {
+        cwd: path.dirname(SILENTCIPHER_CONFIG.scriptPath),
         timeout: SILENTCIPHER_CONFIG.extractTimeout,
       });
       

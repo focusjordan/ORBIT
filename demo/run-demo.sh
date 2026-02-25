@@ -52,7 +52,7 @@ DIM='\033[2m'
 RESET='\033[0m'
 
 step=0
-total=8
+total=9
 
 narrate() {
   step=$((step + 1))
@@ -120,18 +120,35 @@ narrate "AI-generated music detection. Multi-signal analysis."
 node "$ORBIT_CLI" detect "$AUDIO_FILE"
 pause
 
-# Step 6: DDEX Ingest
-narrate "We also support DDEX, the industry standard. This ingests a label's existing metadata package."
+# Step 6: Rights Transfer (narrated)
+narrate "The protocol's differentiator: cross-platform rights transfer with full chain of custody."
+echo -e "  ${BOLD}How B2B Transfer Works:${RESET}"
+echo ""
+echo -e "  ${DIM}1.${RESET} Platform A (label/distributor) registers the track"
+echo -e "  ${DIM}2.${RESET} Platform A initiates transfer to Platform B (DSP/sync agent)"
+echo -e "  ${DIM}3.${RESET} Platform B accepts — new watermark embedded, chain preserved"
+echo -e "  ${DIM}4.${RESET} Every downstream platform can verify the full provenance chain"
+echo ""
+echo -e "  ${DIM}Both parties sign cryptographically. The chain is immutable and auditable.${RESET}"
+echo -e "  ${DIM}This is how ORBIT replaces email-and-spreadsheet rights management.${RESET}"
+pause
+
+# Step 7: DDEX Ingest
+narrate "DDEX ingest — the industry standard for catalog delivery. In production, this processes a full label catalog automatically."
+echo -e "  ${DIM}(dry-run: parsing the DDEX package and showing what would be registered)${RESET}"
+echo ""
 node "$ORBIT_CLI" ingest "${DEMO_DIR}/sample-release.xml" --dry-run --owner-id demo-owner
 pause
 
-# Step 7: Batch Processing
-narrate "And batch processing. Point it at a catalog, it processes everything. This is what an agent runs."
+# Step 8: Batch Processing
+narrate "Batch processing — point it at a folder, it processes everything. In production, this is what an agent or pipeline runs against the full catalog."
+echo -e "  ${DIM}(dry-run: scanning the directory and showing what would be processed)${RESET}"
+echo ""
 node "$ORBIT_CLI" batch "$AUDIO_DIR" --command verify --dry-run
 pause
 
-# Step 8: Identity
-narrate "Every operation is authenticated and audited."
+# Step 9: Identity
+narrate "Every operation is cryptographically authenticated and audited."
 node "$ORBIT_CLI" whoami
 
 echo ""
