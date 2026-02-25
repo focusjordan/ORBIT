@@ -559,6 +559,103 @@ class OrbitClient {
   }
 
   // ============================================================================
+  // Platform Management Endpoints
+  // ============================================================================
+
+  /**
+   * List registrations for the authenticated platform
+   * 
+   * @param {Object} [options] - Query options
+   * @param {number} [options.limit=50] - Max results (1-100)
+   * @param {number} [options.offset=0] - Pagination offset
+   * 
+   * @returns {Promise<Object>} Registration list
+   * @returns {string} result.platform - Platform ID
+   * @returns {number} result.total - Total registration count
+   * @returns {Array} result.registrations - Registration records
+   */
+  async listRegistrations(options = {}) {
+    const limit = options.limit ?? 50;
+    const offset = options.offset ?? 0;
+
+    const url = `${this.apiUrl}/orbit/v1/registrations?limit=${limit}&offset=${offset}`;
+    const body = {};
+    const signature = this._sign(body);
+
+    const headers = {
+      'X-ORBIT-Platform': this.platformId,
+      'X-ORBIT-Signature': signature.toString('base64'),
+    };
+    if (this.apiKey) headers['X-ORBIT-API-Key'] = this.apiKey;
+
+    const response = await fetch(url, { method: 'GET', headers });
+
+    const contentType = response.headers.get('content-type') || '';
+    let responseData;
+    if (contentType.includes('application/cbor')) {
+      const buf = await response.arrayBuffer();
+      responseData = cbor.decode(Buffer.from(buf));
+    } else if (contentType.includes('application/json')) {
+      responseData = await response.json();
+    } else {
+      const text = await response.text();
+      try { responseData = JSON.parse(text); } catch { throw new Error(`Unexpected response: ${text.slice(0, 200)}`); }
+    }
+
+    if (!response.ok) {
+      const error = new Error(responseData.message || responseData.error || `HTTP ${response.status}`);
+      error.status = response.status;
+      error.code = responseData.error;
+      throw error;
+    }
+
+    return responseData;
+  }
+
+  /**
+   * List pending inbound transfers for the authenticated platform
+   * 
+   * @returns {Promise<Object>} Pending transfers
+   * @returns {string} result.platform - Platform ID
+   * @returns {number} result.total - Count of pending transfers
+   * @returns {Array} result.transfers - Pending transfer records
+   */
+  async listPendingTransfers() {
+    const url = `${this.apiUrl}/orbit/v1/transfers/pending`;
+    const body = {};
+    const signature = this._sign(body);
+
+    const headers = {
+      'X-ORBIT-Platform': this.platformId,
+      'X-ORBIT-Signature': signature.toString('base64'),
+    };
+    if (this.apiKey) headers['X-ORBIT-API-Key'] = this.apiKey;
+
+    const response = await fetch(url, { method: 'GET', headers });
+
+    const contentType = response.headers.get('content-type') || '';
+    let responseData;
+    if (contentType.includes('application/cbor')) {
+      const buf = await response.arrayBuffer();
+      responseData = cbor.decode(Buffer.from(buf));
+    } else if (contentType.includes('application/json')) {
+      responseData = await response.json();
+    } else {
+      const text = await response.text();
+      try { responseData = JSON.parse(text); } catch { throw new Error(`Unexpected response: ${text.slice(0, 200)}`); }
+    }
+
+    if (!response.ok) {
+      const error = new Error(responseData.message || responseData.error || `HTTP ${response.status}`);
+      error.status = response.status;
+      error.code = responseData.error;
+      throw error;
+    }
+
+    return responseData;
+  }
+
+  // ============================================================================
   // V2 ENDPOINTS - AI-Powered Analysis
   // ============================================================================
 
