@@ -139,6 +139,7 @@ async function checkPythonEnvironment() {
 async function analyze(input, options = {}) {
   const {
     maxLength = ANALYSIS_CONFIG.maxLengthSeconds,
+    aiForensics = false,
     verbose = process.env.ORBIT_ML_VERBOSE === 'true',
   } = options;
   
@@ -170,12 +171,15 @@ async function analyze(input, options = {}) {
     return await new Promise((resolve, reject) => {
       const startTime = Date.now();
       
-      const proc = spawn(ANALYSIS_CONFIG.pythonCommand, [
+      const args = [
         ANALYSIS_CONFIG.scriptPath,
         audioPath,
         '--output', 'json',
         '--max-length', String(maxLength),
-      ], {
+      ];
+      if (aiForensics) args.push('--ai-forensics');
+
+      const proc = spawn(ANALYSIS_CONFIG.pythonCommand, args, {
         timeout: ANALYSIS_CONFIG.timeout,
       });
       

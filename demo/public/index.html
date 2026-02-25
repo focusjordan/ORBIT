@@ -448,6 +448,7 @@ body {
       fd.append('audio', blob, 'track');
       if (trackMeta && trackMeta.title) fd.append('title', trackMeta.title);
       if (trackMeta && trackMeta.artist) fd.append('artist', trackMeta.artist);
+      if (trackMeta && trackMeta.filename) fd.append('filename', trackMeta.filename);
 
       try {
         var res = await fetch('/api/analyze', { method: 'POST', body: fd });
@@ -466,7 +467,7 @@ body {
       var sel = $('#' + selectId);
       if (!sel || !sel.value) return {};
       var t = state.demoTracks.find(function(tr) { return tr.filename === sel.value; });
-      return t ? { title: t.title, artist: t.artist } : {};
+      return t ? { title: t.title, artist: t.artist, filename: t.filename } : {};
     }
 
     $('#ai-analyze-btn').addEventListener('click', function() { if (aiBlob) runAnalysis(aiBlob, 'ai-results', 'ai', getSelectedMeta('ai-track-select')); });

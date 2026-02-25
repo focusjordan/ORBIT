@@ -357,7 +357,7 @@ async function analyzeHandler(req, res) {
     
     const needsClap = includeSet.has('genre') || includeSet.has('mood') || 
                       includeSet.has('instruments') || includeSet.has('vocals');
-    const needsAudioAnalysis = includeSet.has('bpm') || includeSet.has('key');
+    const needsAudioAnalysis = includeSet.has('bpm') || includeSet.has('key') || includeSet.has('ai_detection');
     const needsEmbedding = includeSet.has('embedding');
     const needsFingerprint = includeSet.has('fingerprint') || includeSet.has('catalog_check');
     const needsAiDetection = includeSet.has('ai_detection');
@@ -379,6 +379,7 @@ async function analyzeHandler(req, res) {
             enableClap: needsClap,
             enableAudioAnalysis: needsAudioAnalysis,
             enableEmbedding: needsEmbedding,
+            aiForensics: needsAiDetection,
           },
         });
         

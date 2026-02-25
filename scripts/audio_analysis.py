@@ -260,13 +260,198 @@ def calculate_loudness(y, sr):
     return round(float(db), 2)
 
 
-def analyze_audio(audio_path, max_length_seconds=120):
+# =========================================================================
+# AI SPECTRAL FORENSICS
+# =========================================================================
+
+def detect_spectral_cutoff(y, sr, n_fft=4096):
+    """
+    Detect sharp high-frequency cutoff typical of AI models trained on MP3 data.
+    
+    AI generators trained on MP3 datasets replicate MP3's ~16kHz rolloff even
+    when outputting WAV/FLAC. Human masters typically preserve energy up to
+    20kHz+.
+    
+    Args:
+        y:  Audio time series (must be loaded at sr >= 44100)
+        sr: Sample rate
+    
+    Returns:
+        dict with cutoff analysis
+    """
+    import librosa
+    import numpy as np
+    
+    nyquist = sr / 2
+    if nyquist < 18000:
+        return {'available': False, 'reason': f'sample_rate {sr} too low (need >= 44100)'}
+    
+    S = np.abs(librosa.stft(y, n_fft=n_fft))
+    freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+    
+    mean_spectrum = np.mean(S, axis=1)
+    
+    # Energy in several bands
+    def band_energy(lo, hi):
+        mask = (freqs >= lo) & (freqs < hi)
+        return float(np.mean(mean_spectrum[mask])) if mask.any() else 0.0
+    
+    e_below_16k = band_energy(100, 16000)
+    e_16k_to_20k = band_energy(16000, 20000)
+    
+    ratio = e_16k_to_20k / (e_below_16k + 1e-10)
+    
+    # A sharp cutoff at 16kHz produces ratio < 0.005
+    has_cutoff = ratio < 0.005
+    
+    return {
+        'available': True,
+        'has_16k_cutoff': has_cutoff,
+        'energy_ratio_above_16k': round(ratio, 6),
+        'energy_below_16k': round(e_below_16k, 6),
+        'energy_16k_to_20k': round(e_16k_to_20k, 6),
+    }
+
+
+def measure_phase_entropy(y, sr, n_fft=2048):
+    """
+    Measure phase entropy of the audio signal.
+    
+    Neural networks struggle with generating natural phase relationships.
+    Human recordings have chaotic phase due to room acoustics and analog
+    circuits. AI audio often has unnaturally coherent (low-entropy) phase.
+    
+    Args:
+        y:  Audio time series
+        sr: Sample rate
+    
+    Returns:
+        dict with phase entropy metrics
+    """
+    import librosa
+    import numpy as np
+    
+    D = librosa.stft(y, n_fft=n_fft)
+    phase = np.angle(D)
+    
+    # Instantaneous frequency: phase derivative across time frames
+    inst_freq = np.diff(phase, axis=1)
+    
+    # Compute entropy of the instantaneous frequency distribution per band.
+    # We sample frequency bins to keep computation bounded.
+    n_bins = phase.shape[0]
+    sample_bins = np.linspace(0, n_bins - 1, min(n_bins, 64), dtype=int)
+    
+    entropies = []
+    for k in sample_bins:
+        row = inst_freq[k]
+        hist, _ = np.histogram(row, bins=64, range=(-np.pi, np.pi))
+        hist = hist.astype(np.float64) + 1e-10
+        hist /= hist.sum()
+        ent = -np.sum(hist * np.log2(hist))
+        entropies.append(ent)
+    
+    mean_entropy = float(np.mean(entropies))
+    std_entropy = float(np.std(entropies))
+    
+    # Max possible entropy for 64-bin uniform distribution = log2(64) ≈ 6.0
+    # Human audio: typically 4.5-5.8. AI phase-locked audio: < 3.5
+    normalized = mean_entropy / 6.0
+    
+    return {
+        'mean_entropy': round(mean_entropy, 4),
+        'std_entropy': round(std_entropy, 4),
+        'normalized_entropy': round(normalized, 4),
+        'low_entropy': mean_entropy < 3.5,
+    }
+
+
+def measure_spectral_contrast(y, sr):
+    """
+    Measure spectral contrast across frequency sub-bands.
+    
+    AI-generated audio has "spectral smearing" — frequencies bleed into each
+    other because the entire mix is generated as a single waveform rather
+    than layered from distinct instruments. Low spectral contrast indicates
+    poor instrument separation.
+    
+    Also computes spectral flatness (Wiener entropy) which measures how
+    noise-like the spectrum is.
+    
+    Args:
+        y:  Audio time series
+        sr: Sample rate
+    
+    Returns:
+        dict with spectral contrast and flatness metrics
+    """
+    import librosa
+    import numpy as np
+    
+    contrast = librosa.feature.spectral_contrast(y=y, sr=sr, n_bands=6)
+    flatness = librosa.feature.spectral_flatness(y=y)
+    
+    mean_contrast = float(np.mean(contrast))
+    std_contrast = float(np.std(contrast))
+    mean_flatness = float(np.mean(flatness))
+    
+    return {
+        'mean_contrast_db': round(mean_contrast, 4),
+        'std_contrast_db': round(std_contrast, 4),
+        'mean_flatness': round(mean_flatness, 6),
+        'low_contrast': mean_contrast < 15.0,
+        'high_flatness': mean_flatness > 0.05,
+    }
+
+
+def measure_onset_regularity(y, sr):
+    """
+    Measure how metronomically regular onset timing is.
+    
+    Human performers have micro-timing variations (swing, push/pull). AI
+    generators produce onsets aligned to a perfect grid. Very low IOI
+    variance relative to the mean suggests machine-generated timing.
+    
+    Args:
+        y:  Audio time series
+        sr: Sample rate
+    
+    Returns:
+        dict with onset regularity metrics
+    """
+    import librosa
+    import numpy as np
+    
+    onset_frames = librosa.onset.onset_detect(y=y, sr=sr, units='frames')
+    
+    if len(onset_frames) < 4:
+        return {'available': False, 'reason': 'too_few_onsets'}
+    
+    onset_times = librosa.frames_to_time(onset_frames, sr=sr)
+    ioi = np.diff(onset_times)
+    
+    mean_ioi = float(np.mean(ioi))
+    std_ioi = float(np.std(ioi))
+    cv = std_ioi / mean_ioi if mean_ioi > 0 else 0
+    
+    return {
+        'available': True,
+        'onset_count': len(onset_frames),
+        'mean_ioi': round(mean_ioi, 4),
+        'std_ioi': round(std_ioi, 4),
+        'coefficient_of_variation': round(cv, 4),
+        'metronomic': cv < 0.15,
+    }
+
+
+def analyze_audio(audio_path, max_length_seconds=120, ai_forensics=False):
     """
     Perform full audio analysis.
     
     Args:
         audio_path: Path to audio file
         max_length_seconds: Maximum audio length to analyze (for efficiency)
+        ai_forensics: If True, run spectral forensic checks for AI detection
     
     Returns:
         dict with all analysis results
@@ -276,10 +461,11 @@ def analyze_audio(audio_path, max_length_seconds=120):
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f'Audio file not found: {audio_path}')
     
-    # Load audio
-    y, sr = librosa.load(audio_path, sr=22050, mono=True)
+    # Use 44100 Hz when forensics are requested (needed for 16kHz cutoff detection)
+    target_sr = 44100 if ai_forensics else 22050
+    y, sr = librosa.load(audio_path, sr=target_sr, mono=True)
     
-    # Calculate duration
+    # Calculate duration from the full signal before truncation
     duration = len(y) / sr
     
     # Limit length for efficiency
@@ -287,21 +473,32 @@ def analyze_audio(audio_path, max_length_seconds=120):
     if len(y) > max_samples:
         y = y[:max_samples]
     
-    # Run all analyses
+    # Core analyses
     bpm_result = detect_bpm(y, sr)
     key_result = detect_key(y, sr)
     energy = calculate_energy(y)
     loudness_db = calculate_loudness(y, sr)
     
-    return {
+    result = {
         'bpm': bpm_result,
         'key': key_result,
         'energy': energy,
         'loudness_db': loudness_db,
         'duration': round(duration, 2),
         'sample_rate': sr,
-        'analyzed_length': round(min(duration, max_length_seconds), 2)
+        'analyzed_length': round(min(duration, max_length_seconds), 2),
     }
+    
+    # AI spectral forensics (optional, adds ~1-2s)
+    if ai_forensics:
+        result['ai_forensics'] = {
+            'spectral_cutoff': detect_spectral_cutoff(y, sr),
+            'phase_entropy': measure_phase_entropy(y, sr),
+            'spectral_contrast': measure_spectral_contrast(y, sr),
+            'onset_regularity': measure_onset_regularity(y, sr),
+        }
+    
+    return result
 
 
 def main():
@@ -311,6 +508,8 @@ def main():
                         help='Output format (default: json)')
     parser.add_argument('--max-length', type=int, default=120,
                         help='Max audio length to analyze in seconds (default: 120)')
+    parser.add_argument('--ai-forensics', action='store_true',
+                        help='Run AI spectral forensics (16kHz cutoff, phase entropy, spectral contrast, onset regularity)')
     
     args = parser.parse_args()
     
@@ -318,7 +517,8 @@ def main():
     check_dependencies()
     
     try:
-        result = analyze_audio(args.audio_path, max_length_seconds=args.max_length)
+        result = analyze_audio(args.audio_path, max_length_seconds=args.max_length,
+                               ai_forensics=args.ai_forensics)
         print(json.dumps(result))
         
     except FileNotFoundError as e:

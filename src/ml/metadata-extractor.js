@@ -42,6 +42,7 @@ const EXTRACTOR_CONFIG = {
   
   // Audio analysis configuration
   audioAnalysisMaxLength: 120,
+  aiForensics: false,
   
   // Embedding configuration (CLAP 512-dim)
   embeddingMaxLength: 30,
@@ -174,6 +175,7 @@ async function extractMetadata(input, options = {}) {
       
       const analysisResult = await audioAnalysis.analyze(input, {
         maxLength: cfg.audioAnalysisMaxLength,
+        aiForensics: cfg.aiForensics,
         verbose: false,
       });
       
@@ -182,6 +184,11 @@ async function extractMetadata(input, options = {}) {
       result.energy = analysisResult.energy;
       result.loudness_db = analysisResult.loudness_db;
       result.duration = analysisResult.duration;
+      
+      // Propagate AI forensic data if available
+      if (analysisResult.ai_forensics) {
+        result.ai_forensics = analysisResult.ai_forensics;
+      }
       
       // Calculate danceability from BPM and energy
       result.danceability = audioAnalysis.calculateDanceability(analysisResult);

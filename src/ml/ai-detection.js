@@ -2,25 +2,24 @@
  * ORBIT AI Music Detection Module
  * 
  * Multi-signal AI-generated music detection using:
- * 1. Zero-shot CLAP semantic probing (AI vs human performance prompts)
- * 2. Audio analysis anomaly detection (suspiciously perfect metrics)
- * 3. Metadata/behavioral pattern heuristics
+ * 1. Zero-shot CLAP semantic probing (artifact-targeted prompts)
+ * 2. Spectral forensics (16kHz cutoff, phase entropy, spectral contrast, onset regularity)
+ * 3. Metadata intelligence (AI keyword scanning, duration heuristics, identifier checks)
+ * 4. AcoustID catalog provenance mismatch
+ * 
+ * Dynamic weight redistribution: when the catalog signal is non-informative
+ * (no AcoustID match), its weight is redistributed proportionally among the
+ * remaining signals so they can reach the full 0-1 scoring range.
  * 
  * This module provides ADVISORY signals for human review, not automated rejection.
  * Detection is always run during registration but results are informational only.
  * 
  * Architecture:
  * - Uses existing CLAP infrastructure for semantic probing
- * - Uses existing audio-analysis for anomaly detection
- * - Combines signals with weighted scoring
+ * - Uses existing audio-analysis + librosa spectral forensics
+ * - Scans metadata text for AI self-declaration keywords
+ * - Combines signals with weighted scoring and dynamic rebalancing
  * - Fail-open design: errors don't block registration
- * 
- * Accuracy Note:
- * This is a first-generation detection system using zero-shot classification.
- * It is NOT 100% accurate and should be used alongside:
- * - Community reporting
- * - Manual review for flagged content
- * - Platform FAQ/policy enforcement
  * 
  * @see ORBIT_SPECIFICATION.md Section 17 (Future Considerations - AI Detection)
  */
@@ -64,6 +63,30 @@ const AI_DETECTION_CONFIG = {
   },
 };
 
+// Regex patterns for detecting AI self-declaration in metadata text
+const AI_TEXT_PATTERNS = {
+  // Strong: explicit self-declaration of AI origin
+  strong: [
+    /\bai\s+cover\b/i,
+    /\bai\s+\w+\s+cover\b/i,       // "AI Jazz Cover", "AI Style Cover"
+    /\bai\s+remix\b/i,
+    /\bai\s+version\b/i,
+    /\bai[\s-]+generated\b/i,
+    /\bgenerated\s+by\s+ai\b/i,
+    /\bai\s+song\b/i,
+    /\bai\s+music\b/i,
+    /\bmade\s+(with|by|in)\s+(suno|udio|mubert)\b/i,
+    /\b(suno|udio)\s+(ai|cover|remix|version|generation)\b/i,
+  ],
+  // Moderate: AI-related terms that suggest but don't confirm AI origin
+  moderate: [
+    /\bai\b.*\bcover\b/i,           // "AI" and "cover" anywhere in same text
+    /\bcover\b.*\bai\b/i,
+    /\b(suno|udio|mubert)\b/i,      // Known AI music generators
+    /\bartificial\s+intelligence\b/i,
+  ],
+};
+
 // ============================================================================
 // AI DETECTION PROMPTS
 // ============================================================================
@@ -71,36 +94,53 @@ const AI_DETECTION_CONFIG = {
 /**
  * Zero-shot prompts for AI vs human music detection
  * 
- * These prompts leverage CLAP's text-audio alignment to probe
- * whether audio sounds more like AI-generated or human-performed music.
+ * These prompts target audible artifacts rather than asking "is this AI?"
+ * CLAP matches audio-to-text semantic similarity, so we describe what AI
+ * audio actually *sounds like* vs what human recordings *sound like*.
  */
 const AI_DETECTION_PROMPTS = [
-  // AI-generated indicators
+  // AI artifact indicators — describe what AI audio sounds like
   { 
     label: 'ai_generated', 
-    prompt: 'artificial intelligence generated synthetic music' 
+    prompt: 'metallic robotic vocal artifacts and unnatural singing voice' 
   },
   { 
     label: 'ai_generated', 
-    prompt: 'computer generated audio neural network music' 
+    prompt: 'digital vocal synthesis with artificial vibrato and phrasing' 
   },
   { 
     label: 'ai_generated', 
-    prompt: 'AI synthesized digital music production' 
+    prompt: 'blurry instrument separation with muddy frequency mixing' 
+  },
+  { 
+    label: 'ai_generated', 
+    prompt: 'sterile heavily quantized drums with perfect mechanical timing' 
+  },
+  { 
+    label: 'ai_generated', 
+    prompt: 'flat sterile mix with no room ambience or microphone character' 
   },
   
-  // Human performance indicators
+  // Human performance indicators — describe what real recordings sound like
   { 
     label: 'human_performance', 
-    prompt: 'natural human musical performance recording' 
+    prompt: 'natural room acoustics with warm microphone character' 
   },
   { 
     label: 'human_performance', 
-    prompt: 'live musician playing real instruments studio recording' 
+    prompt: 'live performance with human timing imperfections and groove' 
   },
   { 
     label: 'human_performance', 
-    prompt: 'authentic human voice singing natural performance' 
+    prompt: 'clear instrument separation with distinct spatial placement' 
+  },
+  { 
+    label: 'human_performance', 
+    prompt: 'natural singing voice with breath sounds and vocal expression' 
+  },
+  { 
+    label: 'human_performance', 
+    prompt: 'organic drum performance with dynamic velocity variations' 
   },
 ];
 
@@ -181,12 +221,13 @@ async function probeAIGenerated(input, options = {}) {
 /**
  * Check for audio anomalies typical of AI-generated music
  * 
- * AI-generated music often has telltale signs:
- * - Suspiciously perfect tempo (no natural drift)
- * - Unnaturally consistent key (no modulation variance)
- * - Low dynamic range (over-compressed sounding)
+ * Classic checks (BPM/key/energy) plus spectral forensics when available:
+ * - 16kHz frequency cutoff from MP3-trained AI models
+ * - Low phase entropy from neural vocoder artifacts
+ * - Low spectral contrast from spectral smearing / instrument bleed
+ * - Metronomic onset timing (no human micro-timing)
  * 
- * @param {Object} analysisResult - Result from audio-analysis.js analyze()
+ * @param {Object} analysisResult - Result from metadata-extractor (includes ai_forensics when enabled)
  * @returns {{anomalyScore: number, flags: string[], details: Object}}
  */
 function checkAudioAnomalies(analysisResult) {
@@ -198,40 +239,70 @@ function checkAudioAnomalies(analysisResult) {
     return { anomalyScore: 0, flags: ['NO_ANALYSIS_DATA'], details: {} };
   }
   
-  const { bpm, key, loudness_db, energy } = analysisResult;
+  const { bpm, key, energy } = analysisResult;
   const thresholds = AI_DETECTION_CONFIG.anomalyThresholds;
   
-  // Check 1: Suspiciously perfect BPM confidence
-  // Real recordings have slight tempo drift; AI is often too perfect
+  // --- Classic checks ---
+  
   if (bpm && bpm.confidence > thresholds.perfectTempo) {
     flags.push('PERFECT_TEMPO');
     details.bpmConfidence = bpm.confidence;
-    anomalyScore += 0.25;
+    anomalyScore += 0.12;
   }
   
-  // Check 2: Unnaturally high key confidence
-  // AI tends to stay perfectly in key throughout
   if (key && key.confidence > thresholds.perfectKey) {
     flags.push('PERFECT_KEY');
     details.keyConfidence = key.confidence;
-    anomalyScore += 0.20;
+    anomalyScore += 0.10;
   }
   
-  // Check 3: Very consistent energy (would need variance metric)
-  // For now, very low or very high energy might indicate synthesis
   if (energy !== undefined && energy !== null) {
-    // Extremely consistent energy (close to 0.5) can indicate AI
     const energyDeviation = Math.abs(energy - 0.5);
     if (energyDeviation < 0.1) {
       flags.push('UNIFORM_ENERGY');
       details.energy = energy;
-      anomalyScore += 0.15;
+      anomalyScore += 0.08;
     }
   }
   
-  // Check 4: Unusual loudness (if we had loudness range data)
-  // AI music often has compressed dynamics
-  // Note: This would need loudness_range from analysis
+  // --- Spectral forensics (when ai_forensics data is available) ---
+  
+  const forensics = analysisResult.ai_forensics;
+  if (forensics) {
+    // 16kHz cutoff: AI models trained on MP3 datasets reproduce MP3's rolloff
+    const cutoff = forensics.spectral_cutoff;
+    if (cutoff && cutoff.available && cutoff.has_16k_cutoff) {
+      flags.push('FREQ_CUTOFF_16K');
+      details.energy_ratio_above_16k = cutoff.energy_ratio_above_16k;
+      anomalyScore += 0.20;
+    }
+    
+    // Phase entropy: AI audio has unnaturally coherent (low-entropy) phase
+    const phase = forensics.phase_entropy;
+    if (phase && phase.low_entropy) {
+      flags.push('LOW_PHASE_ENTROPY');
+      details.phase_entropy = phase.mean_entropy;
+      details.phase_normalized = phase.normalized_entropy;
+      anomalyScore += 0.25;
+    }
+    
+    // Spectral contrast: low contrast = spectral smearing / instrument bleed
+    const contrast = forensics.spectral_contrast;
+    if (contrast && contrast.low_contrast) {
+      flags.push('SPECTRAL_SMEARING');
+      details.spectral_contrast_db = contrast.mean_contrast_db;
+      details.spectral_flatness = contrast.mean_flatness;
+      anomalyScore += 0.15;
+    }
+    
+    // Onset regularity: metronomic timing suggests machine generation
+    const onsets = forensics.onset_regularity;
+    if (onsets && onsets.available && onsets.metronomic) {
+      flags.push('METRONOMIC_TIMING');
+      details.onset_cv = onsets.coefficient_of_variation;
+      anomalyScore += 0.10;
+    }
+  }
   
   return {
     anomalyScore: Math.min(1, Math.round(anomalyScore * 1000) / 1000),
@@ -245,14 +316,40 @@ function checkAudioAnomalies(analysisResult) {
 // ============================================================================
 
 /**
+ * Scan text strings for AI-indicative keywords and phrases.
+ * Returns the highest-tier match found across all input texts.
+ *
+ * @param {string[]} texts - Array of text strings to scan (title, artist, filename, etc.)
+ * @returns {{tier: 'strong'|'moderate'|null, score: number, matched: string|null}}
+ */
+function scanTextForAIIndicators(texts) {
+  const candidates = texts.filter(Boolean).map(t => String(t));
+  if (candidates.length === 0) return { tier: null, score: 0, matched: null };
+
+  for (const text of candidates) {
+    for (const re of AI_TEXT_PATTERNS.strong) {
+      if (re.test(text)) return { tier: 'strong', score: 0.85, matched: text };
+    }
+  }
+  for (const text of candidates) {
+    for (const re of AI_TEXT_PATTERNS.moderate) {
+      if (re.test(text)) return { tier: 'moderate', score: 0.50, matched: text };
+    }
+  }
+
+  return { tier: null, score: 0, matched: null };
+}
+
+/**
  * Check metadata patterns common in AI-generated uploads
  * 
  * AI generators often produce content with characteristic patterns:
+ * - Explicit AI self-declaration in title/artist/filename
  * - Typical duration ranges (Suno/Udio: ~2-3:30)
  * - Round durations (exactly 2:00, 3:00)
  * - Missing standard identifiers (no ISRC/UPC)
  * 
- * @param {Object} metadata - Track metadata
+ * @param {Object} metadata - Track metadata (title, artist, filename, isrc, upc)
  * @param {number} durationSeconds - Track duration in seconds
  * @returns {{suspicionScore: number, flags: string[], details: Object}}
  */
@@ -261,9 +358,29 @@ function checkMetadataPatterns(metadata, durationSeconds) {
   const details = {};
   let suspicionScore = 0;
   
+  // Check 1: AI self-declaration in title, artist, or filename
+  if (metadata) {
+    const textHit = scanTextForAIIndicators([
+      metadata.title,
+      metadata.artist,
+      metadata.filename,
+    ]);
+    if (textHit.tier === 'strong') {
+      flags.push('AI_SELF_DECLARED');
+      details.ai_text_tier = 'strong';
+      details.ai_text_matched = textHit.matched;
+      suspicionScore += textHit.score;
+    } else if (textHit.tier === 'moderate') {
+      flags.push('AI_TEXT_INDICATOR');
+      details.ai_text_tier = 'moderate';
+      details.ai_text_matched = textHit.matched;
+      suspicionScore += textHit.score;
+    }
+  }
+  
   const typicalDurations = AI_DETECTION_CONFIG.typicalAIDurations;
   
-  // Check 1: Duration in typical AI generator range
+  // Check 2: Duration in typical AI generator range
   if (durationSeconds >= typicalDurations.min && durationSeconds <= typicalDurations.max) {
     flags.push('TYPICAL_AI_DURATION');
     details.duration = durationSeconds;
@@ -271,7 +388,7 @@ function checkMetadataPatterns(metadata, durationSeconds) {
     suspicionScore += 0.15;
   }
   
-  // Check 2: Suspiciously round duration (exactly on 30s or 60s marks)
+  // Check 3: Suspiciously round duration (exactly on 30s or 60s marks)
   if (durationSeconds > 0) {
     const isRoundDuration = durationSeconds % 30 === 0;
     if (isRoundDuration) {
@@ -281,19 +398,13 @@ function checkMetadataPatterns(metadata, durationSeconds) {
     }
   }
   
-  // Check 3: Missing industry identifiers
-  // Legitimate releases usually have ISRC/UPC
+  // Check 4: Missing industry identifiers
   if (metadata) {
     if (!metadata.isrc && !metadata.upc) {
       flags.push('NO_IDENTIFIERS');
       suspicionScore += 0.05;
     }
   }
-  
-  // Note: Additional heuristics could include:
-  // - Bulk upload patterns (would need session context)
-  // - Generic/templated metadata
-  // - Suspicious artist names
   
   return {
     suspicionScore: Math.min(1, Math.round(suspicionScore * 1000) / 1000),
@@ -454,14 +565,34 @@ async function detectAI(audioInput, options = {}) {
     result.signals.catalog = catalogSignal;
     catalogScore = catalogSignal.provenanceScore;
     
-    // Combine scores with weights
-    const combinedScore = 
-      (semanticScore * weights.semantic) +
-      (anomalyScore * weights.anomaly) +
-      (metadataScore * weights.metadata) +
-      (catalogScore * weights.catalog);
+    // Determine effective weights.
+    // When catalog signal is non-informative (no_match or unavailable),
+    // redistribute its weight proportionally among the other signals so
+    // they aren't capped at (1 - catalog_weight) of the total.
+    const catalogInformative = catalogScore > 0 ||
+      catalogSignal.flags?.includes('KNOWN_WORK_METADATA_MISMATCH');
+
+    let wSemantic = weights.semantic;
+    let wAnomaly  = weights.anomaly;
+    let wMetadata = weights.metadata;
+    let wCatalog  = weights.catalog;
+
+    if (!catalogInformative) {
+      const nonCatalogSum = weights.semantic + weights.anomaly + weights.metadata;
+      wSemantic = weights.semantic / nonCatalogSum;
+      wAnomaly  = weights.anomaly  / nonCatalogSum;
+      wMetadata = weights.metadata / nonCatalogSum;
+      wCatalog  = 0;
+    }
+
+    const combinedScore =
+      (semanticScore * wSemantic) +
+      (anomalyScore  * wAnomaly) +
+      (metadataScore * wMetadata) +
+      (catalogScore  * wCatalog);
     
     result.score = Math.round(combinedScore * 1000) / 1000;
+    result.weights_used = { semantic: wSemantic, anomaly: wAnomaly, metadata: wMetadata, catalog: wCatalog };
     
     // Determine recommendation
     if (result.score >= thresholds.likelyAI) {
@@ -563,6 +694,7 @@ module.exports = {
   checkAudioAnomalies,
   checkMetadataPatterns,
   checkCatalogProvenance,
+  scanTextForAIIndicators,
   
   // Utility functions
   shouldReview,

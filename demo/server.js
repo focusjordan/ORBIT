@@ -192,6 +192,7 @@ app.post('/api/analyze', upload.single('audio'), async (req, res) => {
     const trackMeta = {};
     if (req.body.title) trackMeta.title = req.body.title;
     if (req.body.artist) trackMeta.artist = req.body.artist;
+    if (req.body.filename) trackMeta.filename = req.body.filename;
 
     const orbitRes = await fetch(`${apiUrl}/orbit/v2/analyze`, {
       method: 'POST',
