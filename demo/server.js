@@ -376,7 +376,7 @@ app.post('/api/transfer', express.json(), async (req, res) => {
       return res.status(400).json({ error: 'registration_id is required' });
     }
 
-    const result = await client.transfer(registration_id, testPlatformId);
+    const result = await client.transfer(Number(registration_id), testPlatformId);
     const data = result.data || result;
 
     res.json({
