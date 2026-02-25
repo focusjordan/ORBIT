@@ -19,6 +19,7 @@ const contentAnalysis = require('../../ml/content-analysis');
 const metadataExtractor = require('../../ml/metadata-extractor');
 const clap = require('../../ml/clap');
 const OrbitFingerprint = require('../../engines/fingerprint');
+const aiDetection = require('../../ml/ai-detection');
 
 const router = express.Router();
 
@@ -285,6 +286,12 @@ async function similarHandler(req, res) {
 async function analyzeHandler(req, res) {
   const startTime = Date.now();
   
+  const processingLog = [];
+  const log = (msg) => {
+    console.log(msg);
+    processingLog.push({ t: Date.now() - startTime, msg });
+  };
+  
   try {
     // ========================================================================
     // 1. VALIDATE INPUT
@@ -321,7 +328,7 @@ async function analyzeHandler(req, res) {
     }
     
     // Parse include array (default: all)
-    const ALL_INCLUDES = ['genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 'fingerprint', 'embedding'];
+    const ALL_INCLUDES = ['genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 'fingerprint', 'embedding', 'ai_detection'];
     let includeSet;
     
     if (include && Array.isArray(include)) {
@@ -336,13 +343,12 @@ async function analyzeHandler(req, res) {
       }
       includeSet = new Set(include);
     } else {
-      // Default: include all except embedding (to reduce response size)
       includeSet = new Set(['genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 'fingerprint']);
     }
     
     const verbose = process.env.ORBIT_ML_VERBOSE === 'true';
     
-    console.log(`[Analyze] Processing audio: ${audioBuffer.length} bytes, include=[${[...includeSet].join(', ')}]`);
+    log(`🔍 Processing audio: ${audioBuffer.length} bytes, include=[${[...includeSet].join(', ')}]`);
     
     // ========================================================================
     // 2. BUILD CONFIG BASED ON INCLUDES
@@ -353,6 +359,7 @@ async function analyzeHandler(req, res) {
     const needsAudioAnalysis = includeSet.has('bpm') || includeSet.has('key');
     const needsEmbedding = includeSet.has('embedding');
     const needsFingerprint = includeSet.has('fingerprint');
+    const needsAiDetection = includeSet.has('ai_detection');
     
     // ========================================================================
     // 3. RUN METADATA EXTRACTION
@@ -362,6 +369,7 @@ async function analyzeHandler(req, res) {
     
     if (needsClap || needsAudioAnalysis || needsEmbedding) {
       try {
+        log('🧠 Running CLAP audio analysis...');
         metadataResult = await metadataExtractor.extractMetadata(audioBuffer, {
           includeEmbedding: needsEmbedding,
           verbose,
@@ -372,7 +380,7 @@ async function analyzeHandler(req, res) {
           },
         });
         
-        console.log(`[Analyze] Metadata extraction complete: ${metadataResult.processingTimeMs}ms`);
+        log(`✅ Metadata extraction complete: ${metadataResult.processingTimeMs}ms`);
         
       } catch (error) {
         console.error(`[Analyze] Metadata extraction failed: ${error.message}`);
@@ -392,11 +400,42 @@ async function analyzeHandler(req, res) {
     
     if (needsFingerprint) {
       try {
+        log('🔍 Generating Chromaprint fingerprint...');
         fingerprintData = await OrbitFingerprint.generate(audioBuffer);
-        console.log(`[Analyze] Fingerprint generated: ${fingerprintData.hash.toString('hex').slice(0, 16)}...`);
+        log(`✅ Fingerprint generated: ${fingerprintData.hash.toString('hex').slice(0, 16)}...`);
       } catch (error) {
-        console.warn(`[Analyze] Fingerprint generation failed: ${error.message}`);
-        // Non-fatal, continue without fingerprint
+        log(`⚠️  Fingerprint generation failed: ${error.message}`);
+      }
+    }
+    
+    // ========================================================================
+    // 4a. AI DETECTION (if requested)
+    // ========================================================================
+    
+    let aiDetectionResult = null;
+    
+    if (needsAiDetection) {
+      try {
+        log('🤖 Running AI music detection...');
+        aiDetectionResult = await aiDetection.detectAI(audioBuffer, {
+          metadata: {},
+          analysisResult: null,
+          verbose,
+        });
+        
+        log(`✅ AI Detection: score=${(aiDetectionResult.score * 100).toFixed(1)}%, recommendation=${aiDetectionResult.recommendation}`);
+        
+        const allFlags = aiDetection.getAllFlags(aiDetectionResult);
+        if (allFlags.length > 0) {
+          log(`   Flags: ${allFlags.join(', ')}`);
+        }
+      } catch (aiError) {
+        log(`⚠️  AI detection failed (non-fatal): ${aiError.message}`);
+        aiDetectionResult = {
+          score: null,
+          recommendation: 'DETECTION_ERROR',
+          error: aiError.message,
+        };
       }
     }
     
@@ -472,7 +511,23 @@ async function analyzeHandler(req, res) {
       };
     }
     
-    console.log(`[Analyze] Complete in ${response.processing_time_ms}ms`);
+    // Add AI detection results if requested
+    if (aiDetectionResult) {
+      response.ai_detection = {
+        score: aiDetectionResult.score,
+        recommendation: aiDetectionResult.recommendation,
+        signals: aiDetectionResult.signals,
+        flags: aiDetection.getAllFlags(aiDetectionResult),
+        processing_time_ms: aiDetectionResult.processing_time_ms,
+      };
+      if (aiDetectionResult.error) {
+        response.ai_detection.error = aiDetectionResult.error;
+      }
+    }
+    
+    log(`⏱️  Analysis complete in ${response.processing_time_ms}ms`);
+    
+    response.processing_log = processingLog;
     
     return res.orbit(response, 200);
     

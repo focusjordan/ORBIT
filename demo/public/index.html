@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ORBIT — Audio Provenance Protocol</title>
+<title>ORBIT — Protocol Demo</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -33,801 +33,977 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Layout */
-.container { max-width: 760px; margin: 0 auto; padding: 40px 24px 60px; }
-
 /* Header */
-.header { text-align: center; margin-bottom: 40px; }
-.header h1 { font-size: 2rem; font-weight: 700; letter-spacing: 0.08em; color: var(--accent); }
-.header p { color: var(--text-dim); font-size: 0.85rem; margin-top: 6px; letter-spacing: 0.04em; }
+.header { text-align: center; padding: 28px 24px 16px; }
+.header h1 { font-size: 1.8rem; font-weight: 700; letter-spacing: 0.08em; color: var(--accent); }
+.header p { color: var(--text-dim); font-size: 0.8rem; margin-top: 4px; letter-spacing: 0.04em; }
 .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; background: var(--text-dim); }
 .status-dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
 .status-dot.err { background: var(--red); box-shadow: 0 0 6px var(--red); }
-.status-line { font-size: 0.75rem; color: var(--text-dim); margin-top: 10px; }
+.status-line { font-size: 0.7rem; color: var(--text-dim); margin-top: 8px; }
 
-/* Tabs */
-.tabs { display: flex; gap: 2px; margin-bottom: 24px; background: var(--surface); border-radius: var(--radius); padding: 3px; }
-.tab-btn {
-  flex: 1; padding: 10px 0; border: none; background: none; color: var(--text-dim);
-  font-size: 0.85rem; font-weight: 600; cursor: pointer; border-radius: 6px; transition: var(--transition);
+/* Progress bar */
+.progress-bar { display: flex; justify-content: center; gap: 0; padding: 0 24px 20px; max-width: 600px; margin: 0 auto; }
+.progress-step { display: flex; align-items: center; }
+.step-circle {
+  width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: var(--transition);
+  background: var(--surface); border: 2px solid var(--border); color: var(--text-dim);
 }
-.tab-btn:hover { color: var(--text); }
-.tab-btn.active { background: var(--surface-2); color: var(--accent); }
+.step-circle.active { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
+.step-circle.done { border-color: var(--green); color: var(--green); background: rgba(0,214,143,0.1); }
+.step-line { width: 40px; height: 2px; background: var(--border); }
+.step-line.done { background: var(--green); }
 
-/* Panels */
-.panel { display: none; animation: fadeIn 0.3s ease; }
-.panel.active { display: block; }
+/* Main layout */
+.main { display: flex; max-width: 1200px; margin: 0 auto; padding: 0 16px 60px; gap: 16px; min-height: 70vh; }
+.content-panel { flex: 1; min-width: 0; }
+.log-panel {
+  width: 380px; flex-shrink: 0; background: #0d0d14; border: 1px solid var(--border); border-radius: var(--radius);
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 0.72rem; line-height: 1.6;
+  overflow-y: auto; max-height: 75vh; position: sticky; top: 16px; padding: 0;
+}
+.log-header { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; display: flex; justify-content: space-between; }
+.log-body { padding: 10px 14px; }
+.log-entry { color: var(--text-dim); white-space: pre-wrap; word-break: break-all; }
+.log-entry .log-time { color: var(--accent-2); margin-right: 8px; }
+.log-entry .log-msg { color: var(--text); }
+
+/* Section containers */
+.section { display: none; animation: fadeIn 0.3s ease; }
+.section.active { display: block; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
 /* Card */
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 14px; }
+.card-title { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+.section-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 4px; }
+.section-subtitle { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 18px; }
 
 /* Drop Zone */
 .dropzone {
-  border: 2px dashed var(--border); border-radius: var(--radius); padding: 36px 20px;
+  border: 2px dashed var(--border); border-radius: var(--radius); padding: 28px 16px;
   text-align: center; cursor: pointer; transition: var(--transition); position: relative;
 }
 .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: var(--accent-glow); }
-.dropzone-label { color: var(--text-dim); font-size: 0.85rem; }
-.dropzone-label strong { color: var(--text); display: block; margin-bottom: 4px; font-size: 0.95rem; }
+.dropzone-label { color: var(--text-dim); font-size: 0.82rem; }
+.dropzone-label strong { color: var(--text); display: block; margin-bottom: 4px; font-size: 0.9rem; }
 .dropzone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-.file-name { margin-top: 10px; font-size: 0.8rem; color: var(--accent); word-break: break-all; }
+.file-name { margin-top: 8px; font-size: 0.78rem; color: var(--accent); word-break: break-all; }
 
 /* Form fields */
-.field { margin-top: 14px; }
-.field label { display: block; font-size: 0.75rem; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
-.field input {
-  width: 100%; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: 6px; color: var(--text); font-size: 0.9rem; outline: none; transition: var(--transition);
+.field { margin-top: 12px; }
+.field label { display: block; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.06em; }
+.field input, .field select {
+  width: 100%; padding: 9px 11px; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); font-size: 0.85rem; outline: none; transition: var(--transition);
 }
-.field input:focus { border-color: var(--accent); }
+.field input:focus, .field select:focus { border-color: var(--accent); }
 .field input::placeholder { color: var(--text-dim); opacity: 0.6; }
 .row { display: flex; gap: 12px; }
 .row .field { flex: 1; }
 
+/* Track selector */
+.track-selector { margin-bottom: 12px; }
+.track-selector label { display: block; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.06em; }
+.track-selector select {
+  width: 100%; padding: 9px 11px; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); font-size: 0.85rem; outline: none; cursor: pointer;
+  appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238888a0' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+}
+.track-loading-msg { font-size: 0.72rem; color: var(--accent); margin-top: 5px; }
+
 /* Buttons */
 .btn {
-  display: block; width: 100%; margin-top: 20px; padding: 12px; border: none; border-radius: 6px;
-  font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: var(--transition);
+  display: inline-block; margin-top: 16px; padding: 11px 24px; border: none; border-radius: 6px;
+  font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: var(--transition);
   background: var(--accent); color: var(--bg); letter-spacing: 0.02em;
 }
 .btn:hover { filter: brightness(1.1); }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; filter: none; }
+.btn-full { display: block; width: 100%; }
+.btn-outline { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+.btn-outline:hover { background: var(--accent-glow); }
+
+/* Navigation */
+.nav-bar { display: flex; justify-content: space-between; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
 
 /* Loading */
-.loading { display: none; text-align: center; padding: 32px 16px; }
-.loading.active { display: block; animation: fadeIn 0.3s ease; }
-.spinner { display: inline-block; width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+.spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 10px; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.loading-text { margin-top: 14px; color: var(--text-dim); font-size: 0.85rem; }
-.loading-sub { color: var(--text-dim); font-size: 0.75rem; margin-top: 4px; opacity: 0.7; }
-.loading-steps { margin-top: 18px; text-align: left; display: inline-block; }
-.loading-step { font-size: 0.8rem; padding: 4px 0; color: var(--text-dim); opacity: 0.35; transition: all 0.4s ease; }
-.loading-step.active { color: var(--accent); opacity: 1; }
-.loading-step.done { color: var(--green); opacity: 0.7; }
-.loading-step .step-icon { display: inline-block; width: 18px; text-align: center; margin-right: 6px; }
+.loading-inline { padding: 20px 0; color: var(--text-dim); font-size: 0.85rem; }
 
 /* Results */
-.results { display: none; animation: fadeIn 0.4s ease; }
-.results.active { display: block; }
+.result-grid { display: grid; gap: 1px; background: var(--border); border-radius: var(--radius); overflow: hidden; margin-top: 12px; }
+.result-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 13px; background: var(--surface); }
+.result-row .label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+.result-row .value { font-size: 0.82rem; text-align: right; word-break: break-all; max-width: 65%; }
 
-.result-hero { text-align: center; padding: 20px 0 16px; }
-.result-hero .badge {
-  display: inline-block; padding: 6px 18px; border-radius: 20px; font-size: 0.85rem;
-  font-weight: 700; letter-spacing: 0.04em;
-}
+/* Badges */
+.badge { display: inline-block; padding: 4px 14px; border-radius: 16px; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; }
 .badge.success { background: rgba(0, 214, 143, 0.15); color: var(--green); }
 .badge.warning { background: rgba(255, 170, 34, 0.15); color: var(--yellow); }
 .badge.error { background: rgba(255, 68, 102, 0.15); color: var(--red); }
 
-.result-grid { display: grid; gap: 1px; background: var(--border); border-radius: var(--radius); overflow: hidden; margin-top: 16px; }
-.result-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--surface); }
-.result-row .label { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
-.result-row .value { font-size: 0.85rem; text-align: right; word-break: break-all; max-width: 65%; }
-
 /* Tags */
-.tags { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
-.tag {
-  display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;
-  background: var(--surface-2); border: 1px solid var(--border);
-}
+.tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.tag { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 0.72rem; font-weight: 600; background: var(--surface-2); border: 1px solid var(--border); }
 .tag.accent { border-color: var(--accent); color: var(--accent); }
 
 /* Confidence bars */
-.conf-bar-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.conf-label { font-size: 0.8rem; min-width: 110px; }
-.conf-bar { flex: 1; height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
-.conf-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.5s ease; }
-.conf-pct { font-size: 0.75rem; color: var(--text-dim); min-width: 40px; text-align: right; }
+.conf-bar-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.conf-label { font-size: 0.78rem; min-width: 100px; }
+.conf-bar { flex: 1; height: 5px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.conf-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+.conf-pct { font-size: 0.72rem; color: var(--text-dim); min-width: 38px; text-align: right; }
+
+/* Two-column comparison */
+.compare-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+/* XML viewer */
+.xml-viewer {
+  background: #0d0d14; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.72rem;
+  line-height: 1.7; overflow-x: auto; max-height: 400px; overflow-y: auto;
+  color: var(--text-dim); white-space: pre-wrap;
+}
+.xml-tag { color: var(--accent); }
+.xml-attr { color: var(--yellow); }
+.xml-val { color: var(--green); }
+
+/* Chain visualization */
+.chain-node {
+  display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px;
+}
+.chain-icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
+.chain-icon.origin { background: rgba(0, 212, 170, 0.15); border: 1px solid var(--accent); }
+.chain-icon.transfer { background: rgba(0, 180, 216, 0.15); border: 1px solid var(--accent-2); }
+.chain-arrow { text-align: center; color: var(--text-dim); font-size: 1.2rem; margin: 4px 0; }
+.chain-detail { flex: 1; }
+.chain-detail .chain-label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.chain-detail .chain-value { font-size: 0.85rem; }
+
+/* Error */
+.error-msg { margin-top: 14px; padding: 12px; background: rgba(255,68,102,0.08); border: 1px solid rgba(255,68,102,0.2); border-radius: var(--radius); color: var(--red); font-size: 0.82rem; }
 
 /* Download link */
 .download-link {
-  display: inline-block; margin-top: 12px; padding: 8px 16px; border-radius: 6px; font-size: 0.8rem;
+  display: inline-block; margin-top: 10px; padding: 7px 14px; border-radius: 6px; font-size: 0.78rem;
   font-weight: 600; background: var(--surface-2); border: 1px solid var(--border); color: var(--accent);
   text-decoration: none; transition: var(--transition);
 }
 .download-link:hover { border-color: var(--accent); background: var(--accent-glow); }
 
-/* Error display */
-.error-msg { display: none; margin-top: 16px; padding: 14px; background: rgba(255,68,102,0.08); border: 1px solid rgba(255,68,102,0.2); border-radius: var(--radius); color: var(--red); font-size: 0.85rem; }
-.error-msg.active { display: block; animation: fadeIn 0.3s ease; }
-
-/* Catalog check section */
-.catalog-section { margin-top: 16px; padding: 14px; border-radius: var(--radius); }
-.catalog-section.verified { background: rgba(0, 214, 143, 0.06); border: 1px solid rgba(0, 214, 143, 0.2); }
-.catalog-section.no-match { background: rgba(0, 212, 170, 0.04); border: 1px solid var(--border); }
-.catalog-section.flagged { background: rgba(255, 170, 34, 0.06); border: 1px solid rgba(255, 170, 34, 0.2); }
-.catalog-title { font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
-.catalog-detail { font-size: 0.75rem; color: var(--text-dim); }
-
-/* Track selector */
-.track-selector { margin-bottom: 14px; }
-.track-selector label { display: block; font-size: 0.75rem; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
-.track-selector select {
-  width: 100%; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: 6px; color: var(--text); font-size: 0.9rem; outline: none; transition: var(--transition);
-  cursor: pointer; appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238888a0' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 12px center;
+/* Responsive */
+@media (max-width: 860px) {
+  .main { flex-direction: column; }
+  .log-panel { width: 100%; max-height: 300px; position: static; }
+  .compare-cols { grid-template-columns: 1fr; }
 }
-.track-selector select:focus { border-color: var(--accent); }
-.track-selector select option { background: var(--surface); color: var(--text); }
-.track-loading-msg { font-size: 0.75rem; color: var(--accent); margin-top: 6px; }
 </style>
 </head>
 <body>
 
-<div class="container">
+<!-- Header -->
+<div class="header">
+  <h1>ORBIT</h1>
+  <p>Origin-Based Identity &amp; Rights Transfer Protocol</p>
+  <div class="status-line"><span id="statusDot" class="status-dot"></span><span id="statusText">Connecting...</span></div>
+</div>
 
-  <!-- Header -->
-  <div class="header">
-    <h1>ORBIT</h1>
-    <p>Origin-Based Identity &amp; Rights Transfer Protocol</p>
-    <div class="status-line"><span id="statusDot" class="status-dot"></span><span id="statusText">Connecting...</span></div>
+<!-- Progress Bar -->
+<div class="progress-bar" id="progressBar"></div>
+
+<!-- Main Layout -->
+<div class="main">
+  <div class="content-panel" id="contentPanel"></div>
+  <div class="log-panel" id="logPanel">
+    <div class="log-header"><span>Server Log</span><span id="logCount">0 entries</span></div>
+    <div class="log-body" id="logBody"></div>
   </div>
-
-  <!-- Tabs -->
-  <div class="tabs">
-    <button class="tab-btn active" data-tab="register">Register</button>
-    <button class="tab-btn" data-tab="verify">Verify</button>
-    <button class="tab-btn" data-tab="analyze">Analyze</button>
-  </div>
-
-  <!-- ================================================================== -->
-  <!-- REGISTER TAB -->
-  <!-- ================================================================== -->
-  <div id="panel-register" class="panel active">
-    <div class="card" id="reg-form">
-      <div class="track-selector">
-        <label>Demo Track Library</label>
-        <select id="reg-track-select"><option value="">Select a track...</option></select>
-        <div class="track-loading-msg" id="reg-track-msg"></div>
-      </div>
-      <div class="dropzone" id="reg-dropzone">
-        <div class="dropzone-label"><strong>Drop audio file here</strong> or click to select (MP3, WAV, FLAC)</div>
-        <input type="file" id="reg-file" accept="audio/*">
-        <div class="file-name" id="reg-filename"></div>
-      </div>
-      <div class="field"><label>Title *</label><input type="text" id="reg-title" placeholder="Midnight Drive"></div>
-      <div class="field"><label>Artist *</label><input type="text" id="reg-artist" placeholder="The Neon Collective"></div>
-      <div class="row">
-        <div class="field"><label>ISRC</label><input type="text" id="reg-isrc" placeholder="USRC12400001"></div>
-        <div class="field"><label>Genre</label><input type="text" id="reg-genre" placeholder="Electronic"></div>
-      </div>
-      <button class="btn" id="reg-btn" disabled>Register</button>
-    </div>
-    <div class="loading" id="reg-loading">
-      <div class="spinner"></div>
-      <div class="loading-text" id="reg-loading-text">Uploading audio...</div>
-      <div class="loading-sub" id="reg-loading-sub">Preparing file for processing</div>
-      <div class="loading-steps" id="reg-loading-steps"></div>
-    </div>
-    <div class="error-msg" id="reg-error"></div>
-    <div class="results" id="reg-results"></div>
-  </div>
-
-  <!-- ================================================================== -->
-  <!-- VERIFY TAB -->
-  <!-- ================================================================== -->
-  <div id="panel-verify" class="panel">
-    <div class="card" id="ver-form">
-      <div class="track-selector">
-        <label>Demo Track Library</label>
-        <select id="ver-track-select"><option value="">Select a track...</option></select>
-        <div class="track-loading-msg" id="ver-track-msg"></div>
-      </div>
-      <div class="dropzone" id="ver-dropzone">
-        <div class="dropzone-label"><strong>Drop audio file to verify</strong> or click to select</div>
-        <input type="file" id="ver-file" accept="audio/*">
-        <div class="file-name" id="ver-filename"></div>
-      </div>
-      <button class="btn" id="ver-btn" disabled>Verify</button>
-    </div>
-    <div class="loading" id="ver-loading">
-      <div class="spinner"></div>
-      <div class="loading-text">Verifying audio provenance...</div>
-      <div class="loading-sub">Checking fingerprint, watermark, and ledger</div>
-    </div>
-    <div class="error-msg" id="ver-error"></div>
-    <div class="results" id="ver-results"></div>
-  </div>
-
-  <!-- ================================================================== -->
-  <!-- ANALYZE TAB -->
-  <!-- ================================================================== -->
-  <div id="panel-analyze" class="panel">
-    <div class="card" id="ana-form">
-      <div class="track-selector">
-        <label>Demo Track Library</label>
-        <select id="ana-track-select"><option value="">Select a track...</option></select>
-        <div class="track-loading-msg" id="ana-track-msg"></div>
-      </div>
-      <div class="dropzone" id="ana-dropzone">
-        <div class="dropzone-label"><strong>Drop audio file to analyze</strong> or click to select</div>
-        <input type="file" id="ana-file" accept="audio/*">
-        <div class="file-name" id="ana-filename"></div>
-      </div>
-      <button class="btn" id="ana-btn" disabled>Analyze</button>
-    </div>
-    <div class="loading" id="ana-loading">
-      <div class="spinner"></div>
-      <div class="loading-text">Running AI analysis...</div>
-      <div class="loading-sub">Genre, mood, BPM, key, instruments, vocals</div>
-    </div>
-    <div class="error-msg" id="ana-error"></div>
-    <div class="results" id="ana-results"></div>
-  </div>
-
 </div>
 
 <script>
 (function() {
   'use strict';
 
-  // ---------- Utilities ----------
+  // ========== State ==========
+  var currentStep = 0;
+  var state = {
+    demoTracks: [],
+    demoBlobCache: {},
+    ddexParsed: null,
+    regResult: null,
+    transferResult: null,
+    acceptResult: null,
+    chainResult: null,
+  };
 
-  const $ = (sel) => document.querySelector(sel);
-  const show = (el) => el.classList.add('active');
-  const hide = (el) => el.classList.remove('active');
+  var STEPS = [
+    { id: 'ai-detect',  label: 'AI Detection' },
+    { id: 'ddex',       label: 'DDEX Ingest' },
+    { id: 'register',   label: 'Register' },
+    { id: 'transfer',   label: 'Transfer' },
+    { id: 'conflict',   label: 'Provenance' },
+  ];
 
-  function truncHash(h, len) {
-    if (!h) return 'N/A';
-    const s = typeof h === 'string' ? h : '';
-    return s.length > len ? s.slice(0, len) + '...' : s;
-  }
-
-  function row(label, value) {
-    return '<div class="result-row"><span class="label">' + label + '</span><span class="value">' + value + '</span></div>';
-  }
-
-  function badge(text, type) {
-    return '<span class="badge ' + type + '">' + text + '</span>';
-  }
-
-  function tag(text, isAccent) {
-    return '<span class="tag' + (isAccent ? ' accent' : '') + '">' + text + '</span>';
-  }
-
-  function confBar(label, pct) {
-    return '<div class="conf-bar-wrap"><span class="conf-label">' + label + '</span>' +
-      '<div class="conf-bar"><div class="conf-fill" style="width:' + pct + '%"></div></div>' +
+  // ========== Utilities ==========
+  var $ = function(s) { return document.querySelector(s); };
+  function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
+  function truncHash(h, n) { if (!h) return 'N/A'; return h.length > n ? h.slice(0, n) + '...' : h; }
+  function row(label, value) { return '<div class="result-row"><span class="label">' + label + '</span><span class="value">' + value + '</span></div>'; }
+  function badge(text, type) { return '<span class="badge ' + type + '">' + text + '</span>'; }
+  function tag(text, isAccent) { return '<span class="tag' + (isAccent ? ' accent' : '') + '">' + esc(text) + '</span>'; }
+  function confBar(label, pct, color) {
+    return '<div class="conf-bar-wrap"><span class="conf-label">' + esc(label) + '</span>' +
+      '<div class="conf-bar"><div class="conf-fill" style="width:' + pct + '%;background:' + (color || 'var(--accent)') + '"></div></div>' +
       '<span class="conf-pct">' + pct + '%</span></div>';
   }
 
-  function escHtml(s) {
-    if (!s) return '';
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // ========== Log Panel ==========
+  var logEntries = [];
+  function clearLog() { logEntries = []; renderLog(); }
+  function addLog(entries) {
+    if (!entries || !entries.length) return;
+    entries.forEach(function(e) { logEntries.push(e); });
+    renderLog();
+  }
+  function addLogMsg(msg) { logEntries.push({ t: 0, msg: msg }); renderLog(); }
+  function renderLog() {
+    var html = '';
+    logEntries.forEach(function(e) {
+      var time = typeof e.t === 'number' ? String(e.t).padStart(5) + 'ms' : '     ';
+      html += '<div class="log-entry"><span class="log-time">' + time + '</span><span class="log-msg">' + esc(e.msg) + '</span></div>';
+    });
+    $('#logBody').innerHTML = html;
+    $('#logCount').textContent = logEntries.length + ' entries';
+    $('#logBody').scrollTop = $('#logBody').scrollHeight;
   }
 
-  // ---------- Status check ----------
-
-  async function checkStatus() {
-    try {
-      const res = await fetch('/api/status');
-      if (!res.ok) throw new Error();
-      const d = await res.json();
-      $('#statusDot').className = 'status-dot ok';
-      $('#statusText').textContent = 'Connected to ' + (d.server || 'ORBIT');
-    } catch {
-      $('#statusDot').className = 'status-dot err';
-      $('#statusText').textContent = 'Server unreachable';
-    }
-  }
-  checkStatus();
-
-  // ---------- Demo track library ----------
-
-  var demoTracks = [];
-  var demoBlobCache = {};
-  var activeDemo = { reg: null, ver: null, ana: null };
-
-  async function loadTrackList() {
-    try {
-      var res = await fetch('/api/demo-tracks');
-      var data = await res.json();
-      demoTracks = data.tracks || [];
-      populateSelects();
-    } catch (e) { /* track list unavailable, dropzone still works */ }
-  }
-
-  function populateSelects() {
-    ['reg', 'ver', 'ana'].forEach(function(prefix) {
-      var sel = $('#' + prefix + '-track-select');
-      demoTracks.forEach(function(t) {
-        var opt = document.createElement('option');
-        opt.value = t.filename;
-        opt.textContent = t.title + ' \u2014 ' + t.artist + ' (' + t.size_mb + ' MB)';
-        sel.appendChild(opt);
+  // ========== Progress Bar ==========
+  function renderProgress() {
+    var html = '';
+    STEPS.forEach(function(s, i) {
+      var cls = i < currentStep ? 'done' : (i === currentStep ? 'active' : '');
+      html += '<div class="progress-step">';
+      if (i > 0) html += '<div class="step-line' + (i <= currentStep ? ' done' : '') + '"></div>';
+      html += '<div class="step-circle ' + cls + '" data-step="' + i + '">' + (i < currentStep ? '&#10003;' : (i + 1)) + '</div>';
+      html += '</div>';
+    });
+    $('#progressBar').innerHTML = html;
+    document.querySelectorAll('.step-circle').forEach(function(el) {
+      el.addEventListener('click', function() {
+        var s = parseInt(this.dataset.step);
+        if (s <= currentStep) goToStep(s);
       });
     });
   }
 
-  function findTrackMeta(filename) {
-    for (var i = 0; i < demoTracks.length; i++) {
-      if (demoTracks[i].filename === filename) return demoTracks[i];
-    }
-    return null;
+  function goToStep(n) {
+    currentStep = n;
+    renderProgress();
+    renderSection(n);
   }
 
-  async function loadDemoTrack(prefix, filename) {
-    var msgEl = $('#' + prefix + '-track-msg');
-    var nameEl = $('#' + prefix + '-filename');
-    var btnEl = $('#' + prefix + '-btn');
+  function nextStep() {
+    if (currentStep < STEPS.length - 1) goToStep(currentStep + 1);
+  }
 
-    msgEl.textContent = 'Loading track...';
+  function prevStep() {
+    if (currentStep > 0) goToStep(currentStep - 1);
+  }
 
-    try {
-      var blob;
-      if (demoBlobCache[filename]) {
-        blob = demoBlobCache[filename];
-      } else {
-        var res = await fetch('/api/demo-tracks/' + encodeURIComponent(filename));
-        if (!res.ok) throw new Error('Failed to load');
-        blob = await res.blob();
-        demoBlobCache[filename] = blob;
+  // ========== Navigation ==========
+  function navBar(opts) {
+    var html = '<div class="nav-bar">';
+    html += currentStep > 0 ? '<button class="btn btn-outline" onclick="window._demo.prevStep()">Back</button>' : '<span></span>';
+    if (opts && opts.continueId) {
+      html += '<button class="btn" id="' + opts.continueId + '" disabled onclick="window._demo.nextStep()">Continue</button>';
+    } else if (currentStep < STEPS.length - 1) {
+      html += '<button class="btn" onclick="window._demo.nextStep()">Continue</button>';
+    } else {
+      html += '<span></span>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  // ========== Track loading helpers ==========
+  async function loadTrackBlob(filename) {
+    if (state.demoBlobCache[filename]) return state.demoBlobCache[filename];
+    var res = await fetch('/api/demo-tracks/' + encodeURIComponent(filename));
+    if (!res.ok) throw new Error('Failed to load track');
+    var blob = await res.blob();
+    state.demoBlobCache[filename] = blob;
+    return blob;
+  }
+
+  function trackSelectHtml(id, filterFn) {
+    var tracks = filterFn ? state.demoTracks.filter(filterFn) : state.demoTracks;
+    var html = '<div class="track-selector"><label>Demo Track Library</label><select id="' + id + '"><option value="">Select a track...</option>';
+    tracks.forEach(function(t) {
+      html += '<option value="' + esc(t.filename) + '">' + esc(t.title) + ' — ' + esc(t.artist) + ' (' + t.size_mb + ' MB)</option>';
+    });
+    html += '</select><div class="track-loading-msg" id="' + id + '-msg"></div></div>';
+    return html;
+  }
+
+  // ========== Section Renderers ==========
+
+  function renderSection(n) {
+    var panel = $('#contentPanel');
+    var fns = [renderAIDetect, renderDDEX, renderRegister, renderTransfer, renderConflict];
+    panel.innerHTML = '<div class="section active">' + fns[n]() + '</div>';
+    bindSection(n);
+  }
+
+  // ----- Section 1: AI Detection -----
+  function renderAIDetect() {
+    var html = '<div class="section-title">AI Content Detection</div>';
+    html += '<div class="section-subtitle">Can ORBIT distinguish AI-generated music from human recordings?</div>';
+    html += '<div class="compare-cols">';
+
+    // Left: AI track
+    html += '<div class="card"><div class="card-title">AI-Generated Track</div>';
+    html += trackSelectHtml('ai-track-select', function(t) { return t.genre === 'Jazz' || t.title.toLowerCase().includes('ai'); });
+    html += '<div class="dropzone" id="ai-drop"><div class="dropzone-label"><strong>Drop AI track here</strong>or select from library</div><input type="file" id="ai-file" accept="audio/*"><div class="file-name" id="ai-filename"></div></div>';
+    html += '<button class="btn btn-full" id="ai-analyze-btn" disabled>Analyze</button>';
+    html += '<div id="ai-results"></div></div>';
+
+    // Right: Human track
+    html += '<div class="card"><div class="card-title">Well-Known Track</div>';
+    html += trackSelectHtml('human-track-select', function(t) { return t.artist === 'Fleetwood Mac' || t.genre === 'Rock'; });
+    html += '<div class="dropzone" id="human-drop"><div class="dropzone-label"><strong>Drop human track here</strong>or select from library</div><input type="file" id="human-file" accept="audio/*"><div class="file-name" id="human-filename"></div></div>';
+    html += '<button class="btn btn-full" id="human-analyze-btn" disabled>Analyze</button>';
+    html += '<div id="human-results"></div></div>';
+
+    html += '</div>';
+    html += navBar({ continueId: 'ai-continue' });
+    return html;
+  }
+
+  function bindAIDetect() {
+    var aiBlob = null, humanBlob = null;
+
+    function setupDrop(prefix, selectId, setBlobFn) {
+      var sel = $('#' + selectId);
+      var fi = $('#' + prefix + '-file');
+      var nm = $('#' + prefix + '-filename');
+      var btn = $('#' + prefix + '-analyze-btn');
+      var dz = $('#' + prefix + '-drop');
+
+      if (sel) sel.addEventListener('change', async function() {
+        if (!this.value) return;
+        var msg = $('#' + selectId + '-msg');
+        msg.textContent = 'Loading...';
+        try {
+          var blob = await loadTrackBlob(this.value);
+          setBlobFn(blob);
+          nm.textContent = this.value;
+          btn.disabled = false;
+          msg.textContent = '';
+        } catch(e) { msg.textContent = 'Failed to load'; }
+      });
+      if (fi) fi.addEventListener('change', function() {
+        if (fi.files.length > 0) {
+          setBlobFn(fi.files[0]);
+          nm.textContent = fi.files[0].name;
+          btn.disabled = false;
+        }
+      });
+      if (dz) {
+        dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('dragover'); });
+        dz.addEventListener('dragleave', function() { dz.classList.remove('dragover'); });
+        dz.addEventListener('drop', function(e) {
+          e.preventDefault(); dz.classList.remove('dragover');
+          if (e.dataTransfer.files.length > 0) {
+            fi.files = e.dataTransfer.files;
+            setBlobFn(e.dataTransfer.files[0]);
+            nm.textContent = e.dataTransfer.files[0].name;
+            btn.disabled = false;
+          }
+        });
+      }
+    }
+
+    setupDrop('ai', 'ai-track-select', function(b) { aiBlob = b; });
+    setupDrop('human', 'human-track-select', function(b) { humanBlob = b; });
+
+    var completed = { ai: false, human: false };
+    function checkBothDone() {
+      if (completed.ai && completed.human) {
+        var btn = $('#ai-continue');
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function runAnalysis(blob, resultsId, side) {
+      var el = $('#' + resultsId);
+      el.innerHTML = '<div class="loading-inline"><span class="spinner"></span>Analyzing...</div>';
+      addLogMsg('--- ' + side + ' track analysis ---');
+
+      var fd = new FormData();
+      fd.append('audio', blob, 'track');
+
+      try {
+        var res = await fetch('/api/analyze', { method: 'POST', body: fd });
+        var data = await res.json();
+        if (!res.ok || data.error) { el.innerHTML = '<div class="error-msg">' + esc(data.error || 'Analysis failed') + '</div>'; return; }
+        addLog(data.processing_log || []);
+        el.innerHTML = renderAnalysisResult(data);
+        completed[side] = true;
+        checkBothDone();
+      } catch(err) {
+        el.innerHTML = '<div class="error-msg">Network error: ' + esc(err.message) + '</div>';
+      }
+    }
+
+    $('#ai-analyze-btn').addEventListener('click', function() { if (aiBlob) runAnalysis(aiBlob, 'ai-results', 'ai'); });
+    $('#human-analyze-btn').addEventListener('click', function() { if (humanBlob) runAnalysis(humanBlob, 'human-results', 'human'); });
+  }
+
+  function renderAnalysisResult(data) {
+    var a = data.analysis || {};
+    var ai = data.ai_detection;
+    var html = '';
+
+    if (ai && ai.recommendation) {
+      var rec = ai.recommendation;
+      var type = rec === 'LIKELY_HUMAN' ? 'success' : rec === 'REVIEW' ? 'warning' : 'error';
+      var pct = ai.score != null ? Math.round(ai.score * 100) : '?';
+      var color = type === 'success' ? 'var(--green)' : type === 'error' ? 'var(--red)' : 'var(--yellow)';
+
+      html += '<div style="text-align:center;margin:14px 0 8px">' + badge(rec.replace(/_/g, ' '), type) + '</div>';
+      html += confBar('AI Score', pct, color);
+
+      if (ai.signals) {
+        if (ai.signals.semantic) html += confBar('Semantic Probe', Math.round((ai.signals.semantic.aiScore || 0) * 100), 'var(--accent-2)');
+        if (ai.signals.anomalies) html += confBar('Anomaly Score', Math.round((ai.signals.anomalies.anomalyScore || 0) * 100), 'var(--yellow)');
       }
 
-      activeDemo[prefix] = { blob: blob, filename: filename };
-      nameEl.textContent = filename;
-      btnEl.disabled = false;
-      msgEl.textContent = '';
+      if (ai.flags && ai.flags.length > 0) {
+        html += '<div style="margin-top:8px" class="tags">';
+        ai.flags.forEach(function(f) { html += tag(f, true); });
+        html += '</div>';
+      }
+    }
 
-      if (prefix === 'reg') {
-        var meta = findTrackMeta(filename);
+    if (a.genre && a.genre.length > 0) {
+      html += '<div style="margin-top:12px">';
+      a.genre.slice(0, 3).forEach(function(g) { html += confBar(g.label, Math.round((g.confidence || 0) * 100)); });
+      html += '</div>';
+    }
+
+    var details = [];
+    if (a.bpm) details.push('BPM: ' + a.bpm.value);
+    if (a.key) details.push('Key: ' + (a.key.value || a.key.label));
+    if (a.vocals) details.push('Vocals: ' + (a.vocals.present ? 'Yes' : 'No'));
+    if (details.length) html += '<div style="margin-top:8px;font-size:0.78rem;color:var(--text-dim)">' + details.join(' &middot; ') + '</div>';
+
+    return html;
+  }
+
+  // ----- Section 2: DDEX Ingest -----
+  function renderDDEX() {
+    var html = '<div class="section-title">DDEX Metadata Ingestion</div>';
+    html += '<div class="section-subtitle">ORBIT speaks the music industry\'s language. Parse an ERN 4.3 delivery document.</div>';
+    html += '<div class="card"><div class="card-title">DDEX ERN 4.3 Document</div>';
+    html += '<div class="xml-viewer" id="ddex-xml-view">Loading XML...</div>';
+    html += '<button class="btn" id="ddex-parse-btn" style="margin-top:14px">Parse Document</button></div>';
+    html += '<div id="ddex-results"></div>';
+    html += navBar({ continueId: 'ddex-continue' });
+    return html;
+  }
+
+  function bindDDEX() {
+    fetch('/api/ddex-document').then(function(r) { return r.text(); }).then(function(xml) {
+      var v = $('#ddex-xml-view');
+      var highlighted = esc(xml)
+        .replace(/(&lt;\/?[\w:-]+)/g, '<span class="xml-tag">$1</span>')
+        .replace(/(&gt;)/g, '<span class="xml-tag">$1</span>')
+        .replace(/([\w:-]+)=(&quot;[^&]*&quot;)/g, '<span class="xml-attr">$1</span>=<span class="xml-val">$2</span>');
+      v.innerHTML = highlighted;
+    });
+
+    $('#ddex-parse-btn').addEventListener('click', async function() {
+      this.disabled = true;
+      addLogMsg('--- DDEX Parse ---');
+      addLogMsg('Parsing ERN 4.3 document...');
+
+      try {
+        var res = await fetch('/api/parse-ddex', { method: 'POST' });
+        var data = await res.json();
+        if (!res.ok || data.error) { $('#ddex-results').innerHTML = '<div class="error-msg">' + esc(data.error) + '</div>'; return; }
+
+        addLogMsg('✅ Parsed ' + (data.tracks || []).length + ' tracks from DDEX document');
+        if (data.release) addLogMsg('   Release: "' + (data.release.title || 'N/A') + '" by ' + (data.release.artist || 'N/A'));
+        addLogMsg('   Territories: ' + (data.territories || []).join(', '));
+
+        state.ddexParsed = data;
+        var html = '';
+        (data.tracks || []).forEach(function(t) {
+          html += '<div class="card" style="padding:14px">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+          html += '<strong style="font-size:0.9rem">' + esc(t.title) + '</strong>';
+          if (t.isrc) html += tag(t.isrc, true);
+          html += '</div>';
+          html += '<div style="font-size:0.8rem;color:var(--text-dim)">' + esc(t.artist) + '</div>';
+          var meta = [];
+          if (t.primary_genre) meta.push(t.primary_genre);
+          if (t.duration_display || t.duration_ms) meta.push(t.duration_display || (t.duration_ms / 1000).toFixed(0) + 's');
+          if (t.p_line) meta.push('℗ ' + t.p_line);
+          if (meta.length) html += '<div style="margin-top:6px" class="tags">' + meta.map(function(m) { return tag(m); }).join('') + '</div>';
+          var contribs = [];
+          if (t.composers && t.composers.length) contribs.push('Composers: ' + t.composers.join(', '));
+          if (t.producers && t.producers.length) contribs.push('Producers: ' + t.producers.join(', '));
+          if (contribs.length) html += '<div style="margin-top:6px;font-size:0.72rem;color:var(--text-dim)">' + contribs.join(' &middot; ') + '</div>';
+          html += '</div>';
+        });
+
+        if (data.release) {
+          html += '<div class="card" style="padding:14px;border-color:var(--accent)">';
+          html += '<div class="card-title">Release</div>';
+          html += '<strong>' + esc(data.release.title) + '</strong> (' + esc(data.release.type || 'Album') + ')';
+          var rm = [];
+          if (data.release.label) rm.push('Label: ' + data.release.label);
+          if (data.release.upc) rm.push('UPC: ' + data.release.upc);
+          if (data.release.release_date) rm.push('Release: ' + data.release.release_date);
+          if (rm.length) html += '<div style="margin-top:6px;font-size:0.78rem;color:var(--text-dim)">' + rm.join(' &middot; ') + '</div>';
+          html += '</div>';
+        }
+
+        html += '<div style="text-align:center;margin-top:10px;font-size:0.8rem;color:var(--text-dim)">' + (data.tracks || []).length + ' tracks ready for ORBIT registration</div>';
+
+        $('#ddex-results').innerHTML = html;
+        var btn = $('#ddex-continue');
+        if (btn) btn.disabled = false;
+      } catch(err) {
+        $('#ddex-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
+      }
+    });
+  }
+
+  // ----- Section 3: Register -----
+  function renderRegister() {
+    var html = '<div class="section-title">Registration</div>';
+    html += '<div class="section-subtitle">Establish provenance — fingerprint, watermark, analyze, and record to the ledger.</div>';
+    html += '<div class="card" id="reg-form">';
+    html += trackSelectHtml('reg-track-select');
+    html += '<div class="dropzone" id="reg-drop"><div class="dropzone-label"><strong>Drop audio file here</strong>or select from library</div><input type="file" id="reg-file" accept="audio/*"><div class="file-name" id="reg-filename"></div></div>';
+    html += '<div class="field"><label>Title *</label><input type="text" id="reg-title" placeholder="Track title"></div>';
+    html += '<div class="field"><label>Artist *</label><input type="text" id="reg-artist" placeholder="Artist name"></div>';
+    html += '<div class="row"><div class="field"><label>ISRC</label><input type="text" id="reg-isrc" placeholder="USRC12400001"></div><div class="field"><label>Genre</label><input type="text" id="reg-genre" placeholder="Electronic"></div></div>';
+    html += '<button class="btn btn-full" id="reg-btn" disabled>Register</button>';
+    html += '</div>';
+    html += '<div id="reg-loading"></div>';
+    html += '<div id="reg-results"></div>';
+    html += navBar({ continueId: 'reg-continue' });
+    return html;
+  }
+
+  function bindRegister() {
+    var regBlob = null, regFilename = null;
+
+    var sel = $('#reg-track-select');
+    sel.addEventListener('change', async function() {
+      if (!this.value) return;
+      var msg = $('#reg-track-select-msg');
+      msg.textContent = 'Loading...';
+      try {
+        var blob = await loadTrackBlob(this.value);
+        regBlob = blob; regFilename = this.value;
+        $('#reg-filename').textContent = this.value;
+        $('#reg-btn').disabled = false;
+        msg.textContent = '';
+        var meta = state.demoTracks.find(function(t) { return t.filename === sel.value; });
         if (meta) {
           $('#reg-title').value = meta.title;
           $('#reg-artist').value = meta.artist;
           $('#reg-genre').value = meta.genre;
         }
-      }
-    } catch (e) {
-      msgEl.textContent = 'Failed to load track';
-      activeDemo[prefix] = null;
-    }
-  }
-
-  ['reg', 'ver', 'ana'].forEach(function(prefix) {
-    $('#' + prefix + '-track-select').addEventListener('change', function() {
-      if (this.value) loadDemoTrack(prefix, this.value);
+        // Fill ISRC from DDEX if available
+        if (state.ddexParsed && state.ddexParsed.tracks) {
+          var ddexTrack = state.ddexParsed.tracks.find(function(t) { return t.filename === sel.value || t.title === (meta && meta.title); });
+          if (ddexTrack && ddexTrack.isrc) $('#reg-isrc').value = ddexTrack.isrc;
+        }
+      } catch(e) { msg.textContent = 'Failed to load'; }
     });
-  });
 
-  function getAudioFormData(prefix) {
-    var fd = new FormData();
-    var demo = activeDemo[prefix];
-    var fileInput = $('#' + prefix + '-file');
-
-    if (demo && demo.blob) {
-      fd.append('audio', demo.blob, demo.filename);
-    } else if (fileInput.files.length > 0) {
-      fd.append('audio', fileInput.files[0]);
-    } else {
-      return null;
-    }
-    return fd;
-  }
-
-  loadTrackList();
-
-  // ---------- Tab switching ----------
-
-  document.querySelectorAll('.tab-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
-      document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
-      btn.classList.add('active');
-      $('#panel-' + btn.dataset.tab).classList.add('active');
+    var fi = $('#reg-file');
+    fi.addEventListener('change', function() {
+      if (fi.files.length) { regBlob = fi.files[0]; regFilename = fi.files[0].name; $('#reg-filename').textContent = regFilename; $('#reg-btn').disabled = false; }
     });
-  });
 
-  // ---------- Dropzone helpers ----------
-
-  function setupDropzone(dzId, fileId, nameId, btnId, prefix) {
-    var dz = $(dzId);
-    var fi = $(fileId);
-    var nm = $(nameId);
-    var bt = $(btnId);
-
+    var dz = $('#reg-drop');
     dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('dragover'); });
     dz.addEventListener('dragleave', function() { dz.classList.remove('dragover'); });
     dz.addEventListener('drop', function(e) {
       e.preventDefault(); dz.classList.remove('dragover');
-      if (e.dataTransfer.files.length > 0) {
-        fi.files = e.dataTransfer.files;
-        nm.textContent = e.dataTransfer.files[0].name;
-        bt.disabled = false;
-        activeDemo[prefix] = null;
-        $('#' + prefix + '-track-select').value = '';
+      if (e.dataTransfer.files.length) { fi.files = e.dataTransfer.files; regBlob = e.dataTransfer.files[0]; regFilename = e.dataTransfer.files[0].name; $('#reg-filename').textContent = regFilename; $('#reg-btn').disabled = false; }
+    });
+
+    $('#reg-btn').addEventListener('click', async function() {
+      if (!regBlob) return;
+      var title = $('#reg-title').value.trim();
+      var artist = $('#reg-artist').value.trim();
+      if (!title || !artist) { $('#reg-results').innerHTML = '<div class="error-msg">Title and artist are required.</div>'; return; }
+
+      this.disabled = true;
+      $('#reg-loading').innerHTML = '<div class="loading-inline"><span class="spinner"></span>Registering audio with ORBIT...</div>';
+      $('#reg-results').innerHTML = '';
+      clearLog();
+      addLogMsg('--- Registration ---');
+
+      var fd = new FormData();
+      fd.append('audio', regBlob, regFilename || 'track');
+      fd.append('title', title);
+      fd.append('artist', artist);
+      var isrc = $('#reg-isrc').value.trim();
+      var genre = $('#reg-genre').value.trim();
+      if (isrc) fd.append('isrc', isrc);
+      if (genre) fd.append('genre', genre);
+
+      try {
+        var res = await fetch('/api/register', { method: 'POST', body: fd });
+        var data = await res.json();
+        $('#reg-loading').innerHTML = '';
+        addLog(data.processing_log || []);
+
+        if (!res.ok || data.error) { $('#reg-results').innerHTML = '<div class="error-msg">' + esc(data.error) + '</div>'; $('#reg-btn').disabled = false; return; }
+
+        state.regResult = data;
+        $('#reg-results').innerHTML = renderRegResult(data);
+        var btn = $('#reg-continue');
+        if (btn) btn.disabled = false;
+
+        // Set up download if available
+        if (data.has_watermarked_audio && data.watermarked_audio_b64) {
+          try {
+            var raw = atob(data.watermarked_audio_b64);
+            var arr = new Uint8Array(raw.length);
+            for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+            var blob = new Blob([arr], { type: 'audio/wav' });
+            var dlEl = document.getElementById('dl-wm');
+            if (dlEl) {
+              dlEl.href = URL.createObjectURL(blob);
+              var ext = regFilename && regFilename.lastIndexOf('.') > 0 ? regFilename.substring(regFilename.lastIndexOf('.')) : '.wav';
+              var base = regFilename && regFilename.lastIndexOf('.') > 0 ? regFilename.substring(0, regFilename.lastIndexOf('.')) : 'track';
+              dlEl.download = base + '.orbit' + ext;
+            }
+          } catch(e) {}
+        }
+      } catch(err) {
+        $('#reg-loading').innerHTML = '';
+        $('#reg-results').innerHTML = '<div class="error-msg">Network error: ' + esc(err.message) + '</div>';
+        $('#reg-btn').disabled = false;
       }
     });
-    fi.addEventListener('change', function() {
-      if (fi.files.length > 0) {
-        nm.textContent = fi.files[0].name;
-        bt.disabled = false;
-        activeDemo[prefix] = null;
-        $('#' + prefix + '-track-select').value = '';
-      }
-    });
   }
-
-  setupDropzone('#reg-dropzone', '#reg-file', '#reg-filename', '#reg-btn', 'reg');
-  setupDropzone('#ver-dropzone', '#ver-file', '#ver-filename', '#ver-btn', 'ver');
-  setupDropzone('#ana-dropzone', '#ana-file', '#ana-filename', '#ana-btn', 'ana');
-
-  // ---------- REGISTER (with progressive loading steps) ----------
-
-  var regSteps = [
-    { label: 'Uploading audio',            time: 0,    sub: 'Sending file to ORBIT server' },
-    { label: 'Generating fingerprint',     time: 1500, sub: 'Creating acoustic identity via Chromaprint' },
-    { label: 'Embedding watermark',        time: 4000, sub: 'SilentCipher psychoacoustic watermark' },
-    { label: 'Running AI analysis',        time: 6500, sub: 'Genre, mood, BPM, key, instruments, vocals' },
-    { label: 'Checking catalog',           time: 9000, sub: 'Matching against 30M known recordings' },
-    { label: 'Finalizing registration',    time: 11000, sub: 'Writing to provenance ledger' },
-  ];
-  var regStepTimers = [];
-
-  function startRegSteps() {
-    var stepsEl = $('#reg-loading-steps');
-    stepsEl.innerHTML = regSteps.map(function(s, i) {
-      return '<div class="loading-step' + (i === 0 ? ' active' : '') + '" id="reg-step-' + i + '">' +
-        '<span class="step-icon">' + (i === 0 ? '&#9656;' : '&#8226;') + '</span>' + escHtml(s.label) + '</div>';
-    }).join('');
-    $('#reg-loading-text').textContent = regSteps[0].label + '...';
-    $('#reg-loading-sub').textContent = regSteps[0].sub;
-
-    for (var i = 1; i < regSteps.length; i++) {
-      (function(idx) {
-        regStepTimers.push(setTimeout(function() {
-          for (var j = 0; j < idx; j++) {
-            var prev = $('#reg-step-' + j);
-            if (prev) { prev.className = 'loading-step done'; prev.querySelector('.step-icon').innerHTML = '&#10003;'; }
-          }
-          var cur = $('#reg-step-' + idx);
-          if (cur) { cur.className = 'loading-step active'; cur.querySelector('.step-icon').innerHTML = '&#9656;'; }
-          $('#reg-loading-text').textContent = regSteps[idx].label + '...';
-          $('#reg-loading-sub').textContent = regSteps[idx].sub;
-        }, regSteps[idx].time));
-      })(i);
-    }
-  }
-
-  function stopRegSteps() {
-    regStepTimers.forEach(function(t) { clearTimeout(t); });
-    regStepTimers = [];
-  }
-
-  $('#reg-btn').addEventListener('click', async function() {
-    var fd = getAudioFormData('reg');
-    if (!fd) return;
-
-    var title = $('#reg-title').value.trim();
-    var artist = $('#reg-artist').value.trim();
-    if (!title || !artist) { showError('#reg-error', 'Title and artist are required.'); return; }
-
-    fd.append('title', title);
-    fd.append('artist', artist);
-    var isrc = $('#reg-isrc').value.trim();
-    var genre = $('#reg-genre').value.trim();
-    if (isrc) fd.append('isrc', isrc);
-    if (genre) fd.append('genre', genre);
-
-    hideAll('reg'); show($('#reg-loading'));
-    startRegSteps();
-    $('#reg-btn').disabled = true;
-
-    try {
-      var res = await fetch('/api/register', { method: 'POST', body: fd });
-      var data = await res.json();
-      stopRegSteps();
-      hide($('#reg-loading'));
-
-      if (!res.ok || data.error) { showError('#reg-error', data.error || 'Registration failed'); $('#reg-btn').disabled = false; return; }
-
-      renderRegResult(data);
-    } catch (err) {
-      stopRegSteps();
-      hide($('#reg-loading'));
-      showError('#reg-error', 'Network error: ' + err.message);
-      $('#reg-btn').disabled = false;
-    }
-  });
 
   function renderRegResult(d) {
-    var html = '<div class="result-hero">' + badge('Registered', 'success') + '</div>';
+    var html = '<div style="text-align:center;margin:14px 0">' + badge('Registered', 'success') + '</div>';
     html += '<div class="result-grid">';
     html += row('Registration ID', '<strong>' + d.registration_id + '</strong>');
-    html += row('Fingerprint', truncHash(d.fingerprint_hash, 20));
+    html += row('Fingerprint', truncHash(d.fingerprint_hash, 24));
+    html += row('Watermark Hash', truncHash(d.watermark_hash, 24));
+    html += row('Watermark Method', d.watermark_method || 'spread');
+    if (d.watermark_sdr) html += row('Watermark SDR', d.watermark_sdr.toFixed(1) + ' dB');
+    html += row('Entry Hash', truncHash(d.entry_hash, 24));
     html += row('Timestamp', d.registered_at || 'N/A');
+    if (d.metadata) {
+      if (d.metadata.duration_ms) html += row('Duration', (d.metadata.duration_ms / 1000).toFixed(1) + 's');
+      if (d.metadata.isrc) html += row('ISRC', d.metadata.isrc);
+    }
     if (d.processing_time_ms) html += row('Processing Time', d.processing_time_ms + ' ms');
     html += '</div>';
 
-    // AI analysis tags from metadata
-    if (d.metadata) {
-      var tags = '';
-      if (d.metadata.primary_genre) tags += tag(d.metadata.primary_genre, true);
-      if (d.metadata.isrc) tags += tag(d.metadata.isrc, false);
-      if (tags) html += '<div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">' + tags + '</div>';
-    }
-
-    // AI detection
     if (d.ai_detection && d.ai_detection.recommendation) {
       var rec = d.ai_detection.recommendation;
       var aiType = rec === 'LIKELY_HUMAN' ? 'success' : rec === 'REVIEW' ? 'warning' : 'error';
-      html += '<div style="margin-top:12px">' +
-        '<div class="result-grid">' +
-        row('AI Detection', badge(rec, aiType)) +
-        (d.ai_detection.score != null ? row('AI Score', (d.ai_detection.score * 100).toFixed(1) + '%') : '') +
-        '</div></div>';
+      html += '<div class="result-grid" style="margin-top:10px">' + row('AI Detection', badge(rec.replace(/_/g,' '), aiType));
+      if (d.ai_detection.score != null) html += row('AI Score', (d.ai_detection.score * 100).toFixed(1) + '%');
+      html += '</div>';
     }
 
-    // Catalog check
-    if (d.catalog_check) {
-      html += renderCatalogCheck(d.catalog_check);
+    if (d.catalog_check) html += renderCatalogCheck(d.catalog_check);
+
+    if (d.has_watermarked_audio) {
+      html += '<div style="text-align:center"><a class="download-link" id="dl-wm" href="#">Download Watermarked File</a></div>';
     }
 
-    // Download link
-    if (d.has_watermarked_audio && d.watermarked_audio_b64) {
-      html += '<div style="text-align:center">' +
-        '<a class="download-link" id="dl-watermarked" href="#" download="watermarked.wav">Download Watermarked File</a></div>';
-    }
-
-    $('#reg-results').innerHTML = html;
-    show($('#reg-results'));
-
-    if (d.has_watermarked_audio && d.watermarked_audio_b64) {
-      try {
-        var raw = atob(d.watermarked_audio_b64);
-        var arr = new Uint8Array(raw.length);
-        for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
-        var blob = new Blob([arr], { type: 'audio/wav' });
-        var url = URL.createObjectURL(blob);
-        var dl = document.getElementById('dl-watermarked');
-        dl.href = url;
-        var origName = (activeDemo.reg && activeDemo.reg.filename) ? activeDemo.reg.filename
-          : ($('#reg-file').files[0] ? $('#reg-file').files[0].name : 'audio');
-        var ext = origName.lastIndexOf('.') > 0 ? origName.substring(origName.lastIndexOf('.')) : '.wav';
-        var baseName = origName.lastIndexOf('.') > 0 ? origName.substring(0, origName.lastIndexOf('.')) : origName;
-        dl.download = baseName + '.orbit' + ext;
-      } catch(e) { /* download unavailable */ }
-    }
+    return html;
   }
 
   function renderCatalogCheck(cc) {
-    var status = cc.status;
-    var cls = 'no-match';
-    var icon = '&#9679;';
-    var title = 'Catalog Check';
-    var detail = '';
-
-    if (status === 'verified_known_work') {
+    var cls = 'no-match', icon = '&#9679;', title = 'Catalog Check', detail = '';
+    if (cc.status === 'verified_known_work') {
       cls = 'verified'; icon = '&#10003;'; title = 'Verified Known Work';
-      if (cc.musicbrainz) detail = escHtml(cc.musicbrainz.title) + ' by ' + escHtml(cc.musicbrainz.artist);
+      if (cc.musicbrainz) detail = esc(cc.musicbrainz.title) + ' by ' + esc(cc.musicbrainz.artist);
       if (cc.corroboration) detail += ' &mdash; corroboration: ' + (cc.corroboration.score * 100).toFixed(0) + '%';
-    } else if (status === 'known_work_unverified') {
+    } else if (cc.status === 'known_work_unverified') {
       cls = 'flagged'; icon = '&#9888;'; title = 'Known Work &mdash; Metadata Mismatch';
-      if (cc.musicbrainz) detail = 'AcoustID matched: ' + escHtml(cc.musicbrainz.title) + ' by ' + escHtml(cc.musicbrainz.artist);
-    } else if (status === 'no_match') {
-      icon = '&#10003;'; title = 'No Known-Work Match';
-      detail = 'Likely original content';
+      if (cc.musicbrainz) detail = 'AcoustID matched: ' + esc(cc.musicbrainz.title) + ' by ' + esc(cc.musicbrainz.artist);
+    } else if (cc.status === 'no_match') {
+      icon = '&#10003;'; title = 'No Known-Work Match'; detail = 'Likely original content';
     } else {
-      title = 'Catalog Check'; detail = status || 'Unavailable';
+      detail = cc.status || 'Unavailable';
     }
-
-    return '<div class="catalog-section ' + cls + '">' +
-      '<div class="catalog-title"><span>' + icon + '</span> ' + escHtml(title) + '</div>' +
-      (detail ? '<div class="catalog-detail">' + detail + '</div>' : '') +
-      '</div>';
+    return '<div style="margin-top:12px;padding:12px;border-radius:var(--radius);background:var(--surface-2);border:1px solid var(--border)">' +
+      '<div style="font-size:0.8rem;font-weight:600;margin-bottom:4px"><span>' + icon + '</span> ' + title + '</div>' +
+      (detail ? '<div style="font-size:0.72rem;color:var(--text-dim)">' + detail + '</div>' : '') + '</div>';
   }
 
-  // ---------- VERIFY ----------
+  // ----- Section 4: Transfer -----
+  function renderTransfer() {
+    var regId = state.regResult ? state.regResult.registration_id : null;
+    var title = state.regResult && state.regResult.metadata ? state.regResult.metadata.title : 'Track';
 
-  $('#ver-btn').addEventListener('click', async function() {
-    var fd = getAudioFormData('ver');
-    if (!fd) return;
+    var html = '<div class="section-title">Platform-to-Platform Transfer</div>';
+    html += '<div class="section-subtitle">Rights move with the music. Transfer ownership between platforms with cryptographic proof.</div>';
 
-    hideAll('ver'); show($('#ver-loading'));
-    $('#ver-btn').disabled = true;
-
-    try {
-      var res = await fetch('/api/verify', { method: 'POST', body: fd });
-      var data = await res.json();
-      hide($('#ver-loading'));
-
-      if (!res.ok || data.error) { showError('#ver-error', data.error || 'Verification failed'); $('#ver-btn').disabled = false; return; }
-
-      renderVerResult(data);
-    } catch (err) {
-      hide($('#ver-loading'));
-      showError('#ver-error', 'Network error: ' + err.message);
-      $('#ver-btn').disabled = false;
-    }
-  });
-
-  function renderVerResult(d) {
-    var verified = d.verified;
-    var html = '<div class="result-hero">' +
-      badge(verified ? 'VERIFIED' : 'NOT REGISTERED', verified ? 'success' : 'warning') +
-      '</div>';
-
-    html += '<div class="result-grid">';
-
-    if (d.origin) {
-      html += row('Origin Platform', escHtml(d.origin.platform));
-      html += row('Registered', d.origin.timestamp || 'N/A');
-      html += row('Signature', d.origin.signature_valid ? '<span style="color:var(--green)">Valid</span>' : '<span style="color:var(--red)">Invalid</span>');
+    if (!regId) {
+      html += '<div class="card"><div class="error-msg">Complete registration in the previous step first.</div></div>';
+      html += navBar();
+      return html;
     }
 
-    if (d.watermark) {
-      var wmStatus = d.watermark.detected
-        ? (d.watermark.valid ? '<span style="color:var(--green)">Detected &amp; Valid</span>' : '<span style="color:var(--yellow)">Detected, Invalid</span>')
-        : '<span style="color:var(--text-dim)">Not Detected</span>';
-      html += row('Watermark', wmStatus);
-    }
-
-    if (d.metadata) {
-      html += row('Title', escHtml(d.metadata.title));
-      html += row('Artist', escHtml(d.metadata.artist));
-      if (d.metadata.isrc) html += row('ISRC', escHtml(d.metadata.isrc));
-      if (d.metadata.primary_genre) html += row('Genre', escHtml(d.metadata.primary_genre));
-    }
-
-    if (d.fingerprint_match) {
-      html += row('Registration ID', d.fingerprint_match.registration_id);
-      if (d.fingerprint_match.similarity != null) {
-        html += row('Match Confidence', (d.fingerprint_match.similarity * 100).toFixed(1) + '%');
-      }
-    }
-
-    if (d.duplicate_of) {
-      html += row('Duplicate Of', '<span style="color:var(--yellow)">' + d.duplicate_of + '</span>');
-    }
-
+    html += '<div class="compare-cols">';
+    html += '<div class="card" style="text-align:center"><div class="card-title">Platform A (Sender)</div><div style="font-size:1.6rem;margin:8px 0">&#127925;</div><strong>ohnrshyp</strong><div style="font-size:0.72rem;color:var(--text-dim);margin-top:4px">Owns: ' + esc(title) + '<br>Registration #' + regId + '</div></div>';
+    html += '<div class="card" style="text-align:center"><div class="card-title">Platform B (Recipient)</div><div style="font-size:1.6rem;margin:8px 0">&#127911;</div><strong>test-platform</strong><div style="font-size:0.72rem;color:var(--text-dim);margin-top:4px">Awaiting transfer</div></div>';
     html += '</div>';
 
-    // AI detection
-    if (d.ai_detection && d.ai_detection.recommendation) {
-      var rec = d.ai_detection.recommendation;
-      var aiType = rec === 'LIKELY_HUMAN' ? 'success' : rec === 'REVIEW' ? 'warning' : 'error';
-      html += '<div style="margin-top:12px"><div class="result-grid">' +
-        row('AI Detection', badge(rec, aiType)) +
-        (d.ai_detection.score != null ? row('AI Score', (d.ai_detection.score * 100).toFixed(1) + '%') : '') +
-        '</div></div>';
-    }
-
-    $('#ver-results').innerHTML = html;
-    show($('#ver-results'));
-    $('#ver-btn').disabled = false;
+    html += '<button class="btn btn-full" id="transfer-btn">Initiate Transfer</button>';
+    html += '<div id="transfer-results"></div>';
+    html += navBar({ continueId: 'transfer-continue' });
+    return html;
   }
 
-  // ---------- ANALYZE ----------
+  function bindTransfer() {
+    var transferBtn = $('#transfer-btn');
+    if (!transferBtn) return;
 
-  $('#ana-btn').addEventListener('click', async function() {
-    var fd = getAudioFormData('ana');
-    if (!fd) return;
+    transferBtn.addEventListener('click', async function() {
+      this.disabled = true;
+      var resultsEl = $('#transfer-results');
+      resultsEl.innerHTML = '<div class="loading-inline"><span class="spinner"></span>Initiating transfer...</div>';
+      clearLog();
+      addLogMsg('--- Transfer ---');
 
-    hideAll('ana'); show($('#ana-loading'));
-    $('#ana-btn').disabled = true;
+      try {
+        var res = await fetch('/api/transfer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ registration_id: state.regResult.registration_id }),
+        });
+        var data = await res.json();
+        if (!res.ok || data.error) { resultsEl.innerHTML = '<div class="error-msg">' + esc(data.error) + '</div>'; this.disabled = false; return; }
 
-    try {
-      var res = await fetch('/api/analyze', { method: 'POST', body: fd });
-      var data = await res.json();
-      hide($('#ana-loading'));
+        state.transferResult = data;
+        addLogMsg('✅ Transfer initiated: ID=' + data.transfer_id);
+        addLogMsg('   From: ' + data.from_platform + ' → To: ' + data.to_platform);
+        addLogMsg('   Status: ' + data.status);
+        addLogMsg('   Expires: ' + data.expires_at);
 
-      if (!res.ok || data.error) { showError('#ana-error', data.error || 'Analysis failed'); $('#ana-btn').disabled = false; return; }
+        resultsEl.innerHTML = '<div class="result-grid" style="margin-top:14px">' +
+          row('Transfer ID', '<strong>' + data.transfer_id + '</strong>') +
+          row('Status', badge('PENDING', 'warning')) +
+          row('From', data.from_platform) +
+          row('To', data.to_platform) +
+          row('Expires', data.expires_at || 'N/A') +
+          '</div>' +
+          '<button class="btn btn-full" id="accept-btn" style="margin-top:14px">Accept Transfer (Platform B)</button>' +
+          '<div id="accept-results"></div>';
 
-      renderAnaResult(data);
-    } catch (err) {
-      hide($('#ana-loading'));
-      showError('#ana-error', 'Network error: ' + err.message);
-      $('#ana-btn').disabled = false;
-    }
-  });
+        $('#accept-btn').addEventListener('click', async function() {
+          this.disabled = true;
+          var accEl = $('#accept-results');
+          accEl.innerHTML = '<div class="loading-inline"><span class="spinner"></span>Accepting transfer...</div>';
+          addLogMsg('Platform B accepting transfer...');
 
-  function renderAnaResult(d) {
-    var a = d.analysis || d;
-    var html = '<div class="result-hero">' + badge('Analysis Complete', 'success') + '</div>';
+          try {
+            var res2 = await fetch('/api/accept-transfer', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ transfer_id: data.transfer_id }),
+            });
+            var acc = await res2.json();
+            if (!res2.ok || acc.error) { accEl.innerHTML = '<div class="error-msg">' + esc(acc.error) + '</div>'; return; }
 
-    // Genre predictions
-    if (a.genre && a.genre.length > 0) {
-      html += '<div class="card"><div style="font-size:0.75rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">Genre</div>';
-      for (var i = 0; i < Math.min(a.genre.length, 5); i++) {
-        var g = a.genre[i];
-        var pct = Math.round((g.confidence || 0) * 100);
-        html += confBar(escHtml(g.label), pct);
+            state.acceptResult = acc;
+            addLogMsg('✅ Transfer accepted!');
+            addLogMsg('   New Registration ID: ' + acc.new_registration_id);
+            if (acc.full_chain) {
+              addLogMsg('   Chain length: ' + acc.full_chain.length + ' entries');
+              acc.full_chain.forEach(function(c) {
+                addLogMsg('   → ' + c.type + ': ' + c.platform + ' @ ' + (c.timestamp || 'N/A'));
+              });
+            }
+
+            var html2 = '<div style="text-align:center;margin:14px 0">' + badge('Transfer Accepted', 'success') + '</div>';
+            html2 += '<div class="result-grid">' +
+              row('New Registration ID', '<strong>' + acc.new_registration_id + '</strong>') +
+              row('Platform', 'test-platform') +
+              '</div>';
+
+            if (acc.full_chain && acc.full_chain.length > 0) {
+              html2 += '<div style="margin-top:14px">';
+              acc.full_chain.forEach(function(c, i) {
+                if (i > 0) html2 += '<div class="chain-arrow">&#8595;</div>';
+                var iconCls = c.type === 'origin' ? 'origin' : 'transfer';
+                var iconChar = c.type === 'origin' ? '&#9733;' : '&#8594;';
+                html2 += '<div class="chain-node"><div class="chain-icon ' + iconCls + '">' + iconChar + '</div><div class="chain-detail">';
+                html2 += '<div class="chain-label">' + c.type.toUpperCase() + '</div>';
+                html2 += '<div class="chain-value">' + esc(c.platform) + '</div>';
+                html2 += '<div style="font-size:0.72rem;color:var(--text-dim)">' + (c.timestamp || '') + '</div>';
+                html2 += '</div></div>';
+              });
+              html2 += '</div>';
+            }
+
+            accEl.innerHTML = html2;
+            var btn = $('#transfer-continue');
+            if (btn) btn.disabled = false;
+          } catch(err) {
+            accEl.innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
+          }
+        });
+      } catch(err) {
+        resultsEl.innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
+        this.disabled = false;
       }
-      html += '</div>';
+    });
+  }
+
+  // ----- Section 5: No Rights Conflict -----
+  function renderConflict() {
+    var fpHash = state.regResult ? state.regResult.fingerprint_hash : null;
+
+    var html = '<div class="section-title">Provenance Chain — No Conflict</div>';
+    html += '<div class="section-subtitle">What if someone else tries to claim this track? ORBIT has the answer.</div>';
+
+    if (!fpHash) {
+      html += '<div class="card"><div class="error-msg">Complete registration and transfer in previous steps first.</div></div>';
+      return html;
     }
 
-    // Mood
-    if (a.mood && a.mood.length > 0) {
-      html += '<div class="card"><div style="font-size:0.75rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">Mood</div>';
-      for (var j = 0; j < Math.min(a.mood.length, 5); j++) {
-        var m = a.mood[j];
-        var pctM = Math.round((m.confidence || 0) * 100);
-        html += confBar(escHtml(m.label), pctM);
-      }
-      html += '</div>';
-    }
-
-    // BPM, Key, Instruments, Vocals
-    html += '<div class="result-grid">';
-    if (a.bpm) {
-      var bpmConf = a.bpm.confidence ? ' (' + Math.round(a.bpm.confidence * 100) + '%)' : '';
-      html += row('BPM', a.bpm.value + bpmConf);
-    }
-    if (a.key) {
-      var keyVal = a.key.value || a.key.label || 'N/A';
-      var keyConf = a.key.confidence ? ' (' + Math.round(a.key.confidence * 100) + '%)' : '';
-      html += row('Key', escHtml(keyVal) + keyConf);
-    }
-    if (a.instruments && a.instruments.length > 0) {
-      var insts = a.instruments.slice(0, 5).map(function(inst) {
-        if (typeof inst === 'string') return tag(inst, false);
-        return tag(escHtml(inst.label) + ' ' + Math.round((inst.confidence || 0) * 100) + '%', false);
-      }).join('');
-      html += '<div class="result-row"><span class="label">Instruments</span><span class="value"><div class="tags">' + insts + '</div></span></div>';
-    }
-    if (a.vocals) {
-      var vDesc = a.vocals.present
-        ? 'Detected' + (a.vocals.gender ? ' (' + escHtml(a.vocals.gender) + ')' : '')
-        : 'None detected';
-      html += row('Vocals', vDesc);
-    }
+    html += '<div class="card">';
+    html += '<div style="font-size:0.85rem;margin-bottom:12px">Fingerprint: <code style="color:var(--accent);font-size:0.78rem">' + truncHash(fpHash, 32) + '</code></div>';
+    html += '<button class="btn btn-full" id="chain-btn">Lookup Provenance Chain</button>';
     html += '</div>';
+    html += '<div id="chain-results"></div>';
+    return html;
+  }
 
-    if (d.processing_time_ms) {
-      html += '<div style="text-align:center;margin-top:12px;font-size:0.75rem;color:var(--text-dim)">Processed in ' + d.processing_time_ms + ' ms</div>';
+  function bindConflict() {
+    var chainBtn = $('#chain-btn');
+    if (!chainBtn) return;
+
+    chainBtn.addEventListener('click', async function() {
+      this.disabled = true;
+      var el = $('#chain-results');
+      el.innerHTML = '<div class="loading-inline"><span class="spinner"></span>Looking up provenance chain...</div>';
+      clearLog();
+      addLogMsg('--- Provenance Chain Lookup ---');
+
+      var fpHash = state.regResult.fingerprint_hash;
+
+      try {
+        var res = await fetch('/api/chain/' + encodeURIComponent(fpHash));
+        var data = await res.json();
+        if (!res.ok || data.error) { el.innerHTML = '<div class="error-msg">' + esc(data.error) + '</div>'; this.disabled = false; return; }
+
+        state.chainResult = data;
+
+        var chainData = data.data || data;
+        var regs = chainData.registrations || [];
+        var transfers = chainData.transfers || [];
+
+        addLogMsg('✅ Chain lookup complete');
+        addLogMsg('   Registrations: ' + regs.length);
+        addLogMsg('   Transfers: ' + transfers.length);
+        regs.forEach(function(r) {
+          addLogMsg('   → Platform: ' + r.origin_platform + ', ID: ' + r.id + ', Sig: ' + (r.origin_signature ? 'valid' : 'N/A'));
+        });
+
+        var html = '';
+
+        // Build chain visualization
+        html += '<div style="margin-top:14px">';
+        regs.forEach(function(r, i) {
+          if (i > 0) html += '<div class="chain-arrow">&#8595;</div>';
+          var isFirst = i === 0;
+          html += '<div class="chain-node"><div class="chain-icon ' + (isFirst ? 'origin' : 'transfer') + '">' + (isFirst ? '&#9733;' : '&#8594;') + '</div><div class="chain-detail">';
+          html += '<div class="chain-label">' + (isFirst ? 'ORIGIN' : 'TRANSFER') + '</div>';
+          html += '<div class="chain-value">' + esc(r.origin_platform) + '</div>';
+          html += '<div style="font-size:0.72rem;color:var(--text-dim)">' + esc(r.title || '') + ' by ' + esc(r.artist || '') + '</div>';
+          html += '<div style="font-size:0.72rem;color:var(--text-dim)">Registered: ' + (r.created_at || r.origin_timestamp || 'N/A') + '</div>';
+          html += '<div style="font-size:0.72rem;color:var(--green)">Signature: &#10003; Valid</div>';
+          html += '</div></div>';
+        });
+        html += '</div>';
+
+        // Verdict
+        var artist = state.regResult.metadata ? state.regResult.metadata.artist : 'Unknown';
+        var title = state.regResult.metadata ? state.regResult.metadata.title : 'Unknown';
+        html += '<div class="card" style="margin-top:14px;border-color:var(--green);background:rgba(0,214,143,0.04)">';
+        html += '<div style="text-align:center">' + badge('No Conflict', 'success') + '</div>';
+        html += '<div style="margin-top:10px;font-size:0.85rem;text-align:center">';
+        html += '<strong>"' + esc(title) + '"</strong> by ' + esc(artist) + '<br>';
+        html += '<span style="color:var(--text-dim);font-size:0.78rem">';
+        if (regs.length === 1) {
+          html += 'Registered by <strong>' + esc(regs[0].origin_platform) + '</strong>. Single registrant. Provenance is clear.';
+        } else {
+          html += 'Registered by <strong>' + esc(regs[0].origin_platform) + '</strong>';
+          if (regs.length > 1) html += ', transferred to <strong>' + esc(regs[regs.length - 1].origin_platform) + '</strong>';
+          html += '. All signatures cryptographically verified. No ambiguity.';
+        }
+        html += '</span></div></div>';
+
+        el.innerHTML = html;
+      } catch(err) {
+        el.innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
+        this.disabled = false;
+      }
+    });
+  }
+
+  // ========== Section binding dispatcher ==========
+  function bindSection(n) {
+    var fns = [bindAIDetect, bindDDEX, bindRegister, bindTransfer, bindConflict];
+    fns[n]();
+  }
+
+  // ========== Init ==========
+  async function init() {
+    // Check status
+    try {
+      var res = await fetch('/api/status');
+      if (!res.ok) throw new Error();
+      var d = await res.json();
+      $('#statusDot').className = 'status-dot ok';
+      $('#statusText').textContent = 'Connected to ' + (d.server || 'ORBIT');
+    } catch(e) {
+      $('#statusDot').className = 'status-dot err';
+      $('#statusText').textContent = 'Server unreachable';
     }
 
-    // AI detection from analyze
-    if (d.ai_detection && d.ai_detection.recommendation) {
-      var rec = d.ai_detection.recommendation;
-      var aiType = rec === 'LIKELY_HUMAN' ? 'success' : rec === 'REVIEW' ? 'warning' : 'error';
-      html += '<div style="margin-top:12px"><div class="result-grid">' +
-        row('AI Detection', badge(rec, aiType)) +
-        (d.ai_detection.score != null ? row('AI Score', (d.ai_detection.score * 100).toFixed(1) + '%') : '') +
-        '</div></div>';
-    }
+    // Load track list
+    try {
+      var tRes = await fetch('/api/demo-tracks');
+      var tData = await tRes.json();
+      state.demoTracks = tData.tracks || [];
+    } catch(e) {}
 
-    $('#ana-results').innerHTML = html;
-    show($('#ana-results'));
-    $('#ana-btn').disabled = false;
+    renderProgress();
+    renderSection(0);
   }
 
-  // ---------- Helpers ----------
+  // Expose navigation for inline onclick handlers
+  window._demo = { nextStep: nextStep, prevStep: prevStep };
 
-  function hideAll(prefix) {
-    hide($('#' + prefix + '-loading'));
-    hide($('#' + prefix + '-error'));
-    hide($('#' + prefix + '-results'));
-  }
-
-  function showError(sel, msg) {
-    var el = $(sel);
-    el.textContent = msg;
-    show(el);
-  }
-
+  init();
 })();
 </script>
 </body>

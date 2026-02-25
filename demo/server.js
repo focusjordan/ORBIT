@@ -6,8 +6,8 @@ const path = require('path');
 const express = require('express');
 const multer = require('multer');
 const { OrbitClient } = require('@ohnrshyp/orbit-sdk');
-
 const fs = require('fs');
+
 const PORT = process.env.DEMO_PORT || 3000;
 
 // ---------------------------------------------------------------------------
@@ -24,35 +24,63 @@ const TRACK_META = {
   '7-1-2023-I Can\'t Believe It Snippet.wav': { title: "I Can't Believe It", artist: 'Jordan Kugler', genre: 'R&B' },
   '7-2-19-She A Bop.wav':                  { title: 'She A Bop',             artist: 'Jordan Kugler', genre: 'Pop' },
   '11-4-19-The Birds Instrumental.wav':    { title: 'The Birds',             artist: 'Jordan Kugler', genre: 'Instrumental' },
+  'Never Going Back Again (2004 Remaster).mp3': { title: 'Never Going Back Again', artist: 'Fleetwood Mac', genre: 'Rock' },
+  '50 Cent - 21 Questions (Old School Vibe) [Full Version] AI cover.mp3': { title: '21 Questions (AI Jazz Cover)', artist: '50 Cent (AI Cover)', genre: 'Jazz' },
 };
 
 // ---------------------------------------------------------------------------
-// SDK Client
+// DDEX Parser (imported directly -- pure transform, no heavy deps)
 // ---------------------------------------------------------------------------
 
-function buildClient() {
+const ddexParser = require('../src/engines/ddex-ingest');
+const DDEX_FILE = path.resolve(__dirname, 'demo-release.xml');
+
+// ---------------------------------------------------------------------------
+// SDK Clients
+// ---------------------------------------------------------------------------
+
+function buildClient(platformId, privateKeyB64, label) {
   const apiUrl = process.env.ORBIT_API_URL;
-  const platformId = process.env.ORBIT_PLATFORM_ID;
-  const privateKeyB64 = process.env.ORBIT_PRIVATE_KEY;
   const apiKey = process.env.ORBIT_API_KEY || undefined;
 
   if (!apiUrl) throw new Error('ORBIT_API_URL is required');
-  if (!platformId) throw new Error('ORBIT_PLATFORM_ID is required');
-  if (!privateKeyB64) throw new Error('ORBIT_PRIVATE_KEY is required');
+  if (!platformId) throw new Error(`${label}: platform ID is required`);
+  if (!privateKeyB64) throw new Error(`${label}: private key is required`);
 
   const opts = { apiUrl, platformId, privateKey: Buffer.from(privateKeyB64, 'base64') };
   if (apiKey) opts.apiKey = apiKey;
   return new OrbitClient(opts);
 }
 
+// Platform A (primary)
 let client;
 try {
-  client = buildClient();
-  console.log(`  ORBIT SDK client initialized (server: ${process.env.ORBIT_API_URL})`);
+  client = buildClient(
+    process.env.ORBIT_PLATFORM_ID,
+    process.env.ORBIT_PRIVATE_KEY,
+    'Platform A'
+  );
+  console.log(`  Platform A initialized: ${process.env.ORBIT_PLATFORM_ID}`);
 } catch (err) {
-  console.error(`\n  Failed to initialize ORBIT client: ${err.message}`);
+  console.error(`\n  Failed to initialize Platform A: ${err.message}`);
   console.error('  Set ORBIT_API_URL, ORBIT_PLATFORM_ID, and ORBIT_PRIVATE_KEY\n');
   process.exit(1);
+}
+
+// Platform B (for transfer demo)
+let clientB = null;
+const testPlatformId = process.env.TEST_PLATFORM_ID;
+const testPlatformKey = process.env.TEST_PLATFORM_PRIVATE_KEY;
+
+if (testPlatformId && testPlatformKey) {
+  try {
+    clientB = buildClient(testPlatformId, testPlatformKey, 'Platform B');
+    console.log(`  Platform B initialized: ${testPlatformId}`);
+  } catch (err) {
+    console.warn(`  Platform B unavailable: ${err.message}`);
+  }
+} else {
+  console.warn('  Platform B not configured (set TEST_PLATFORM_ID + TEST_PLATFORM_PRIVATE_KEY for transfer demo)');
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +94,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 // ---------------------------------------------------------------------------
-// GET /api/demo-tracks — list available demo audio files
+// GET /api/demo-tracks
 // ---------------------------------------------------------------------------
 
 app.get('/api/demo-tracks', (_req, res) => {
@@ -97,7 +125,7 @@ app.get('/api/demo-tracks', (_req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/demo-tracks/:filename — serve a demo audio file
+// GET /api/demo-tracks/:filename
 // ---------------------------------------------------------------------------
 
 app.get('/api/demo-tracks/:filename', (req, res) => {
@@ -109,7 +137,9 @@ app.get('/api/demo-tracks/:filename', (req, res) => {
   if (!fs.existsSync(resolved)) {
     return res.status(404).json({ error: 'Track not found' });
   }
-  res.setHeader('Content-Type', 'audio/wav');
+  const ext = path.extname(resolved).toLowerCase();
+  const mimeTypes = { '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.flac': 'audio/flac' };
+  res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
   res.setHeader('Content-Disposition', `attachment; filename="${req.params.filename}"`);
   fs.createReadStream(resolved).pipe(res);
 });
@@ -135,10 +165,38 @@ app.get('/api/status', async (_req, res) => {
       server: apiUrl,
       health,
       info: info ? (info.data || info) : null,
+      platformA: process.env.ORBIT_PLATFORM_ID,
+      platformB: testPlatformId || null,
+      platformBAvailable: !!clientB,
     });
   } catch (err) {
     console.error('  Status check failed:', err.message);
     res.status(502).json({ error: `Cannot reach ORBIT server: ${err.message}` });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/analyze  (with AI detection support)
+// ---------------------------------------------------------------------------
+
+app.post('/api/analyze', upload.single('audio'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
+
+    const result = await client.analyze(req.file.buffer, {
+      include: ['genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 'ai_detection'],
+    });
+    const data = result.data || result;
+
+    res.json({
+      analysis: data.analysis || data,
+      ai_detection: data.ai_detection || null,
+      processing_time_ms: data.processing_time_ms,
+      processing_log: data.processing_log || [],
+    });
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message, details: err.details || null });
   }
 });
 
@@ -163,7 +221,6 @@ app.post('/api/register', upload.single('audio'), async (req, res) => {
 
     const ownerId = client.platformId;
     const result = await client.register(req.file.buffer, metadata, ownerId);
-
     const data = result.data || result;
 
     const response = {
@@ -171,11 +228,15 @@ app.post('/api/register', upload.single('audio'), async (req, res) => {
       registration_id: data.registration_id,
       fingerprint_hash: data.fingerprint_hash,
       watermark_hash: data.watermark_hash,
+      watermark_method: data.watermark_method,
+      watermark_sdr: data.watermark_sdr || null,
+      entry_hash: data.entry_hash,
       registered_at: data.registered_at,
       metadata: data.metadata,
       processing_time_ms: data.processing_time_ms,
       ai_detection: data.ai_detection || null,
       catalog_check: data.catalog_check || null,
+      processing_log: data.processing_log || [],
     };
 
     if (data.watermarked_audio) {
@@ -211,6 +272,7 @@ app.post('/api/verify', upload.single('audio'), async (req, res) => {
       transfers: data.transfers || [],
       duplicate_of: data.duplicate_of || null,
       ai_detection: data.ai_detection || null,
+      processing_log: data.processing_log || [],
     });
   } catch (err) {
     const status = err.status || 500;
@@ -219,21 +281,134 @@ app.post('/api/verify', upload.single('audio'), async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/analyze
+// GET /api/ddex-document  — raw XML for display
 // ---------------------------------------------------------------------------
 
-app.post('/api/analyze', upload.single('audio'), async (req, res) => {
+app.get('/api/ddex-document', (_req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
+    const xml = fs.readFileSync(DDEX_FILE, 'utf-8');
+    res.setHeader('Content-Type', 'application/xml');
+    res.send(xml);
+  } catch (err) {
+    res.status(500).json({ error: `Failed to read DDEX file: ${err.message}` });
+  }
+});
 
-    const result = await client.analyze(req.file.buffer);
+// ---------------------------------------------------------------------------
+// POST /api/parse-ddex  — parse and return structured metadata
+// ---------------------------------------------------------------------------
+
+app.post('/api/parse-ddex', async (_req, res) => {
+  try {
+    const result = ddexParser.parseFile(DDEX_FILE);
+
+    // Reshape tracks for the demo UI (flatten metadata + audio_filename)
+    const tracks = (result.tracks || []).map(t => ({
+      ...t.metadata,
+      filename: t.audio_filename,
+      track_number: t.track_number,
+    }));
+
+    // Reshape release metadata
+    const rm = result.release_metadata || {};
+    const release = {
+      title: rm.album_title,
+      type: rm.release_type,
+      label: rm.label,
+      upc: rm.upc,
+      release_date: rm.release_date,
+      parental_advisory: rm.parental_advisory,
+      artist: tracks.length > 0 ? tracks[0].artist : null,
+    };
+
+    res.json({
+      success: true,
+      version: result.ern_version,
+      tracks,
+      release,
+      territories: rm.territories || [],
+    });
+  } catch (err) {
+    res.status(500).json({ error: `DDEX parse failed: ${err.message}` });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/transfer  — initiate transfer from Platform A to Platform B
+// ---------------------------------------------------------------------------
+
+app.post('/api/transfer', express.json(), async (req, res) => {
+  try {
+    if (!clientB) {
+      return res.status(400).json({ error: 'Platform B not configured. Set TEST_PLATFORM_ID and TEST_PLATFORM_PRIVATE_KEY.' });
+    }
+
+    const { registration_id } = req.body;
+    if (!registration_id) {
+      return res.status(400).json({ error: 'registration_id is required' });
+    }
+
+    const result = await client.transfer(registration_id, testPlatformId);
     const data = result.data || result;
 
     res.json({
-      analysis: data.analysis || data,
-      ai_detection: data.ai_detection || null,
-      processing_time_ms: data.processing_time_ms,
+      success: true,
+      transfer_id: data.transfer_id,
+      status: data.status,
+      from_platform: process.env.ORBIT_PLATFORM_ID,
+      to_platform: testPlatformId,
+      initiated_at: data.initiated_at,
+      expires_at: data.expires_at,
     });
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message, details: err.details || null });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/accept-transfer  — accept transfer as Platform B
+// ---------------------------------------------------------------------------
+
+app.post('/api/accept-transfer', express.json(), async (req, res) => {
+  try {
+    if (!clientB) {
+      return res.status(400).json({ error: 'Platform B not configured.' });
+    }
+
+    const { transfer_id } = req.body;
+    if (!transfer_id) {
+      return res.status(400).json({ error: 'transfer_id is required' });
+    }
+
+    const result = await clientB.acceptTransfer(transfer_id);
+    const data = result.data || result;
+
+    res.json({
+      success: true,
+      accepted: data.accepted,
+      transfer_id: data.transfer_id,
+      new_registration_id: data.new_registration_id,
+      metadata: data.metadata,
+      full_chain: data.full_chain,
+      entry_hash: data.entry_hash,
+      registered_at: data.registered_at,
+    });
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message, details: err.details || null });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/chain/:fingerprint_hash  — provenance chain lookup
+// ---------------------------------------------------------------------------
+
+app.get('/api/chain/:fingerprint_hash', async (req, res) => {
+  try {
+    const result = await client.getChain(req.params.fingerprint_hash);
+    const data = result.data || result;
+    res.json(data);
   } catch (err) {
     const status = err.status || 500;
     res.status(status).json({ error: err.message, details: err.details || null });
@@ -250,7 +425,9 @@ app.listen(PORT, () => {
   console.log('  ║   ORBIT Demo Server                       ║');
   console.log('  ╚═══════════════════════════════════════════╝');
   console.log('');
-  console.log(`  Local:   http://localhost:${PORT}`);
-  console.log(`  ORBIT:   ${process.env.ORBIT_API_URL}`);
+  console.log(`  Local:      http://localhost:${PORT}`);
+  console.log(`  ORBIT API:  ${process.env.ORBIT_API_URL}`);
+  console.log(`  Platform A: ${process.env.ORBIT_PLATFORM_ID}`);
+  console.log(`  Platform B: ${testPlatformId || '(not configured)'}`);
   console.log('');
 });
