@@ -99,26 +99,37 @@ class SuppressStderr:
             self._devnull.close()
 
 
-class SuppressOutput:
-    """Context manager to suppress both stdout and stderr during model operations."""
+class CaptureOutput:
+    """Context manager to capture stdout and stderr into buffers instead of /dev/null.
+    Prevents model output from corrupting JSON on stdout while preserving
+    error messages for diagnostics."""
     def __init__(self):
         self._original_stdout = None
         self._original_stderr = None
-        self._devnull = None
+        self._stdout_buf = None
+        self._stderr_buf = None
     
     def __enter__(self):
+        import io
         self._original_stdout = sys.stdout
         self._original_stderr = sys.stderr
-        self._devnull = open(os.devnull, 'w')
-        sys.stdout = self._devnull
-        sys.stderr = self._devnull
+        self._stdout_buf = io.StringIO()
+        self._stderr_buf = io.StringIO()
+        sys.stdout = self._stdout_buf
+        sys.stderr = self._stderr_buf
         return self
     
     def __exit__(self, *args):
         sys.stdout = self._original_stdout
         sys.stderr = self._original_stderr
-        if self._devnull:
-            self._devnull.close()
+    
+    @property
+    def stdout(self):
+        return self._stdout_buf.getvalue() if self._stdout_buf else ''
+    
+    @property
+    def stderr(self):
+        return self._stderr_buf.getvalue() if self._stderr_buf else ''
 
 
 def get_model(sample_rate=44100):
@@ -138,12 +149,15 @@ def get_model(sample_rate=44100):
         # Resample to 44.1k if other sample rate
         model_type = '44.1k'
     
-    # Load model (cached after first download) - suppress all output
-    with SuppressOutput():
+    # Load model (cached after first download) - capture output
+    cap = CaptureOutput()
+    with cap:
         model = silentcipher.get_model(
             model_type=model_type,
             device=device
         )
+    if cap.stderr:
+        print(f"[SilentCipher model load stderr]: {cap.stderr}", file=sys.stderr)
     
     return model, device, model_type
 
@@ -198,10 +212,15 @@ def embed_watermark(audio_path, output_path, message, target_sr=44100):
         # Load model
         model, device, model_type = get_model(target_sr)
         
-        # Embed watermark - suppress stdout/stderr from silentcipher library
+        # Embed watermark - capture stdout/stderr from silentcipher library
         # SilentCipher expects message as list of 5 integers [0-255]
-        with SuppressOutput():
+        embed_cap = CaptureOutput()
+        with embed_cap:
             encoded_audio, sdr = model.encode_wav(audio, sr, message)
+        if embed_cap.stderr:
+            print(f"[SilentCipher embed stderr]: {embed_cap.stderr}", file=sys.stderr)
+        if embed_cap.stdout:
+            print(f"[SilentCipher embed stdout]: {embed_cap.stdout}", file=sys.stderr)
         
         # Save output
         sf.write(output_path, encoded_audio, sr)
@@ -251,10 +270,15 @@ def extract_watermark(audio_path, target_sr=44100, phase_shift_decoding=True):
         # Load model
         model, device, model_type = get_model(target_sr)
         
-        # Extract watermark - suppress stdout/stderr from silentcipher library
+        # Extract watermark - capture stdout/stderr from silentcipher library
         # phase_shift_decoding=True makes decoder more robust to audio crops
-        with SuppressOutput():
+        extract_cap = CaptureOutput()
+        with extract_cap:
             result = model.decode_wav(audio, sr, phase_shift_decoding=phase_shift_decoding)
+        if extract_cap.stderr:
+            print(f"[SilentCipher extract stderr]: {extract_cap.stderr}", file=sys.stderr)
+        if extract_cap.stdout:
+            print(f"[SilentCipher extract stdout]: {extract_cap.stdout}", file=sys.stderr)
         
         # Clean up model
         del model

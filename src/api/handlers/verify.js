@@ -294,19 +294,19 @@ async function verifyHandler(req, res) {
       
       if (extracted.detected) {
         watermarkResult.detected = true;
-        watermarkResult.valid = true;
-        watermarkResult.method = extracted.method; // 'silentcipher' or 'spread'
+        watermarkResult.valid = false; // Set true only after ledger match
+        watermarkResult.method = extracted.method;
         watermarkResult.confidence = extracted.confidence;
         watermarkResult.fallback_attempted = extracted.fallbackUsed || false;
+        watermarkResult._extractedPayloadHash = extracted.payloadHash || null;
         
         if (extracted.method === 'silentcipher') {
-          // Neural watermark: payload is a 5-byte hash prefix
           watermarkResult.payload_hash = extracted.payloadHash.toString('hex');
           watermarkResult.message = extracted.message;
           console.log(`[Verify] Neural watermark extracted: hash_prefix=${watermarkResult.payload_hash}`);
         } else if (extracted.method === 'spread') {
-          // Spread spectrum: full 64-byte payload with parsed data
           watermarkResult.payload_hash = extracted.parsedPayload?.payloadHash?.toString('hex') || null;
+          watermarkResult._extractedPayloadHash = extracted.parsedPayload?.payloadHash || null;
           
           if (extracted.parsedPayload) {
             watermarkResult.parsed_payload = {
@@ -467,6 +467,36 @@ async function verifyHandler(req, res) {
       similarity: 1.0, // Same as fingerprint match (exact)
       method: 'chromaprint_verified',
     };
+    
+    // ========================================================================
+    // 7b. CLOSE THE LOOP: Compare extracted watermark against registration
+    // ========================================================================
+    
+    if (watermarkResult.detected && watermarkResult._extractedPayloadHash && registration.watermark_hash) {
+      const storedHash = Buffer.isBuffer(registration.watermark_hash)
+        ? registration.watermark_hash
+        : Buffer.from(registration.watermark_hash, 'hex');
+      
+      const match = UnifiedWatermark.hashMatches(
+        watermarkResult._extractedPayloadHash,
+        storedHash,
+        watermarkResult.method
+      );
+      
+      watermarkResult.valid = match;
+      watermarkResult.registration_match = match ? registration.id : null;
+      
+      if (match) {
+        console.log(`[Verify] Watermark hash MATCHES registration ${registration.id}`);
+      } else {
+        console.log(`[Verify] Watermark hash MISMATCH — extracted: ${watermarkResult.payload_hash}, stored: ${storedHash.toString('hex').slice(0, 10)}...`);
+      }
+    } else if (watermarkResult.detected) {
+      console.log(`[Verify] Watermark detected but cannot compare — missing stored hash or extracted hash`);
+    }
+    
+    // Remove internal field from response
+    delete watermarkResult._extractedPayloadHash;
     
     // Build registered_metadata (v2) / metadata (v1 compatibility)
     const registeredMetadata = {

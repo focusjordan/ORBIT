@@ -372,7 +372,7 @@ async function extract(input, options = {}) {
   if (Buffer.isBuffer(input)) {
     tempFile = path.join(
       os.tmpdir(),
-      `orbit-sc-extract-${Date.now()}-${Math.random().toString(36).slice(2)}.audio`
+      `orbit-sc-extract-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`
     );
     fs.writeFileSync(tempFile, input);
     audioPath = tempFile;

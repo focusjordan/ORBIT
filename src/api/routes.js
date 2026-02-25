@@ -27,6 +27,9 @@ const registerHandler = require('./handlers/register');
 const verifyHandler = require('./handlers/verify');
 const transferHandlers = require('./handlers/transfer');
 const chainHandler = require('./handlers/chain');
+const listRegistrationsHandler = require('./handlers/list');
+const pendingTransfersHandler = require('./handlers/pending');
+const watermarkmatchHandler = require('./handlers/watermarkmatch');
 
 const router = express.Router();
 
@@ -126,6 +129,21 @@ router.post('/verify',
 );
 
 /**
+ * POST /orbit/v1/watermarkmatch
+ * Watermark-only verification — extracts watermark from audio and looks up
+ * the matching registration by hash prefix. No fingerprint, no AI metadata.
+ * Auth: Optional
+ *
+ * Request: JSON with base64-encoded audio { "audio": "<base64>" }
+ * Response: extracted watermark info + matching registration (if found)
+ */
+router.post('/watermarkmatch',
+  (req, res, next) => getGpuLimiter(req)(req, res, next),
+  optionalAuth,
+  watermarkmatchHandler
+);
+
+/**
  * POST /orbit/v1/transfer
  * Initiate B2B transfer to another platform
  * Handler: Session 13 ✅
@@ -169,5 +187,21 @@ router.post('/accept', platformAuth, transferHandlers.acceptTransfer);
  *           chronologically ordered, with signature validation status
  */
 router.get('/chain/:fingerprint', optionalAuth, chainHandler);
+
+/**
+ * GET /orbit/v1/registrations
+ * List registrations for the authenticated platform
+ * Auth: Required (only returns caller's registrations)
+ * 
+ * Query params: limit (1-100), offset (default 0)
+ */
+router.get('/registrations', platformAuth, listRegistrationsHandler);
+
+/**
+ * GET /orbit/v1/transfers/pending
+ * List pending inbound transfers for the authenticated platform
+ * Auth: Required (only returns transfers where caller is recipient)
+ */
+router.get('/transfers/pending', platformAuth, pendingTransfersHandler);
 
 module.exports = router;

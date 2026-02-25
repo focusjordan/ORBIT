@@ -444,6 +444,23 @@ const queries = {
   },
   
   /**
+   * Find registrations whose watermark_hash starts with the given prefix.
+   * SilentCipher embeds 5 bytes; spread spectrum embeds 16.
+   * @param {Buffer} hashPrefix - 5-byte (neural) or 16-byte (spread) prefix
+   * @returns {Promise<Array>}
+   */
+  findByWatermarkHashPrefix: async (hashPrefix) => {
+    const result = await pool.query(
+      `SELECT id, title, artist, origin_platform, owner_id, watermark_hash, created_at
+       FROM orbit_registrations
+       WHERE substring(watermark_hash from 1 for $2) = $1
+       ORDER BY created_at ASC`,
+      [hashPrefix, hashPrefix.length]
+    );
+    return result.rows;
+  },
+
+  /**
    * Count registrations with audio embeddings
    * @returns {Promise<number>}
    */
