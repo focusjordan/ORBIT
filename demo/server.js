@@ -39,9 +39,9 @@ const DDEX_FILE = path.resolve(__dirname, 'demo-release.xml');
 // SDK Clients
 // ---------------------------------------------------------------------------
 
-function buildClient(platformId, privateKeyB64, label) {
+function buildClient(platformId, privateKeyB64, label, apiKeyOverride) {
   const apiUrl = process.env.ORBIT_API_URL;
-  const apiKey = process.env.ORBIT_API_KEY || undefined;
+  const apiKey = apiKeyOverride || process.env.ORBIT_API_KEY || undefined;
 
   if (!apiUrl) throw new Error('ORBIT_API_URL is required');
   if (!platformId) throw new Error(`${label}: platform ID is required`);
@@ -74,7 +74,7 @@ const testPlatformKey = process.env.TEST_PLATFORM_PRIVATE_KEY;
 
 if (testPlatformId && testPlatformKey) {
   try {
-    clientB = buildClient(testPlatformId, testPlatformKey, 'Platform B');
+    clientB = buildClient(testPlatformId, testPlatformKey, 'Platform B', process.env.TEST_PLATFORM_API_KEY);
     console.log(`  Platform B initialized: ${testPlatformId}`);
   } catch (err) {
     console.warn(`  Platform B unavailable: ${err.message}`);
@@ -409,7 +409,7 @@ app.post('/api/accept-transfer', express.json(), async (req, res) => {
       return res.status(400).json({ error: 'transfer_id is required' });
     }
 
-    const result = await clientB.acceptTransfer(transfer_id);
+    const result = await clientB.acceptTransfer(Number(transfer_id));
     const data = result.data || result;
 
     res.json({

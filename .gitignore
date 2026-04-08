@@ -51,3 +51,13 @@ models/
 benchmarks/
 benchmarks.md
 BENCHMARK_HANDOFF.md
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Marketing / internal docs (not for repo)
+docs/LINKEDIN_CONTENT_CALENDAR.md
+
+# Generated test output
+tests/corpus-results.json
