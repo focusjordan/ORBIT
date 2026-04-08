@@ -136,6 +136,7 @@ async function checkPythonEnvironment() {
  * @param {string|Buffer} input - Audio file path or buffer
  * @param {Object} options - Options
  * @param {number} options.maxLength - Max audio length in seconds (default: 120)
+ * @param {string} options.stemsDir - Optional Demucs stems directory (other.wav, bass.wav)
  * @param {boolean} options.verbose - Log progress (default: false)
  * @returns {Promise<Object>} Analysis results with confidence scores
  * @throws {Error} If Python not available, dependencies missing, or processing fails
@@ -144,10 +145,16 @@ async function checkPythonEnvironment() {
  * const result = await analyze('/path/to/audio.mp3');
  * console.log(result.bpm);  // { value: 120, confidence: 0.95 }
  * console.log(result.key);  // { value: 'A minor', key: 'A', mode: 'minor', confidence: 0.88 }
+ *
+ * // For improved key accuracy, run Demucs first and pass stemsDir:
+ * // const demucs = require('./demucs');
+ * // const stems = await demucs.separate('/path/to/audio.mp3');
+ * // const enriched = await analyze('/path/to/audio.mp3', { stemsDir: stems.outputDir });
  */
 async function analyze(input, options = {}) {
   const {
     maxLength = ANALYSIS_CONFIG.maxLengthSeconds,
+    stemsDir = null,
     aiForensics = false,
     verbose = process.env.ORBIT_ML_VERBOSE === 'true',
   } = options;
@@ -186,6 +193,9 @@ async function analyze(input, options = {}) {
         '--output', 'json',
         '--max-length', String(maxLength),
       ];
+      if (stemsDir) {
+        args.push('--stems-dir', stemsDir);
+      }
       if (aiForensics) args.push('--ai-forensics');
 
       const proc = spawn(ANALYSIS_CONFIG.pythonCommand, args, {

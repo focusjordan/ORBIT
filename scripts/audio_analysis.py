@@ -103,7 +103,49 @@ def correlate_with_profile(chroma, profile):
     return numerator / denominator
 
 
-def detect_key(y, sr):
+def _detect_key_from_chroma(chroma_avg):
+    """Detect key from a normalized 12-bin chroma distribution."""
+    import numpy as np
+
+    # Normalize
+    chroma_avg = chroma_avg / np.max(chroma_avg) if np.max(chroma_avg) > 0 else chroma_avg
+
+    best_key = None
+    best_mode = None
+    best_correlation = -1
+
+    # Try all 12 keys for both major and minor
+    for i in range(12):
+        # Rotate chroma to align with key
+        rotated_chroma = np.roll(chroma_avg, -i)
+
+        # Correlate with major profile
+        major_corr = correlate_with_profile(rotated_chroma, MAJOR_PROFILE)
+        if major_corr > best_correlation:
+            best_correlation = major_corr
+            best_key = PITCH_CLASSES[i]
+            best_mode = 'major'
+
+        # Correlate with minor profile
+        minor_corr = correlate_with_profile(rotated_chroma, MINOR_PROFILE)
+        if minor_corr > best_correlation:
+            best_correlation = minor_corr
+            best_key = PITCH_CLASSES[i]
+            best_mode = 'minor'
+
+    # Convert correlation to confidence (0-1 range)
+    # Correlation can be negative, but good matches are typically > 0.5
+    confidence = max(0, min(1, (best_correlation + 1) / 2))
+
+    return {
+        'value': f'{best_key} {best_mode}',
+        'key': best_key,
+        'mode': best_mode,
+        'confidence': round(confidence, 4)
+    }
+
+
+def detect_key(y, sr, harmonic_only=False):
     """
     Detect musical key using Krumhansl-Schmuckler algorithm.
     
@@ -122,48 +164,54 @@ def detect_key(y, sr):
     import librosa
     import numpy as np
     
+    if harmonic_only:
+        y, _ = librosa.effects.hpss(y)
+
     # Compute chroma features using CQT (better for key detection)
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
     
     # Average across time to get overall pitch class distribution
     chroma_avg = np.mean(chroma, axis=1)
-    
-    # Normalize
-    chroma_avg = chroma_avg / np.max(chroma_avg) if np.max(chroma_avg) > 0 else chroma_avg
-    
-    best_key = None
-    best_mode = None
-    best_correlation = -1
-    
-    # Try all 12 keys for both major and minor
-    for i in range(12):
-        # Rotate chroma to align with key
-        rotated_chroma = np.roll(chroma_avg, -i)
-        
-        # Correlate with major profile
-        major_corr = correlate_with_profile(rotated_chroma, MAJOR_PROFILE)
-        if major_corr > best_correlation:
-            best_correlation = major_corr
-            best_key = PITCH_CLASSES[i]
-            best_mode = 'major'
-        
-        # Correlate with minor profile
-        minor_corr = correlate_with_profile(rotated_chroma, MINOR_PROFILE)
-        if minor_corr > best_correlation:
-            best_correlation = minor_corr
-            best_key = PITCH_CLASSES[i]
-            best_mode = 'minor'
-    
-    # Convert correlation to confidence (0-1 range)
-    # Correlation can be negative, but good matches are typically > 0.5
-    confidence = max(0, min(1, (best_correlation + 1) / 2))
-    
-    return {
-        'value': f'{best_key} {best_mode}',
-        'key': best_key,
-        'mode': best_mode,
-        'confidence': round(confidence, 4)
-    }
+    return _detect_key_from_chroma(chroma_avg)
+
+
+def detect_key_from_stems(other_stem_path, bass_stem_path=None, max_length_seconds=120):
+    """
+    Detect key from Demucs stems (preferred) with harmonic emphasis.
+
+    Uses the "other" stem as primary harmonic content source and optionally
+    blends in a lower-weighted bass stem. Falls back to HPSS harmonic
+    extraction on the available content before key estimation.
+    """
+    import librosa
+    import numpy as np
+
+    if not other_stem_path or not os.path.exists(other_stem_path):
+        raise FileNotFoundError(f'Other stem not found: {other_stem_path}')
+
+    target_sr = 22050
+    other_y, sr = librosa.load(other_stem_path, sr=target_sr, mono=True)
+    max_samples = int(max_length_seconds * sr)
+    if len(other_y) > max_samples:
+        other_y = other_y[:max_samples]
+
+    # Harmonic isolate from the "other" stem, which should already be largely non-percussive.
+    other_harm, _ = librosa.effects.hpss(other_y)
+    mix = other_harm.astype(np.float32, copy=False)
+
+    if bass_stem_path and os.path.exists(bass_stem_path):
+        bass_y, bass_sr = librosa.load(bass_stem_path, sr=target_sr, mono=True)
+        if bass_sr != sr:
+            bass_y = librosa.resample(bass_y, orig_sr=bass_sr, target_sr=sr)
+        if len(bass_y) > max_samples:
+            bass_y = bass_y[:max_samples]
+        bass_harm, _ = librosa.effects.hpss(bass_y)
+
+        target_len = min(len(mix), len(bass_harm))
+        if target_len > 0:
+            mix = mix[:target_len] + (0.35 * bass_harm[:target_len])
+
+    return detect_key(mix, sr, harmonic_only=False)
 
 
 def detect_bpm(y, sr):
@@ -1205,7 +1253,7 @@ def measure_tempo_regularity(y, sr):
     }
 
 
-def analyze_audio(audio_path, max_length_seconds=120, ai_forensics=False):
+def analyze_audio(audio_path, max_length_seconds=120, ai_forensics=False, stems_dir=None):
     """
     Perform full audio analysis.
     
@@ -1248,7 +1296,23 @@ def analyze_audio(audio_path, max_length_seconds=120, ai_forensics=False):
     
     # Core analyses
     bpm_result = detect_bpm(y, sr)
-    key_result = detect_key(y, sr)
+    key_result = None
+    key_detection_source = 'mix_hpss'
+    if stems_dir:
+        other_stem = os.path.join(stems_dir, 'other.wav')
+        bass_stem = os.path.join(stems_dir, 'bass.wav')
+        if os.path.exists(other_stem):
+            key_result = detect_key_from_stems(
+                other_stem,
+                bass_stem_path=bass_stem if os.path.exists(bass_stem) else None,
+                max_length_seconds=max_length_seconds
+            )
+            key_detection_source = 'demucs_stems'
+
+    # HPSS fallback for full-mix key detection when stems are unavailable.
+    if key_result is None:
+        key_result = detect_key(y, sr, harmonic_only=True)
+
     energy = calculate_energy(y)
     loudness_db = calculate_loudness(y, sr)
     dynamic_range_db = calculate_dynamic_range(y)
@@ -1262,6 +1326,7 @@ def analyze_audio(audio_path, max_length_seconds=120, ai_forensics=False):
         'duration': round(duration, 2),
         'sample_rate': sr,
         'analyzed_length': round(min(duration, max_length_seconds), 2),
+        'key_detection_source': key_detection_source,
     }
     
     # AI spectral forensics (optional, adds ~1-2s)
@@ -1305,6 +1370,8 @@ def main():
                         help='Max audio length to analyze in seconds (default: 120)')
     parser.add_argument('--ai-forensics', action='store_true',
                         help='Run AI spectral forensics (16kHz cutoff, phase entropy, spectral contrast, onset regularity)')
+    parser.add_argument('--stems-dir',
+                        help='Directory containing Demucs stems (other.wav, optional bass.wav) for improved key detection')
     
     args = parser.parse_args()
     
@@ -1320,8 +1387,12 @@ def main():
                     return obj.item()
                 return super().default(obj)
 
-        result = analyze_audio(args.audio_path, max_length_seconds=args.max_length,
-                               ai_forensics=args.ai_forensics)
+        result = analyze_audio(
+            args.audio_path,
+            max_length_seconds=args.max_length,
+            ai_forensics=args.ai_forensics,
+            stems_dir=args.stems_dir
+        )
         print(json.dumps(result, cls=NumpyEncoder))
         
     except FileNotFoundError as e:
