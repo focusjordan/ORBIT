@@ -28,6 +28,7 @@ const clap = require('./clap');
 const aiKnn = require('./ai-knn');
 const audioAnalysis = require('./audio-analysis');
 const silentcipher = require('./silentcipher');
+const sonics = require('./sonics');
 const runtimeConfig = require('../config');
 
 // ============================================================================
@@ -48,21 +49,23 @@ const AI_DETECTION_CONFIG = {
 
   // V2 weights (includes KNN as additive signal)
   weightsV2: {
-    semantic: 0.24,
+    semantic: 0.14,
     anomaly: 0.23,
     metadata: 0.17,
-    catalog: 0.28,
+    catalog: 0.23,
+    sonics: 0.15,
     knn: 0.08,
   },
 
   // V3 weights (CLAP demoted, watermark detection added)
   weightsV3: {
-    semantic: 0.08,
-    anomaly: 0.27,
-    metadata: 0.15,
-    catalog: 0.22,
-    watermark: 0.20,
-    knn: 0.08,
+    semantic: 0.064,
+    anomaly: 0.216,
+    metadata: 0.120,
+    catalog: 0.176,
+    watermark: 0.160,
+    sonics: 0.200,
+    knn: 0.064,
   },
 
   // Thresholds for recommendations
@@ -999,6 +1002,66 @@ async function checkWatermarkPresence(audioInput, options = {}) {
   };
 }
 
+/**
+ * Probe audio with SONICS SpecTTTra synthetic-song detector.
+ *
+ * @param {string|Buffer} audioInput - Audio input
+ * @param {Object} options
+ * @param {boolean} options.verbose
+ * @returns {Promise<{sonicsScore: number|null, prediction: string|null, confidence: number, flags: string[], details: Object}>}
+ */
+async function checkSonicsDetection(audioInput, options = {}) {
+  const {
+    verbose = process.env.ORBIT_ML_VERBOSE === 'true',
+  } = options;
+
+  const flags = [];
+  if (process.env.ORBIT_SKIP_SONICS === 'true') {
+    return {
+      sonicsScore: null,
+      prediction: null,
+      confidence: 0,
+      flags: ['SONICS_SKIPPED'],
+      details: { available: false, reason: 'ORBIT_SKIP_SONICS' },
+    };
+  }
+
+  try {
+    const detection = await sonics.detect(audioInput, { verbose });
+    const sonicsScore = detection.syntheticProbability;
+
+    if (sonicsScore > 0.7) flags.push('SONICS_SYNTHETIC_DETECTED');
+    if (sonicsScore > 0.9) flags.push('SONICS_HIGH_CONFIDENCE_SYNTHETIC');
+
+    const details = {
+      available: true,
+      synthetic_probability: detection.syntheticProbability,
+      real_probability: detection.realProbability,
+      model_variant: detection.modelVariant,
+      processing_time_ms: detection.processingTimeMs,
+    };
+
+    return {
+      sonicsScore,
+      prediction: detection.prediction,
+      confidence: detection.confidence,
+      flags,
+      details,
+    };
+  } catch (error) {
+    if (verbose) {
+      console.log(`   SONICS probe unavailable: ${error.message}`);
+    }
+    return {
+      sonicsScore: null,
+      prediction: null,
+      confidence: 0,
+      flags: ['SONICS_UNAVAILABLE_FAIL_OPEN'],
+      details: { available: false, error: error.message },
+    };
+  }
+}
+
 // ============================================================================
 // COMBINED DETECTION
 // ============================================================================
@@ -1066,6 +1129,7 @@ async function detectAI(audioInput, options = {}) {
       anomalies: null,
       metadata: null,
       catalog: null,
+      sonics: null,
     },
     active_flags: featureFlags,
     processing_time_ms: 0,
@@ -1076,6 +1140,7 @@ async function detectAI(audioInput, options = {}) {
       signalScores.catalogFlags?.includes('KNOWN_WORK_METADATA_MISMATCH');
     const knnInformative = typeof signalScores.knn === 'number';
     const watermarkInformative = typeof signalScores.watermark === 'number';
+    const sonicsInformative = typeof signalScores.sonics === 'number';
 
     let wSemantic = weightingConfig.semantic || 0;
     let wAnomaly = weightingConfig.anomaly || 0;
@@ -1083,12 +1148,14 @@ async function detectAI(audioInput, options = {}) {
     let wCatalog = weightingConfig.catalog || 0;
     let wKnn = weightingConfig.knn || 0;
     let wWatermark = weightingConfig.watermark || 0;
+    let wSonics = weightingConfig.sonics || 0;
 
     if (!catalogInformative) wCatalog = 0;
     if (!knnInformative) wKnn = 0;
     if (!watermarkInformative) wWatermark = 0;
+    if (!sonicsInformative) wSonics = 0;
 
-    const sum = wSemantic + wAnomaly + wMetadata + wCatalog + wKnn + wWatermark;
+    const sum = wSemantic + wAnomaly + wMetadata + wCatalog + wKnn + wWatermark + wSonics;
     if (sum > 0) {
       wSemantic /= sum;
       wAnomaly /= sum;
@@ -1096,6 +1163,7 @@ async function detectAI(audioInput, options = {}) {
       wCatalog /= sum;
       wKnn /= sum;
       wWatermark /= sum;
+      wSonics /= sum;
     }
 
     const weighted =
@@ -1104,7 +1172,8 @@ async function detectAI(audioInput, options = {}) {
       (signalScores.metadata * wMetadata) +
       (signalScores.catalog * wCatalog) +
       ((signalScores.knn || 0) * wKnn) +
-      ((signalScores.watermark || 0) * wWatermark);
+      ((signalScores.watermark || 0) * wWatermark) +
+      ((signalScores.sonics || 0) * wSonics);
 
     let scoreFloor = 0;
     if (floorInputs) {
@@ -1119,10 +1188,13 @@ async function detectAI(audioInput, options = {}) {
          'PRE_ECHO_DETECTED', 'HF_PHASE_INCOHERENCE', 'MS_PHASE_ANOMALY', 'PERFECT_VIBRATO'].includes(f));
 
       const watermarkFlags = floorInputs.watermarkFlags || [];
+      const sonicsFlags = floorInputs.sonicsFlags || [];
 
       // Definitive: file metadata literally declares AI origin
       if (metaFlags.includes('AI_COMMENT_TAG') || metaFlags.includes('AI_SELF_DECLARED') || metaFlags.includes('AI_ENCODER_SIGNATURE')) {
         scoreFloor = 0.90;
+      } else if (sonicsFlags.includes('SONICS_HIGH_CONFIDENCE_SYNTHETIC')) {
+        scoreFloor = 0.75;
       } else if (watermarkFlags.includes('UNKNOWN_WATERMARK_DETECTED')) {
         scoreFloor = 0.65;
       } else if (metaFlags.includes('AI_TEXT_INDICATOR') && forensicHits.length >= 2) {
@@ -1153,6 +1225,7 @@ async function detectAI(audioInput, options = {}) {
         catalog: wCatalog,
         knn: wKnn,
         watermark: wWatermark,
+        sonics: wSonics,
       },
       score_floor_applied: scoreFloor > weighted ? scoreFloor : null,
     };
@@ -1281,12 +1354,15 @@ async function detectAI(audioInput, options = {}) {
         }
       }
 
+      const sonicsV2 = await checkSonicsDetection(audioInput, { verbose: false });
+
       const v2Aggregate = aggregateScores(
         {
           semantic: semanticV2.aiScore || 0,
           anomaly: adjustedAnomalyV2Score,
           metadata: metadataV2.suspicionScore || 0,
           catalog: catalogScore,
+          sonics: typeof sonicsV2.sonicsScore === 'number' ? sonicsV2.sonicsScore : null,
           knn: knnSignal.available ? knnSignal.aiLikelihood : null,
           catalogFlags: catalogSignal.flags || [],
         },
@@ -1294,6 +1370,7 @@ async function detectAI(audioInput, options = {}) {
         {
           metaFlags: metadataV2.flags || [],
           anomalyFlags: anomalyV2.flags || [],
+          sonicsFlags: sonicsV2.flags || [],
         },
         AI_DETECTION_CONFIG.thresholdsV2
       );
@@ -1308,6 +1385,7 @@ async function detectAI(audioInput, options = {}) {
           anomalies: anomalyV2,
           metadata: metadataV2,
           catalog: catalogSignal,
+          sonics: sonicsV2,
           knn: knnSignal,
         },
       };
@@ -1335,6 +1413,8 @@ async function detectAI(audioInput, options = {}) {
         verbose,
       });
 
+      const sonicsV3 = v2Result?.signals?.sonics || await checkSonicsDetection(audioInput, { verbose: false });
+
       const semanticV3 = v2Result
         ? v2Result.signals.semantic
         : await probeAIGenerated(audioInput, {
@@ -1360,6 +1440,7 @@ async function detectAI(audioInput, options = {}) {
           catalog: catalogScore,
           knn: knnV3.available ? knnV3.aiLikelihood : null,
           watermark: watermarkSignal.watermarkScore,
+          sonics: typeof sonicsV3.sonicsScore === 'number' ? sonicsV3.sonicsScore : null,
           catalogFlags: catalogSignal.flags || [],
         },
         AI_DETECTION_CONFIG.weightsV3,
@@ -1367,6 +1448,7 @@ async function detectAI(audioInput, options = {}) {
           metaFlags: metadataV3.flags || [],
           anomalyFlags: anomalyV3.flags || [],
           watermarkFlags: watermarkSignal.flags || [],
+          sonicsFlags: sonicsV3.flags || [],
         },
         AI_DETECTION_CONFIG.thresholdsV3
       );
@@ -1383,6 +1465,7 @@ async function detectAI(audioInput, options = {}) {
           catalog: catalogSignal,
           knn: knnV3,
           watermark: watermarkSignal,
+          sonics: sonicsV3,
         },
       };
     }
@@ -1440,6 +1523,7 @@ async function detectAI(audioInput, options = {}) {
           score: v2Result.score,
           recommendation: v2Result.recommendation,
           weights_used: v2Result.weights_used,
+          sonics: v2Result.signals?.sonics || null,
         }
         : null,
       v3: v3Result
@@ -1447,6 +1531,7 @@ async function detectAI(audioInput, options = {}) {
           score: v3Result.score,
           recommendation: v3Result.recommendation,
           weights_used: v3Result.weights_used,
+          sonics: v3Result.signals?.sonics || null,
         }
         : null,
       per_signal_contributions: {
@@ -1462,6 +1547,7 @@ async function detectAI(audioInput, options = {}) {
             anomaly: Math.round((v2Result.signals.anomalies?.anomalyScore || 0) * v2Result.weights_used.anomaly * 1000) / 1000,
             metadata: Math.round((v2Result.signals.metadata?.suspicionScore || 0) * v2Result.weights_used.metadata * 1000) / 1000,
             catalog: Math.round((v2Result.signals.catalog?.provenanceScore || 0) * v2Result.weights_used.catalog * 1000) / 1000,
+            sonics: Math.round(((v2Result.signals.sonics?.sonicsScore || 0) * (v2Result.weights_used.sonics || 0)) * 1000) / 1000,
             knn: Math.round(((v2Result.signals.knn?.aiLikelihood || 0) * v2Result.weights_used.knn) * 1000) / 1000,
           }
           : null,
@@ -1473,6 +1559,7 @@ async function detectAI(audioInput, options = {}) {
             catalog: Math.round((v3Result.signals.catalog?.provenanceScore || 0) * v3Result.weights_used.catalog * 1000) / 1000,
             knn: Math.round(((v3Result.signals.knn?.aiLikelihood || 0) * (v3Result.weights_used.knn || 0)) * 1000) / 1000,
             watermark: Math.round(((v3Result.signals.watermark?.watermarkScore || 0) * (v3Result.weights_used.watermark || 0)) * 1000) / 1000,
+            sonics: Math.round(((v3Result.signals.sonics?.sonicsScore || 0) * (v3Result.weights_used.sonics || 0)) * 1000) / 1000,
           }
           : null,
       },
@@ -1560,8 +1647,14 @@ function getAllFlags(detectionResult) {
   if (detectionResult.signals?.knn?.flags) {
     flags.push(...detectionResult.signals.knn.flags);
   }
+  if (detectionResult.signals?.sonics?.flags) {
+    flags.push(...detectionResult.signals.sonics.flags);
+  }
   if (detectionResult.v2?.signals?.knn?.flags) {
     flags.push(...detectionResult.v2.signals.knn.flags);
+  }
+  if (detectionResult.v2?.signals?.sonics?.flags) {
+    flags.push(...detectionResult.v2.signals.sonics.flags);
   }
   
   return [...new Set(flags)];
@@ -1581,6 +1674,7 @@ module.exports = {
   checkMetadataPatterns,
   checkCatalogProvenance,
   checkWatermarkPresence,
+  checkSonicsDetection,
   scanTextForAIIndicators,
   
   // Utility functions
