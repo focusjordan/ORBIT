@@ -42,18 +42,15 @@ body {
 .status-dot.err { background: var(--red); box-shadow: 0 0 6px var(--red); }
 .status-line { font-size: 0.7rem; color: var(--text-dim); margin-top: 8px; }
 
-/* Progress bar */
-.progress-bar { display: flex; justify-content: center; gap: 0; padding: 0 24px 20px; max-width: 600px; margin: 0 auto; }
-.progress-step { display: flex; align-items: center; }
+/* Module indicator */
+.progress-bar { display: flex; justify-content: center; gap: 8px; padding: 0 24px 20px; max-width: 1100px; margin: 0 auto; flex-wrap: wrap; }
 .step-circle {
-  width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  font-size: 0; font-weight: 700; cursor: pointer; transition: var(--transition);
-  background: var(--surface); border: 2px solid var(--border); color: var(--text-dim);
+  padding: 7px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-dim); font-size: 0.68rem; letter-spacing: 0.04em; text-transform: uppercase;
+  cursor: pointer; transition: var(--transition);
 }
+.step-circle:hover { border-color: var(--accent); color: var(--text); }
 .step-circle.active { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); box-shadow: 0 0 8px var(--accent-glow); }
-.step-circle.done { border-color: var(--green); color: var(--green); background: rgba(0,214,143,0.15); }
-.step-line { width: 18px; height: 2px; background: var(--border); }
-.step-line.done { background: var(--green); }
 
 /* Main layout */
 .main { display: flex; max-width: 1200px; margin: 0 auto; padding: 0 16px 60px; gap: 16px; min-height: 70vh; }
@@ -258,6 +255,12 @@ body {
 .slide-three-col .slide-col-card li::before { content: '\2022'; position: absolute; left: 0; color: var(--accent); }
 .slide-divider { width: 60px; height: 2px; background: var(--border); margin: 16px auto; }
 
+/* Session E additions */
+.module-card:hover { border-color: var(--accent); background: var(--accent-glow); }
+.replaces-banner { padding: 10px; margin-bottom: 10px; border: 1px solid var(--accent); border-radius: var(--radius); background: rgba(0,212,170,0.06); }
+.key-stat-banner { padding: 10px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.mood-profile { padding: 2px 0; }
+
 /* Responsive */
 @media (max-width: 860px) {
   .main { flex-direction: column; }
@@ -294,7 +297,7 @@ body {
   'use strict';
 
   // ========== State ==========
-  var currentStep = 0;
+  var currentView = 'hub';
   var state = {
     demoTracks: [],
     demoBlobCache: {},
@@ -303,30 +306,77 @@ body {
     transferResult: null,
     acceptResult: null,
     chainResult: null,
+    module1: { ai: null, human: null },
+    module2: { result: null },
+    module3: { result: null },
+    module4: { result: null, filename: null },
+    module6: { result: null, transfer: null, accept: null, chain: null, filename: null },
   };
 
-  var STEPS = [
-    { id: 'slide-intro',    label: 'Intro',         type: 'slide' },
-    { id: 'ai-detect',      label: 'AI Detection',  type: 'demo' },
-    { id: 'ddex',           label: 'DDEX Ingest',   type: 'demo' },
-    { id: 'register',       label: 'Register',      type: 'demo' },
-    { id: 'transfer',       label: 'Transfer',      type: 'demo' },
-    { id: 'conflict',       label: 'Provenance',    type: 'demo' },
-    { id: 'slide-auto',     label: 'Automation',    type: 'slide' },
-    { id: 'slide-value',    label: 'Value',         type: 'slide' },
+  var VIEWS = [
+    { id: 'hub', label: 'Overview', type: 'hub' },
+    { id: 'mod-ai-detect', label: 'AI Detection', type: 'demo' },
+    { id: 'mod-analysis', label: 'Audio Analysis', type: 'demo' },
+    { id: 'mod-fingerprint', label: 'Fingerprinting', type: 'demo' },
+    { id: 'mod-watermark', label: 'Watermarking', type: 'demo' },
+    { id: 'mod-ddex', label: 'DDEX Ingest', type: 'demo' },
+    { id: 'mod-provenance', label: 'Provenance Transfer', type: 'demo' },
+    { id: 'closing', label: 'Value', type: 'slide' },
   ];
 
   // ========== Utilities ==========
   var $ = function(s) { return document.querySelector(s); };
   function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
-  function truncHash(h, n) { if (!h) return 'N/A'; return h.length > n ? h.slice(0, n) + '...' : h; }
+  function truncHash(h, n) { if (!h) return 'N/A'; return String(h).length > n ? String(h).slice(0, n) + '...' : String(h); }
   function row(label, value) { return '<div class="result-row"><span class="label">' + label + '</span><span class="value">' + value + '</span></div>'; }
   function badge(text, type) { return '<span class="badge ' + type + '">' + text + '</span>'; }
   function tag(text, isAccent) { return '<span class="tag' + (isAccent ? ' accent' : '') + '">' + esc(text) + '</span>'; }
   function confBar(label, pct, color) {
+    var safe = Math.max(0, Math.min(100, Number(pct) || 0));
     return '<div class="conf-bar-wrap"><span class="conf-label">' + esc(label) + '</span>' +
-      '<div class="conf-bar"><div class="conf-fill" style="width:' + pct + '%;background:' + (color || 'var(--accent)') + '"></div></div>' +
-      '<span class="conf-pct">' + pct + '%</span></div>';
+      '<div class="conf-bar"><div class="conf-fill" style="width:' + safe + '%;background:' + (color || 'var(--accent)') + '"></div></div>' +
+      '<span class="conf-pct">' + safe + '%</span></div>';
+  }
+  function getTrackMeta(filename) { return state.demoTracks.find(function(t) { return t.filename === filename; }) || null; }
+
+  function scorePct(v) {
+    if (v == null) return 0;
+    var n = Number(v);
+    if (Number.isNaN(n)) return 0;
+    if (n > 1) return Math.max(0, Math.min(100, Math.round(n)));
+    return Math.max(0, Math.min(100, Math.round(n * 100)));
+  }
+
+  function readSignalScore(ai, aliases) {
+    if (!ai || !ai.signals) return null;
+    for (var i = 0; i < aliases.length; i++) {
+      var p = aliases[i].split('.');
+      var ref = ai.signals;
+      var ok = true;
+      for (var j = 0; j < p.length; j++) {
+        if (ref == null || ref[p[j]] == null) { ok = false; break; }
+        ref = ref[p[j]];
+      }
+      if (ok) return scorePct(ref);
+    }
+    return null;
+  }
+
+  function normalizeList(items, fallbackLabel) {
+    if (!items) return [];
+    if (Array.isArray(items)) {
+      return items.map(function(it, idx) {
+        if (typeof it === 'string') return { label: it, confidence: null };
+        return {
+          label: it.label || it.name || it.key || (fallbackLabel + ' ' + (idx + 1)),
+          confidence: it.confidence != null ? it.confidence : (it.score != null ? it.score : null),
+        };
+      });
+    }
+    if (typeof items === 'object') {
+      return Object.keys(items).map(function(k) { return { label: k, confidence: items[k] }; });
+    }
+    return [];
   }
 
   // ========== Log Panel ==========
@@ -349,52 +399,45 @@ body {
     $('#logBody').scrollTop = $('#logBody').scrollHeight;
   }
 
-  // ========== Progress Bar ==========
-  function renderProgress() {
+  // ========== Module Indicator ==========
+  function renderIndicator() {
     var html = '';
-    STEPS.forEach(function(s, i) {
-      var cls = i < currentStep ? 'done' : (i === currentStep ? 'active' : '');
-      html += '<div class="progress-step">';
-      if (i > 0) html += '<div class="step-line' + (i <= currentStep ? ' done' : '') + '"></div>';
-      html += '<div class="step-circle ' + cls + '" data-step="' + i + '" title="' + esc(s.label) + '"></div>';
-      html += '</div>';
+    VIEWS.forEach(function(v) {
+      var active = v.id === currentView ? ' active' : '';
+      html += '<button class="step-circle' + active + '" data-view="' + v.id + '" title="' + esc(v.label) + '">' + esc(v.label) + '</button>';
     });
     $('#progressBar').innerHTML = html;
     document.querySelectorAll('.step-circle').forEach(function(el) {
-      el.addEventListener('click', function() {
-        var s = parseInt(this.dataset.step);
-        if (s <= currentStep) goToStep(s);
-      });
+      el.addEventListener('click', function() { goToView(this.dataset.view); });
     });
   }
 
-  function goToStep(n) {
-    currentStep = n;
-    renderProgress();
-    renderSection(n);
+  function goToView(viewId) {
+    currentView = viewId;
+    renderIndicator();
+    renderView();
   }
 
-  function nextStep() {
-    if (currentStep < STEPS.length - 1) goToStep(currentStep + 1);
+  function moduleScaffold(title, subtitle, replaces, keyStat, bodyHtml) {
+    return ''
+      + '<div class="card" style="padding:14px">'
+      + '<a href="#" id="back-to-hub" style="font-size:0.78rem;color:var(--accent);text-decoration:none">&larr; Back to Platform Overview</a>'
+      + '<div class="section-title" style="margin-top:8px">' + title + '</div>'
+      + '<div class="section-subtitle">' + subtitle + '</div>'
+      + '<div class="replaces-banner"><span style="font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em">Replaces</span><div style="font-size:0.85rem;color:var(--text);margin-top:3px">' + replaces + '</div></div>'
+      + '<div class="key-stat-banner"><span style="font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em">Key Stat</span><div style="font-size:0.85rem;color:var(--text);margin-top:3px">' + keyStat + '</div></div>'
+      + bodyHtml
+      + '</div>';
   }
 
-  function prevStep() {
-    if (currentStep > 0) goToStep(currentStep - 1);
-  }
-
-  // ========== Navigation ==========
-  function navBar(opts) {
-    var html = '<div class="nav-bar">';
-    html += currentStep > 0 ? '<button class="btn btn-outline" onclick="window._demo.prevStep()">Back</button>' : '<span></span>';
-    if (opts && opts.continueId) {
-      html += '<button class="btn" id="' + opts.continueId + '" disabled onclick="window._demo.nextStep()">Continue</button>';
-    } else if (currentStep < STEPS.length - 1) {
-      html += '<button class="btn" onclick="window._demo.nextStep()">Continue</button>';
-    } else {
-      html += '<span></span>';
+  function bindBackToHub() {
+    var el = $('#back-to-hub');
+    if (el) {
+      el.addEventListener('click', function(e) {
+        e.preventDefault();
+        goToView('hub');
+      });
     }
-    html += '</div>';
-    return html;
   }
 
   // ========== Track loading helpers ==========
@@ -417,885 +460,787 @@ body {
     return html;
   }
 
-  // ========== Section Renderers ==========
-
-  function renderSection(n) {
-    var panel = $('#contentPanel');
-    var fns = [renderIntroSlide, renderAIDetect, renderDDEX, renderRegister, renderTransfer, renderConflict, renderAutomationSlide, renderValueSlide];
-    panel.innerHTML = '<div class="section active">' + fns[n]() + '</div>';
-    var isSlide = STEPS[n].type === 'slide';
-    $('#logPanel').style.display = isSlide ? 'none' : '';
-    bindSection(n);
+  function bindFileInput(prefix, setBlobFn, setNameFn) {
+    var fi = $('#' + prefix + '-file');
+    var dz = $('#' + prefix + '-drop');
+    var nm = $('#' + prefix + '-filename');
+    if (!fi || !dz || !nm) return;
+    fi.addEventListener('change', function() {
+      if (!fi.files.length) return;
+      setBlobFn(fi.files[0]);
+      setNameFn(fi.files[0].name);
+      nm.textContent = fi.files[0].name;
+    });
+    dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', function() { dz.classList.remove('dragover'); });
+    dz.addEventListener('drop', function(e) {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      if (!e.dataTransfer.files.length) return;
+      fi.files = e.dataTransfer.files;
+      setBlobFn(e.dataTransfer.files[0]);
+      setNameFn(e.dataTransfer.files[0].name);
+      nm.textContent = e.dataTransfer.files[0].name;
+    });
   }
 
-  // ----- Slide: Intro — Distributor / Label Pain Points -----
-  function renderIntroSlide() {
-    var html = '<div class="slide-section">';
-    html += '<h1 class="slide-headline" style="font-size:2rem;color:var(--accent);margin-bottom:4px">ORBIT</h1>';
-    html += '<p style="font-size:0.78rem;color:var(--text-dim);letter-spacing:0.05em;margin-bottom:6px">Origin-Based Identity &amp; Rights Transfer Protocol</p>';
-    html += '<div style="margin:10px auto 14px"><span class="badge" style="background:rgba(0,212,170,0.15);color:var(--accent);font-size:0.72rem;letter-spacing:0.04em">Audio Provenance for Labels &amp; Distributors</span></div>';
-    html += '<p class="slide-pitch">Every track screened, fingerprinted, watermarked, and cryptographically signed &mdash; the identity travels with the file.</p>';
-    html += '<div class="slide-divider"></div>';
-    html += '<div class="slide-stats">';
-    html += '<div class="slide-stat"><div class="slide-stat-icon">&#9835;</div><div class="slide-stat-text"><strong>Submissions are growing, but so is AI-generated content</strong>Distributors need to screen every track without scaling headcount linearly. ORBIT detects AI-generated music automatically at intake.</div></div>';
-    html += '<div class="slide-stat"><div class="slide-stat-icon">&#9741;</div><div class="slide-stat-text"><strong>Rights data is fragile and breaks in transit</strong>Metadata lives in spreadsheets and DDEX XML that nobody re-verifies after delivery. ORBIT embeds provenance directly into the audio file itself.</div></div>';
-    html += '<div class="slide-stat"><div class="slide-stat-icon">&#9888;</div><div class="slide-stat-text"><strong>No chain of custody once audio leaves your platform</strong>Once a track is delivered to a DSP, there is no way to prove provenance downstream. ORBIT creates a cryptographic chain that travels with the file forever.</div></div>';
-    html += '</div>';
-    html += navBar();
-    html += '</div>';
+  async function analyzeBlob(blob, trackMeta) {
+    var fd = new FormData();
+    fd.append('audio', blob, 'track');
+    if (trackMeta && trackMeta.title) fd.append('title', trackMeta.title);
+    if (trackMeta && trackMeta.artist) fd.append('artist', trackMeta.artist);
+    if (trackMeta && trackMeta.filename) fd.append('filename', trackMeta.filename);
+    var res = await fetch('/api/analyze', { method: 'POST', body: fd });
+    var data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Analysis failed');
+    addLog(data.processing_log || []);
+    return data;
+  }
+
+  // ========== Hub ==========
+  function renderHub() {
+    var cards = [
+      { id: 'mod-ai-detect', icon: '&#128737;', name: 'AI Music Detection', desc: 'Screen incoming audio for synthetic generation risk.', repl: 'Illuminarty, Boomy AI Detector, manual listening teams' },
+      { id: 'mod-analysis', icon: '&#127911;', name: 'Audio Analysis & Metadata', desc: 'Enrich every track with production-grade descriptors.', repl: 'Cyanite, Musiio, ACRCloud metadata services' },
+      { id: 'mod-fingerprint', icon: '&#128376;', name: 'Fingerprinting & Catalog Matching', desc: 'Identify known works across global references in real time.', repl: 'Audible Magic, Pex, ACRCloud identification' },
+      { id: 'mod-watermark', icon: '&#128274;', name: 'Neural Watermarking', desc: 'Embed provenance identity directly into the waveform.', repl: 'Digimarc, Intrinsic.ai, Irdeto/Civolution' },
+      { id: 'mod-ddex', icon: '&#128196;', name: 'DDEX Parsing & Ingest', desc: 'Parse ERN payloads into immediately usable structures.', repl: 'FUGA ingest tooling, Labelcamp, custom parsers' },
+      { id: 'mod-provenance', icon: '&#128279;', name: 'Provenance & Rights Transfer', desc: 'Move custody across platforms with verifiable chain of title.', repl: 'Manual rights ops, chain-of-title spreadsheets, blockchain startups' },
+    ];
+    var html = '<div class="slide-section">'
+      + '<h1 class="slide-headline">ORBIT — One Platform. Six Vendor Categories.</h1>'
+      + '<p class="slide-subline">Every capability a label or distributor needs. No vendor stack required.</p>'
+      + '<div class="slide-two-col" style="max-width:1000px">';
+    cards.forEach(function(c) {
+      html += '<div class="slide-col-card module-card" data-view="' + c.id + '" style="cursor:pointer">'
+        + '<div style="font-size:1.3rem;margin-bottom:6px">' + c.icon + '</div>'
+        + '<h3 style="margin-bottom:4px">' + c.name + '</h3>'
+        + '<p style="margin-bottom:8px">' + c.desc + '</p>'
+        + '<div style="font-size:0.72rem;color:var(--text-dim)">Replaces: ' + c.repl + '</div>'
+        + '</div>';
+    });
+    html += '</div>'
+      + '<div style="margin-top:20px"><button class="btn btn-outline" id="open-closing">View Closing Value Slide</button></div>'
+      + '</div>';
     return html;
   }
 
-  // ----- Slide: Automation & Agent Integration -----
-  function renderAutomationSlide() {
-    var html = '<div class="slide-section">';
-    html += '<h1 class="slide-headline">Autonomous Catalog Management</h1>';
-    html += '<p class="slide-subline">19 CLI commands with structured JSON output &mdash; built for automation, agents, and CI/CD pipelines</p>';
+  function bindHub() {
+    document.querySelectorAll('.module-card').forEach(function(card) {
+      card.addEventListener('click', function() { goToView(this.dataset.view); });
+    });
+    var c = $('#open-closing');
+    if (c) c.addEventListener('click', function() { goToView('closing'); });
+  }
 
-    html += '<div style="max-width:700px;margin:20px auto 0;text-align:left">';
-    html += '<div class="card" style="padding:16px;font-family:\'SF Mono\',\'Fira Code\',\'Consolas\',monospace;font-size:0.78rem;line-height:2;color:var(--text-dim)">';
-    html += '<div style="color:var(--accent);margin-bottom:8px;font-weight:600">$ orbit watch ~/intake --command detect</div>';
-    html += '<div><span style="color:var(--text-dim)">[new file]</span> &rarr; AI Screen &rarr; <span style="color:var(--green);font-weight:600">LIKELY_HUMAN</span> &rarr; orbit register &rarr; Ledger</div>';
-    html += '<div><span style="color:var(--text-dim)">[new file]</span> &rarr; AI Screen &rarr; <span style="color:var(--red);font-weight:600">LIKELY_AI</span> &rarr; Flagged for Review</div>';
-    html += '<div><span style="color:var(--text-dim)">[new file]</span> &rarr; AI Screen &rarr; <span style="color:var(--yellow);font-weight:600">REVIEW</span> &rarr; Manual Queue</div>';
-    html += '</div></div>';
-
-    html += '<div class="slide-stats">';
-    html += '<div class="slide-stat"><div class="slide-stat-icon" style="font-size:1.2rem">&#9881;</div><div class="slide-stat-text"><strong>Point-and-run automation</strong><code style="color:var(--accent);font-size:0.76rem">orbit watch</code> monitors an intake folder and auto-processes every new file. <code style="color:var(--accent);font-size:0.76rem">orbit batch</code> processes an entire catalog directory at once.</div></div>';
-    html += '<div class="slide-stat"><div class="slide-stat-icon" style="font-size:1.2rem">&#129302;</div><div class="slide-stat-text"><strong>Agent-ready by design</strong>Every command outputs structured JSON via <code style="color:var(--accent);font-size:0.76rem">--json</code>. Compatible with OpenClaw, MCP, or any LLM agent framework &mdash; each command becomes a tool an agent can invoke autonomously.</div></div>';
-    html += '<div class="slide-stat"><div class="slide-stat-icon" style="font-size:1.2rem">&#128202;</div><div class="slide-stat-text"><strong>Full audit trail</strong><code style="color:var(--accent);font-size:0.76rem">orbit audit</code> logs every operation with timestamps. Complete visibility into what was screened, registered, flagged, or transferred.</div></div>';
-    html += '</div>';
-
-    html += '<div class="slide-divider"></div>';
-    html += '<h2 style="font-size:1.1rem;font-weight:700;color:#fff;margin-bottom:14px">Getting Started</h2>';
-    html += '<div class="slide-two-col" style="max-width:600px">';
-    html += '<div class="slide-col-card" style="text-align:center"><h3 style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em">Setup &amp; Integration</h3>';
-    html += '<div style="font-size:1.8rem;font-weight:800;color:var(--accent);margin:8px 0">$1,500</div>';
-    html += '<div style="font-size:0.76rem;color:var(--text-dim)">One-time &mdash; onboarding, configuration, and integration support</div></div>';
-    html += '<div class="slide-col-card" style="text-align:center"><h3 style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em">First Month</h3>';
-    html += '<div style="font-size:1.8rem;font-weight:800;color:var(--accent);margin:8px 0">$4,000<span style="font-size:0.7rem;font-weight:400;color:var(--text-dim)">/mo</span></div>';
-    html += '<div style="font-size:0.76rem;color:var(--text-dim)">50% introductory rate &mdash; full platform access</div></div>';
-    html += '</div>';
-    html += '<div style="max-width:600px;margin:14px auto 0;text-align:center;font-size:0.78rem;color:var(--text-dim)">After the first month: $8,000/mo on a rolling 6-month commitment</div>';
-
-    html += navBar();
-
-    html += '</div>';
+  // ========== Module 1 ==========
+  function renderM1Result(data) {
+    var ai = data.ai_detection || {};
+    var rec = ai.recommendation || 'UNAVAILABLE';
+    var type = rec === 'LIKELY_HUMAN' ? 'success' : rec === 'REVIEW' ? 'warning' : 'error';
+    var html = '<div style="text-align:center;margin:12px 0">' + badge(rec.replace(/_/g, ' '), type) + '</div>';
+    html += confBar('Overall Score', scorePct(ai.score), type === 'success' ? 'var(--green)' : (type === 'error' ? 'var(--red)' : 'var(--yellow)'));
+    var sonics = readSignalScore(ai, ['sonics.aiScore', 'sonics.score', 'sonics.confidence']);
+    var semantic = readSignalScore(ai, ['semantic.aiScore', 'semantic.score']);
+    var anomaly = readSignalScore(ai, ['anomalies.anomalyScore', 'anomalies.score']);
+    var metadata = readSignalScore(ai, ['metadata.metadataScore', 'metadata.score']);
+    var provenance = readSignalScore(ai, ['catalog.provenanceScore', 'catalog.score']);
+    if (sonics != null) html += confBar('SONICS Signal', sonics, 'var(--accent)');
+    if (semantic != null) html += confBar('Semantic Probe', semantic, 'var(--accent-2)');
+    if (anomaly != null) html += confBar('Anomaly Detection', anomaly, 'var(--yellow)');
+    if (metadata != null) html += confBar('Metadata Analysis', metadata, '#8f95b2');
+    if (provenance != null) html += confBar('Catalog Provenance', provenance, 'var(--red)');
+    if (ai.flags && ai.flags.length) {
+      html += '<div class="tags" style="margin-top:8px">';
+      ai.flags.forEach(function(f) { html += tag(f, true); });
+      html += '</div>';
+    }
     return html;
   }
 
-  // ----- Slide: Value Proposition -----
-  function renderValueSlide() {
-    var html = '<div class="slide-section">';
-    html += '<h1 class="slide-headline">This Isn\'t Software. It\'s Autonomous Infrastructure.</h1>';
-    html += '<p class="slide-subline">ORBIT doesn\'t optimize your existing workflow &mdash; it replaces the parts that don\'t scale.</p>';
-
-    html += '<div class="slide-divider"></div>';
-    html += '<h2 style="font-size:0.9rem;font-weight:700;color:#fff;margin-bottom:14px;text-transform:uppercase;letter-spacing:0.06em">What You\'re Currently Spending</h2>';
-
-    html += '<div class="slide-stats" style="max-width:750px">';
-    html += '<div class="slide-stat"><div class="slide-stat-icon" style="background:rgba(255,68,102,0.15);border-color:var(--red);color:var(--red);font-size:1.1rem">&#128100;</div>';
-    html += '<div class="slide-stat-text"><strong>$8&ndash;29K/mo in screening labor</strong>2&ndash;5 people listening to submissions, checking for AI content, verifying ownership claims. They get fatigued, they\'re inconsistent, and they can\'t analyze audio at a signal level.</div></div>';
-
-    html += '<div class="slide-stat"><div class="slide-stat-icon" style="background:rgba(255,68,102,0.15);border-color:var(--red);color:var(--red);font-size:1.1rem">&#9878;</div>';
-    html += '<div class="slide-stat-text"><strong>$7&ndash;50K per song in infringement costs and unclaimed royalties</strong>Missed ownership conflicts, undetected duplicates, and broken metadata compound across every track in a catalog. There is no way to retroactively prove provenance without the infrastructure in place before the dispute happens.</div></div>';
-
-    html += '<div class="slide-stat"><div class="slide-stat-icon" style="background:rgba(255,68,102,0.15);border-color:var(--red);color:var(--red);font-size:1.1rem">&#8734;</div>';
-    html += '<div class="slide-stat-text"><strong>Uncapped lost revenue from metadata failure</strong>Rights data breaks in transit between platforms. Royalties go unclaimed. The industry loses $2B+ annually &mdash; every label and distributor absorbs a share of that.</div></div>';
-    html += '</div>';
-
-    html += '<div class="slide-divider"></div>';
-    html += '<h2 style="font-size:0.9rem;font-weight:700;color:#fff;margin-bottom:14px;text-transform:uppercase;letter-spacing:0.06em">What ORBIT Changes</h2>';
-
-    html += '<div class="slide-stats" style="max-width:750px">';
-    html += '<div class="slide-stat"><div class="slide-stat-icon" style="font-size:1.1rem">&#9889;</div>';
-    html += '<div class="slide-stat-text"><strong>Removes the scalability ceiling</strong>Accept 10x more submissions without proportionally scaling headcount. Every track is screened, fingerprinted, watermarked, and signed automatically &mdash; at machine speed, 24/7.</div></div>';
-
-    html += '<div class="slide-stat"><div class="slide-stat-icon" style="font-size:1.1rem">&#128274;</div>';
-    html += '<div class="slide-stat-text"><strong>Cryptographic proof that prevents disputes before they start</strong>Every file carries its own provenance chain. Ownership is embedded, not documented externally. If a dispute arises, the answer is already in the file.</div></div>';
-
-    html += '<div class="slide-stat"><div class="slide-stat-icon" style="font-size:1.1rem">&#129302;</div>';
-    html += '<div class="slide-stat-text"><strong>Autonomous operations via AI agents</strong>ORBIT integrates with OpenClaw, MCP, and LLM agent frameworks. Your catalog isn\'t managed by people clicking buttons &mdash; it\'s managed by an autonomous system that screens, registers, transfers, and audits without human intervention.</div></div>';
-    html += '</div>';
-
-    html += '<div class="slide-divider"></div>';
-    html += '<div style="max-width:700px;margin:0 auto;text-align:center">';
-    html += '<p style="font-size:0.92rem;color:var(--text);line-height:1.7;margin-bottom:6px">Between screening labor, infringement risk, and unclaimed royalties, these costs compound across every track in your catalog. ORBIT solves them at <strong style="color:var(--accent)">a fraction of the cost</strong>.</p>';
-    html += '<p style="font-size:0.82rem;color:var(--text-dim)">This is not an incremental improvement. It\'s a category shift.</p>';
-    html += '</div>';
-
-    html += '<div style="margin-top:24px">';
-    html += '<button class="btn btn-outline" onclick="window._demo.prevStep()">Back</button>';
-    html += '</div>';
-
-    html += '</div>';
-    return html;
+  function renderM1Verdict() {
+    if (!state.module1.ai || !state.module1.human) return '';
+    var left = (state.module1.ai.ai_detection && state.module1.ai.ai_detection.recommendation) || 'N/A';
+    var right = (state.module1.human.ai_detection && state.module1.human.ai_detection.recommendation) || 'N/A';
+    return '<div class="card" style="margin-top:12px;border-color:var(--accent)">'
+      + '<div class="card-title">Verdict Comparison</div>'
+      + '<div class="result-grid">'
+      + row('AI-Generated Track', left.replace(/_/g, ' '))
+      + row('Human Track', right.replace(/_/g, ' '))
+      + '</div></div>';
   }
 
-  function noopBind() {}
-
-  // ----- Section: AI Detection -----
-  function renderAIDetect() {
-    var html = '<div class="section-title">AI Content Detection</div>';
-    html += '<div class="section-subtitle">Can ORBIT distinguish AI-generated music from human recordings?</div>';
-    html += '<div class="compare-cols">';
-
-    // Left: AI track
-    html += '<div class="card"><div class="card-title">AI-Generated Track</div>';
-    html += trackSelectHtml('ai-track-select', function(t) { return t.genre === 'Jazz' || t.title.toLowerCase().includes('ai'); });
-    html += '<div class="dropzone" id="ai-drop"><div class="dropzone-label"><strong>Drop AI track here</strong>or select from library</div><input type="file" id="ai-file" accept="audio/*"><div class="file-name" id="ai-filename"></div></div>';
-    html += '<button class="btn btn-full" id="ai-analyze-btn" disabled>Analyze</button>';
-    html += '<div id="ai-results"></div></div>';
-
-    // Right: Human track
-    html += '<div class="card"><div class="card-title">Well-Known Track</div>';
-    html += trackSelectHtml('human-track-select', function(t) { return t.artist === 'Fleetwood Mac' || t.genre === 'Rock'; });
-    html += '<div class="dropzone" id="human-drop"><div class="dropzone-label"><strong>Drop human track here</strong>or select from library</div><input type="file" id="human-file" accept="audio/*"><div class="file-name" id="human-filename"></div></div>';
-    html += '<button class="btn btn-full" id="human-analyze-btn" disabled>Analyze</button>';
-    html += '<div id="human-results"></div></div>';
-
-    html += '</div>';
-    html += navBar({ continueId: 'ai-continue' });
-    return html;
+  function renderM1() {
+    var body = '<div class="compare-cols">'
+      + '<div class="card"><div class="card-title">AI-Generated Track</div>'
+      + trackSelectHtml('m1-ai-track', function(t) { return t.genre === 'Jazz' || String(t.title).toLowerCase().includes('ai'); })
+      + '<div class="dropzone" id="m1-ai-drop"><div class="dropzone-label"><strong>Drop AI track here</strong>or select from library</div><input type="file" id="m1-ai-file" accept="audio/*"><div class="file-name" id="m1-ai-filename"></div></div>'
+      + '<button class="btn btn-full" id="m1-ai-btn" disabled>Analyze AI Track</button><div id="m1-ai-results"></div></div>'
+      + '<div class="card"><div class="card-title">Human Track</div>'
+      + trackSelectHtml('m1-human-track', function(t) { return t.artist === 'Fleetwood Mac' || t.genre === 'Rock'; })
+      + '<div class="dropzone" id="m1-human-drop"><div class="dropzone-label"><strong>Drop human track here</strong>or select from library</div><input type="file" id="m1-human-file" accept="audio/*"><div class="file-name" id="m1-human-filename"></div></div>'
+      + '<button class="btn btn-full" id="m1-human-btn" disabled>Analyze Human Track</button><div id="m1-human-results"></div></div>'
+      + '</div><div id="m1-verdict">' + renderM1Verdict() + '</div>';
+    return moduleScaffold(
+      'AI Music Detection',
+      'Side-by-side model confidence and review routing.',
+      'Illuminarty, Boomy AI Detector, manual listening teams',
+      'Three independent detection methodologies. 95.2% corpus accuracy. 100% effective with review routing.',
+      body
+    );
   }
 
-  function bindAIDetect() {
+  function bindM1() {
+    bindBackToHub();
     var aiBlob = null, humanBlob = null;
-
-    function setupDrop(prefix, selectId, setBlobFn) {
-      var sel = $('#' + selectId);
-      var fi = $('#' + prefix + '-file');
-      var nm = $('#' + prefix + '-filename');
-      var btn = $('#' + prefix + '-analyze-btn');
-      var dz = $('#' + prefix + '-drop');
-
-      if (sel) sel.addEventListener('change', async function() {
+    function wireSelect(selId, msgId, fileNameId, setBlob, btnId) {
+      var sel = $('#' + selId);
+      if (!sel) return;
+      sel.addEventListener('change', async function() {
         if (!this.value) return;
-        var msg = $('#' + selectId + '-msg');
+        var msg = $('#' + msgId);
         msg.textContent = 'Loading...';
         try {
           var blob = await loadTrackBlob(this.value);
-          setBlobFn(blob);
-          nm.textContent = this.value;
-          btn.disabled = false;
+          setBlob(blob);
+          $('#' + fileNameId).textContent = this.value;
+          $('#' + btnId).disabled = false;
           msg.textContent = '';
-        } catch(e) { msg.textContent = 'Failed to load'; }
+        } catch (e) { msg.textContent = 'Failed to load'; }
       });
-      if (fi) fi.addEventListener('change', function() {
-        if (fi.files.length > 0) {
-          setBlobFn(fi.files[0]);
-          nm.textContent = fi.files[0].name;
-          btn.disabled = false;
-        }
-      });
-      if (dz) {
-        dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('dragover'); });
-        dz.addEventListener('dragleave', function() { dz.classList.remove('dragover'); });
-        dz.addEventListener('drop', function(e) {
-          e.preventDefault(); dz.classList.remove('dragover');
-          if (e.dataTransfer.files.length > 0) {
-            fi.files = e.dataTransfer.files;
-            setBlobFn(e.dataTransfer.files[0]);
-            nm.textContent = e.dataTransfer.files[0].name;
-            btn.disabled = false;
-          }
-        });
-      }
     }
+    wireSelect('m1-ai-track', 'm1-ai-track-msg', 'm1-ai-filename', function(b) { aiBlob = b; }, 'm1-ai-btn');
+    wireSelect('m1-human-track', 'm1-human-track-msg', 'm1-human-filename', function(b) { humanBlob = b; }, 'm1-human-btn');
 
-    setupDrop('ai', 'ai-track-select', function(b) { aiBlob = b; });
-    setupDrop('human', 'human-track-select', function(b) { humanBlob = b; });
+    bindFileInput('m1-ai', function(b) { aiBlob = b; }, function() {});
+    bindFileInput('m1-human', function(b) { humanBlob = b; }, function() {});
+    $('#m1-ai-file').addEventListener('change', function() { $('#m1-ai-btn').disabled = !this.files.length; });
+    $('#m1-human-file').addEventListener('change', function() { $('#m1-human-btn').disabled = !this.files.length; });
 
-    var completed = { ai: false, human: false };
-    function checkBothDone() {
-      if (completed.ai && completed.human) {
-        var btn = $('#ai-continue');
-        if (btn) btn.disabled = false;
-      }
-    }
-
-    async function runAnalysis(blob, resultsId, side, trackMeta) {
-      var el = $('#' + resultsId);
-      el.innerHTML = '<div class="loading-inline"><span class="spinner"></span>Analyzing...</div>';
-      addLogMsg('--- ' + side + ' track analysis ---');
-
-      var fd = new FormData();
-      fd.append('audio', blob, 'track');
-      if (trackMeta && trackMeta.title) fd.append('title', trackMeta.title);
-      if (trackMeta && trackMeta.artist) fd.append('artist', trackMeta.artist);
-      if (trackMeta && trackMeta.filename) fd.append('filename', trackMeta.filename);
-
-      try {
-        var res = await fetch('/api/analyze', { method: 'POST', body: fd });
-        var data = await res.json();
-        if (!res.ok || data.error) { el.innerHTML = '<div class="error-msg">' + esc(data.error || 'Analysis failed') + '</div>'; return; }
-        addLog(data.processing_log || []);
-        el.innerHTML = renderAnalysisResult(data);
-        completed[side] = true;
-        checkBothDone();
-      } catch(err) {
-        el.innerHTML = '<div class="error-msg">Network error: ' + esc(err.message) + '</div>';
-      }
-    }
-
-    function getSelectedMeta(selectId) {
-      var sel = $('#' + selectId);
-      if (!sel || !sel.value) return {};
-      var t = state.demoTracks.find(function(tr) { return tr.filename === sel.value; });
+    function selectedMeta(selId) {
+      var s = $('#' + selId);
+      var t = s && s.value ? getTrackMeta(s.value) : null;
       return t ? { title: t.title, artist: t.artist, filename: t.filename } : {};
     }
 
-    $('#ai-analyze-btn').addEventListener('click', function() { if (aiBlob) runAnalysis(aiBlob, 'ai-results', 'ai', getSelectedMeta('ai-track-select')); });
-    $('#human-analyze-btn').addEventListener('click', function() { if (humanBlob) runAnalysis(humanBlob, 'human-results', 'human', getSelectedMeta('human-track-select')); });
+    $('#m1-ai-btn').addEventListener('click', async function() {
+      if (!aiBlob) return;
+      this.disabled = true;
+      $('#m1-ai-results').innerHTML = '<div class="loading-inline"><span class="spinner"></span>Analyzing...</div>';
+      try {
+        var d = await analyzeBlob(aiBlob, selectedMeta('m1-ai-track'));
+        state.module1.ai = d;
+        $('#m1-ai-results').innerHTML = renderM1Result(d);
+        $('#m1-verdict').innerHTML = renderM1Verdict();
+      } catch (err) {
+        $('#m1-ai-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
+      }
+      this.disabled = false;
+    });
+
+    $('#m1-human-btn').addEventListener('click', async function() {
+      if (!humanBlob) return;
+      this.disabled = true;
+      $('#m1-human-results').innerHTML = '<div class="loading-inline"><span class="spinner"></span>Analyzing...</div>';
+      try {
+        var d = await analyzeBlob(humanBlob, selectedMeta('m1-human-track'));
+        state.module1.human = d;
+        $('#m1-human-results').innerHTML = renderM1Result(d);
+        $('#m1-verdict').innerHTML = renderM1Verdict();
+      } catch (err) {
+        $('#m1-human-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
+      }
+      this.disabled = false;
+    });
   }
 
-  function renderAnalysisResult(data) {
-    var a = data.analysis || {};
-    var ai = data.ai_detection;
-    var cc = data.catalog_check;
+  // ========== Module 2 ==========
+  function moodProfileHtml(mood) {
+    var items = normalizeList(mood, 'Mood').slice(0, 8);
+    if (!items.length) return '<div style="font-size:0.78rem;color:var(--text-dim)">Mood profile unavailable.</div>';
     var html = '';
-
-    // AI Detection badge and scores
-    if (ai && ai.recommendation) {
-      var rec = ai.recommendation;
-      var type = rec === 'LIKELY_HUMAN' ? 'success' : rec === 'REVIEW' ? 'warning' : 'error';
-      var pct = ai.score != null ? Math.round(ai.score * 100) : '?';
-      var color = type === 'success' ? 'var(--green)' : type === 'error' ? 'var(--red)' : 'var(--yellow)';
-
-      html += '<div style="text-align:center;margin:14px 0 8px">' + badge(rec.replace(/_/g, ' '), type) + '</div>';
-      html += confBar('AI Score', pct, color);
-
-      if (ai.signals) {
-        if (ai.signals.semantic) html += confBar('Semantic Probe', Math.round((ai.signals.semantic.aiScore || 0) * 100), 'var(--accent-2)');
-        if (ai.signals.anomalies) html += confBar('Anomaly Score', Math.round((ai.signals.anomalies.anomalyScore || 0) * 100), 'var(--yellow)');
-        if (ai.signals.catalog && ai.signals.catalog.provenanceScore > 0) html += confBar('Provenance', Math.round((ai.signals.catalog.provenanceScore || 0) * 100), 'var(--red)');
-      }
-
-      if (ai.flags && ai.flags.length > 0) {
-        html += '<div style="margin-top:8px" class="tags">';
-        ai.flags.forEach(function(f) { html += tag(f, true); });
-        html += '</div>';
-      }
-    }
-
-    // Catalog check result
-    if (cc && cc.status && cc.status !== 'no_match' && cc.status !== 'unavailable') {
-      var ccType = cc.status === 'verified_known_work' ? 'success' : 'warning';
-      var ccLabel = cc.status === 'verified_known_work' ? 'Known Work Verified' : 'Known Work — Metadata Mismatch';
-      html += '<div style="margin-top:10px;padding:10px;border-radius:var(--radius);background:var(--surface-2);border:1px solid var(--border)">';
-      html += '<div style="margin-bottom:6px">' + badge(ccLabel, ccType) + '</div>';
-      if (cc.musicbrainz) {
-        html += '<div style="font-size:0.78rem">AcoustID matched: <strong>' + esc(cc.musicbrainz.title) + '</strong> by ' + esc(cc.musicbrainz.artist) + '</div>';
-      }
-      if (cc.corroboration) {
-        html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:3px">Corroboration: ' + Math.round(cc.corroboration.score * 100) + '%';
-        html += ' (title: ' + (cc.corroboration.title_match ? 'match' : 'no') + ', artist: ' + (cc.corroboration.artist_match ? 'match' : 'no') + ')</div>';
-      }
-      html += '</div>';
-    } else if (cc && cc.status === 'no_match') {
-      html += '<div style="margin-top:10px;font-size:0.72rem;color:var(--text-dim)">Catalog: No known-work match</div>';
-    }
-
-    if (a.genre && a.genre.length > 0) {
-      html += '<div style="margin-top:12px">';
-      a.genre.slice(0, 3).forEach(function(g) { html += confBar(g.label, Math.round((g.confidence || 0) * 100)); });
-      html += '</div>';
-    }
-
-    var details = [];
-    if (a.bpm) details.push('BPM: ' + a.bpm.value);
-    if (a.key) details.push('Key: ' + (a.key.value || a.key.label));
-    if (a.vocals) details.push('Vocals: ' + (a.vocals.present ? 'Yes' : 'No'));
-    if (details.length) html += '<div style="margin-top:8px;font-size:0.78rem;color:var(--text-dim)">' + details.join(' &middot; ') + '</div>';
-
+    items.forEach(function(m) {
+      var pct = m.confidence == null ? 0 : scorePct(m.confidence);
+      html += confBar(m.label, pct, 'var(--accent-2)');
+    });
     return html;
   }
 
-  // ----- Section 2: DDEX Ingest -----
-  function renderDDEX() {
-    var html = '<div class="section-title">DDEX Metadata Ingestion</div>';
-    html += '<div class="section-subtitle">ORBIT speaks the music industry\'s language. Parse an ERN 4.3 delivery document.</div>';
-    html += '<div class="card"><div class="card-title">DDEX ERN 4.3 Document</div>';
-    html += '<div class="xml-viewer" id="ddex-xml-view">Loading XML...</div>';
-    html += '<button class="btn" id="ddex-parse-btn" style="margin-top:14px">Parse Document</button></div>';
-    html += '<div id="ddex-results"></div>';
-    html += navBar({ continueId: 'ddex-continue' });
+  function renderM2Result(data) {
+    var a = data.analysis || {};
+    var html = '';
+    html += '<div class="card" style="margin-top:12px"><div class="card-title">Genre (wav2vec2)</div>';
+    var genres = normalizeList(a.genre, 'Genre').slice(0, 6);
+    if (!genres.length) html += '<div style="font-size:0.78rem;color:var(--text-dim)">Genre data unavailable.</div>';
+    genres.forEach(function(g) { html += confBar(g.label, scorePct(g.confidence), 'var(--accent)'); });
+    html += '</div>';
+
+    html += '<div class="card"><div class="card-title">Mood Profile</div><div class="mood-profile">' + moodProfileHtml(a.mood) + '</div></div>';
+
+    html += '<div class="compare-cols">';
+    html += '<div class="card"><div class="card-title">BPM</div><div style="font-size:1.9rem;font-weight:800;color:var(--accent)">' + (a.bpm && a.bpm.value != null ? esc(a.bpm.value) : 'N/A') + '</div><div style="font-size:0.75rem;color:var(--text-dim)">Confidence: ' + (a.bpm && a.bpm.confidence != null ? scorePct(a.bpm.confidence) + '%' : 'N/A') + '</div></div>';
+    html += '<div class="card"><div class="card-title">Key</div><div style="font-size:1.9rem;font-weight:800;color:var(--accent)">' + esc((a.key && (a.key.value || a.key.label)) || 'N/A') + '</div><div style="font-size:0.75rem;color:var(--text-dim)">Confidence: ' + (a.key && a.key.confidence != null ? scorePct(a.key.confidence) + '%' : 'N/A') + '</div></div>';
+    html += '</div>';
+
+    html += '<div class="card"><div class="card-title">Instruments (PANNs)</div>';
+    var inst = normalizeList(a.instruments, 'Instrument').slice(0, 8);
+    if (!inst.length) html += '<div style="font-size:0.78rem;color:var(--text-dim)">Instrument detection unavailable.</div>';
+    inst.forEach(function(i) { html += confBar(i.label, scorePct(i.confidence), 'var(--yellow)'); });
+    html += '</div>';
+
+    var vocals = a.vocals || {};
+    html += '<div class="card"><div class="card-title">Vocals</div><div class="result-grid">'
+      + row('Present', vocals.present ? 'Yes' : 'No')
+      + row('Gender', esc(vocals.gender || 'N/A'))
+      + '</div></div>';
+
+    var metrics = [
+      { k: 'Loudness', v: a.loudness != null ? a.loudness : (a.metrics && a.metrics.loudness) },
+      { k: 'Dynamic Range', v: a.dynamic_range != null ? a.dynamic_range : (a.metrics && a.metrics.dynamic_range) },
+      { k: 'Energy', v: a.energy != null ? a.energy : (a.metrics && a.metrics.energy) },
+      { k: 'Danceability', v: a.danceability != null ? a.danceability : (a.metrics && a.metrics.danceability) },
+    ];
+    html += '<div class="slide-two-col" style="max-width:none">';
+    metrics.forEach(function(m) {
+      html += '<div class="slide-col-card"><h3>' + m.k + '</h3><p style="font-size:1.2rem;color:var(--text)">' + (m.v != null ? esc(Number(m.v).toFixed ? Number(m.v).toFixed(2) : m.v) : 'N/A') + '</p></div>';
+    });
+    html += '</div>';
     return html;
+  }
+
+  function renderM2() {
+    var body = '<div class="card">'
+      + trackSelectHtml('m2-track')
+      + '<div class="dropzone" id="m2-drop"><div class="dropzone-label"><strong>Drop a track for metadata enrichment</strong>or select from library</div><input type="file" id="m2-file" accept="audio/*"><div class="file-name" id="m2-filename"></div></div>'
+      + '<button class="btn btn-full" id="m2-btn" disabled>Analyze Metadata</button>'
+      + '<div id="m2-results">' + (state.module2.result ? renderM2Result(state.module2.result) : '') + '</div>'
+      + '</div>';
+    return moduleScaffold(
+      'Audio Analysis & Metadata Enrichment',
+      'Deep descriptors with local model inference and graceful fallback.',
+      'Cyanite, Musiio (SoundCloud), ACRCloud metadata services',
+      'Real-time BPM, key, genre, mood, and instrument detection. Local inference, no third-party API dependency.',
+      body
+    );
+  }
+
+  function bindM2() {
+    bindBackToHub();
+    var blob = null;
+    $('#m2-track').addEventListener('change', async function() {
+      if (!this.value) return;
+      $('#m2-track-msg').textContent = 'Loading...';
+      try {
+        blob = await loadTrackBlob(this.value);
+        $('#m2-filename').textContent = this.value;
+        $('#m2-btn').disabled = false;
+        $('#m2-track-msg').textContent = '';
+      } catch (e) {
+        $('#m2-track-msg').textContent = 'Failed to load';
+      }
+    });
+    bindFileInput('m2', function(b) { blob = b; }, function() {});
+    $('#m2-file').addEventListener('change', function() { $('#m2-btn').disabled = !this.files.length; });
+    $('#m2-btn').addEventListener('click', async function() {
+      if (!blob) return;
+      this.disabled = true;
+      clearLog();
+      addLogMsg('--- Module 2 Metadata Analysis ---');
+      $('#m2-results').innerHTML = '<div class="loading-inline"><span class="spinner"></span>Analyzing track...</div>';
+      try {
+        var t = getTrackMeta($('#m2-track').value);
+        var data = await analyzeBlob(blob, t || {});
+        state.module2.result = data;
+        $('#m2-results').innerHTML = renderM2Result(data);
+      } catch (err) {
+        $('#m2-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
+      }
+      this.disabled = false;
+    });
+  }
+
+  // ========== Module 3 ==========
+  function renderCatalogCheck(cc) {
+    if (!cc) return '<div class="error-msg">Catalog lookup unavailable.</div>';
+    var title = 'Catalog Check';
+    var status = cc.status || 'unavailable';
+    var type = status === 'verified_known_work' ? 'success' : (status === 'no_match' ? 'success' : 'warning');
+    if (status === 'verified_known_work') title = 'Known Work Found';
+    if (status === 'known_work_unverified') title = 'Known Work - Metadata Mismatch';
+    if (status === 'no_match') title = 'No Known-Work Match - likely original content';
+    var html = '<div class="card" style="margin-top:10px"><div class="card-title">Catalog Matching</div><div style="margin-bottom:8px">' + badge(title, type) + '</div>';
+    if (cc.musicbrainz) html += '<div style="font-size:0.8rem;margin-bottom:4px">MusicBrainz: <strong>' + esc(cc.musicbrainz.title || 'N/A') + '</strong> by ' + esc(cc.musicbrainz.artist || 'N/A') + '</div>';
+    if (cc.acoustid) html += '<div style="font-size:0.8rem;margin-bottom:4px">AcoustID: ' + esc(cc.acoustid.id || cc.acoustid.match || 'match found') + '</div>';
+    if (cc.acrcloud) html += '<div style="font-size:0.8rem;margin-bottom:4px">ACRCloud: ' + esc(cc.acrcloud.title || cc.acrcloud.status || 'match found') + '</div>';
+    if (cc.corroboration && cc.corroboration.score != null) html += '<div style="font-size:0.78rem;color:var(--text-dim)">Corroboration score: ' + scorePct(cc.corroboration.score) + '%</div>';
+    html += '</div>';
+    return html;
+  }
+
+  function renderM3Result(data) {
+    var fp = data.fingerprint || {};
+    var fpHash = fp.hash || fp.fingerprint_hash || fp.chromaprint || data.fingerprint_hash || 'N/A';
+    var html = '<div class="card" style="margin-top:12px"><div class="card-title">Chromaprint Fingerprint</div><div style="font-size:0.82rem;color:var(--accent);word-break:break-all">' + esc(fpHash) + '</div></div>';
+    html += renderCatalogCheck(data.catalog_check);
+    html += '<div style="font-size:0.74rem;color:var(--text-dim);margin-top:8px">Exact-match fingerprinting. Fuzzy similarity matching on roadmap.</div>';
+    return html;
+  }
+
+  function renderM3() {
+    var body = '<div class="card">'
+      + trackSelectHtml('m3-track')
+      + '<div class="dropzone" id="m3-drop"><div class="dropzone-label"><strong>Drop a track for catalog matching</strong>or select from library</div><input type="file" id="m3-file" accept="audio/*"><div class="file-name" id="m3-filename"></div></div>'
+      + '<button class="btn btn-full" id="m3-btn" disabled>Fingerprint & Match</button>'
+      + '<div id="m3-results">' + (state.module3.result ? renderM3Result(state.module3.result) : '') + '</div>'
+      + '</div>';
+    return moduleScaffold(
+      'Audio Fingerprinting & Catalog Matching',
+      'Chromaprint hash + global known-work validation.',
+      'Audible Magic, Pex, ACRCloud identification',
+      'Chromaprint fingerprinting + real-time identification against AcoustID, ACRCloud, and MusicBrainz global catalogs.',
+      body
+    );
+  }
+
+  function bindM3() {
+    bindBackToHub();
+    var blob = null;
+    $('#m3-track').addEventListener('change', async function() {
+      if (!this.value) return;
+      $('#m3-track-msg').textContent = 'Loading...';
+      try {
+        blob = await loadTrackBlob(this.value);
+        $('#m3-filename').textContent = this.value;
+        $('#m3-btn').disabled = false;
+        $('#m3-track-msg').textContent = '';
+      } catch (e) {
+        $('#m3-track-msg').textContent = 'Failed to load';
+      }
+    });
+    bindFileInput('m3', function(b) { blob = b; }, function() {});
+    $('#m3-file').addEventListener('change', function() { $('#m3-btn').disabled = !this.files.length; });
+    $('#m3-btn').addEventListener('click', async function() {
+      if (!blob) return;
+      this.disabled = true;
+      clearLog();
+      addLogMsg('--- Module 3 Fingerprint & Catalog Check ---');
+      $('#m3-results').innerHTML = '<div class="loading-inline"><span class="spinner"></span>Matching against catalogs...</div>';
+      try {
+        var t = getTrackMeta($('#m3-track').value);
+        var data = await analyzeBlob(blob, t || {});
+        state.module3.result = data;
+        $('#m3-results').innerHTML = renderM3Result(data);
+      } catch (err) {
+        $('#m3-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
+      }
+      this.disabled = false;
+    });
+  }
+
+  // ========== Module 4 ==========
+  function renderRegResult(d) {
+    var html = '<div style="text-align:center;margin:14px 0">' + badge('Registered', 'success') + '</div>';
+    html += '<div class="result-grid">';
+    html += row('Registration ID', '<strong>' + d.registration_id + '</strong>');
+    html += row('Fingerprint Hash', truncHash(d.fingerprint_hash, 24));
+    html += row('Watermark Hash', truncHash(d.watermark_hash, 24));
+    html += row('Watermark Method', d.watermark_method || 'spread');
+    html += row('Watermark SDR', d.watermark_sdr != null ? Number(d.watermark_sdr).toFixed(1) + ' dB' : 'N/A');
+    html += row('Signature', badge('Ed25519 Signed', 'success'));
+    html += '</div>';
+    if (d.has_watermarked_audio) html += '<div style="margin-top:8px"><a id="dl-wm" class="download-link" href="#">Download Watermarked File</a></div>';
+    html += '<div style="margin-top:8px;font-size:0.75rem;color:var(--text-dim)">The watermark survives transcoding and carries provenance data that can be extracted from any copy.</div>';
+    return html;
+  }
+
+  function setupWatermarkDownload(data, filename, linkId) {
+    if (!data.has_watermarked_audio || !data.watermarked_audio_b64) return;
+    try {
+      var raw = atob(data.watermarked_audio_b64);
+      var arr = new Uint8Array(raw.length);
+      for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+      var blob = new Blob([arr], { type: 'audio/wav' });
+      var link = document.getElementById(linkId);
+      if (!link) return;
+      link.href = URL.createObjectURL(blob);
+      var ext = filename && filename.lastIndexOf('.') > 0 ? filename.substring(filename.lastIndexOf('.')) : '.wav';
+      var base = filename && filename.lastIndexOf('.') > 0 ? filename.substring(0, filename.lastIndexOf('.')) : 'track';
+      link.download = base + '.orbit' + ext;
+    } catch (_) {}
+  }
+
+  function renderM4() {
+    var body = '<div class="card">'
+      + trackSelectHtml('m4-track')
+      + '<div class="dropzone" id="m4-drop"><div class="dropzone-label"><strong>Upload a track to watermark</strong>or select from library</div><input type="file" id="m4-file" accept="audio/*"><div class="file-name" id="m4-filename"></div></div>'
+      + '<div class="field"><label>Title *</label><input id="m4-title" type="text" placeholder="Track title"></div>'
+      + '<div class="field"><label>Artist *</label><input id="m4-artist" type="text" placeholder="Artist name"></div>'
+      + '<div class="row"><div class="field"><label>ISRC</label><input id="m4-isrc" type="text" placeholder="USRC12400001"></div><div class="field"><label>Genre</label><input id="m4-genre" type="text" placeholder="Electronic"></div></div>'
+      + '<button class="btn btn-full" id="m4-btn" disabled>Register & Watermark</button>'
+      + '<div id="m4-results">' + (state.module4.result ? renderRegResult(state.module4.result) : '') + '</div>'
+      + '</div>';
+    return moduleScaffold(
+      'Neural Watermarking',
+      'Registration-driven identity embedding and downloadable marked audio.',
+      'Digimarc, Intrinsic.ai, Irdeto/Civolution',
+      'Dual-mode: Sony SilentCipher neural watermarking + spread-spectrum fallback. Identity embedded in the audio itself.',
+      body
+    );
+  }
+
+  function bindM4() {
+    bindBackToHub();
+    var blob = null, fileName = null;
+    $('#m4-track').addEventListener('change', async function() {
+      if (!this.value) return;
+      $('#m4-track-msg').textContent = 'Loading...';
+      try {
+        blob = await loadTrackBlob(this.value);
+        fileName = this.value;
+        $('#m4-filename').textContent = this.value;
+        $('#m4-btn').disabled = false;
+        $('#m4-track-msg').textContent = '';
+        var m = getTrackMeta(this.value);
+        if (m) {
+          $('#m4-title').value = m.title || '';
+          $('#m4-artist').value = m.artist || '';
+          $('#m4-genre').value = m.genre || '';
+        }
+      } catch (e) {
+        $('#m4-track-msg').textContent = 'Failed to load';
+      }
+    });
+    bindFileInput('m4', function(b) { blob = b; }, function(n) { fileName = n; });
+    $('#m4-file').addEventListener('change', function() { $('#m4-btn').disabled = !this.files.length; });
+    $('#m4-btn').addEventListener('click', async function() {
+      if (!blob) return;
+      var title = $('#m4-title').value.trim();
+      var artist = $('#m4-artist').value.trim();
+      if (!title || !artist) { $('#m4-results').innerHTML = '<div class="error-msg">Title and artist are required.</div>'; return; }
+      this.disabled = true;
+      clearLog();
+      addLogMsg('--- Module 4 Register & Watermark ---');
+      $('#m4-results').innerHTML = '<div class="loading-inline"><span class="spinner"></span>Registering track...</div>';
+      var fd = new FormData();
+      fd.append('audio', blob, fileName || 'track');
+      fd.append('title', title);
+      fd.append('artist', artist);
+      if ($('#m4-isrc').value.trim()) fd.append('isrc', $('#m4-isrc').value.trim());
+      if ($('#m4-genre').value.trim()) fd.append('genre', $('#m4-genre').value.trim());
+      try {
+        var res = await fetch('/api/register', { method: 'POST', body: fd });
+        var data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Registration failed');
+        addLog(data.processing_log || []);
+        state.module4.result = data;
+        state.regResult = data;
+        $('#m4-results').innerHTML = renderRegResult(data);
+        setupWatermarkDownload(data, fileName, 'dl-wm');
+      } catch (err) {
+        $('#m4-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
+      }
+      this.disabled = false;
+    });
+    if (state.module4.result) setupWatermarkDownload(state.module4.result, state.module4.filename || 'track.wav', 'dl-wm');
+  }
+
+  // ========== Module 5 ==========
+  function renderDDEX() {
+    var html = '<div class="card"><div class="card-title">DDEX ERN Document</div><div class="xml-viewer" id="ddex-xml-view">Loading XML...</div><button class="btn" id="ddex-parse-btn" style="margin-top:14px">Parse Document</button></div><div id="ddex-results"></div>';
+    return moduleScaffold(
+      'DDEX Parsing & Ingest',
+      'Parse ERN payloads into release, tracks, territories, and deal structures.',
+      'FUGA ingest tooling, Labelcamp, custom DDEX parsers',
+      'ERN 3.x and 4.x. Tracks, deals, territories, contributors, rights lines - all extracted automatically.',
+      html
+    );
   }
 
   function bindDDEX() {
+    bindBackToHub();
     fetch('/api/ddex-document').then(function(r) { return r.text(); }).then(function(xml) {
       var v = $('#ddex-xml-view');
+      if (!v) return;
       var highlighted = esc(xml)
         .replace(/(&lt;\/?[\w:-]+)/g, '<span class="xml-tag">$1</span>')
         .replace(/(&gt;)/g, '<span class="xml-tag">$1</span>')
         .replace(/([\w:-]+)=(&quot;[^&]*&quot;)/g, '<span class="xml-attr">$1</span>=<span class="xml-val">$2</span>');
       v.innerHTML = highlighted;
     });
-
-    $('#ddex-parse-btn').addEventListener('click', async function() {
+    var btn = $('#ddex-parse-btn');
+    if (!btn) return;
+    btn.addEventListener('click', async function() {
       this.disabled = true;
-      addLogMsg('--- DDEX Parse ---');
-      addLogMsg('Parsing ERN 4.3 document...');
-
+      clearLog();
+      addLogMsg('--- Module 5 DDEX Parse ---');
       try {
         var res = await fetch('/api/parse-ddex', { method: 'POST' });
         var data = await res.json();
-        if (!res.ok || data.error) { $('#ddex-results').innerHTML = '<div class="error-msg">' + esc(data.error) + '</div>'; return; }
-
-        addLogMsg('✅ Parsed ' + (data.tracks || []).length + ' tracks from DDEX document');
-        if (data.release) addLogMsg('   Release: "' + (data.release.title || 'N/A') + '" by ' + (data.release.artist || 'N/A'));
-        addLogMsg('   Territories: ' + (data.territories || []).join(', '));
-
+        if (!res.ok || data.error) throw new Error(data.error || 'Parse failed');
         state.ddexParsed = data;
         var html = '';
         (data.tracks || []).forEach(function(t) {
-          html += '<div class="card" style="padding:14px">';
-          html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
-          var titleParts = [];
-          if (t.track_number) titleParts.push('#' + t.track_number);
-          titleParts.push(esc(t.title));
-          html += '<strong style="font-size:0.9rem">' + titleParts.join(' ') + '</strong>';
-          if (t.isrc) html += tag(t.isrc, true);
-          html += '</div>';
-          html += '<div style="font-size:0.8rem;color:var(--text-dim)">' + esc(t.artist) + '</div>';
-          var meta = [];
-          if (t.primary_genre) meta.push(t.primary_genre);
-          if (t.language) meta.push('Lang: ' + t.language.toUpperCase());
-          if (t.duration_display || t.duration_ms) meta.push(t.duration_display || (t.duration_ms / 1000).toFixed(0) + 's');
-          if (t.parental_advisory) meta.push(t.parental_advisory === 'explicit' ? 'Explicit' : (t.parental_advisory === 'clean' ? 'Clean' : 'No Advisory'));
-          if (t.sound_recording_type) meta.push(t.sound_recording_type);
-          if (meta.length) html += '<div style="margin-top:6px" class="tags">' + meta.map(function(m) { return tag(m); }).join('') + '</div>';
-          var tech = [];
-          if (t.audio_codec) tech.push(t.audio_codec);
-          if (t.sample_rate) tech.push((t.sample_rate / 1000) + ' kHz');
-          if (t.bits_per_sample) tech.push(t.bits_per_sample + '-bit');
-          if (t.channels) tech.push(t.channels === 2 ? 'Stereo' : (t.channels === 1 ? 'Mono' : t.channels + 'ch'));
-          if (tech.length) html += '<div style="margin-top:6px" class="tags">' + tech.map(function(m) { return tag(m); }).join('') + '</div>';
-          var rights = [];
-          if (t.p_line) rights.push('℗ ' + t.p_line);
-          if (t.c_line) rights.push('© ' + t.c_line);
-          if (rights.length) html += '<div style="margin-top:6px" class="tags">' + rights.map(function(r) { return tag(r); }).join('') + '</div>';
-          var contribs = [];
-          if (t.composers && t.composers.length) contribs.push('Composers: ' + t.composers.join(', '));
-          if (t.lyricists && t.lyricists.length) contribs.push('Lyricists: ' + t.lyricists.join(', '));
-          if (t.writers && t.writers.length) contribs.push('Writers: ' + t.writers.join(', '));
-          if (t.producers && t.producers.length) contribs.push('Producers: ' + t.producers.join(', '));
-          if (contribs.length) html += '<div style="margin-top:6px;font-size:0.72rem;color:var(--text-dim)">' + contribs.join(' &middot; ') + '</div>';
-          var relInfo = [];
-          if (t.album_title) relInfo.push('Album: ' + t.album_title);
-          if (t.label) relInfo.push('Label: ' + t.label);
-          if (t.release_date) relInfo.push('Released: ' + t.release_date);
-          if (t.original_release_date && t.original_release_date !== t.release_date) relInfo.push('Original: ' + t.original_release_date);
-          if (t.catalog_number) relInfo.push('Cat#: ' + t.catalog_number);
-          if (relInfo.length) html += '<div style="margin-top:6px;font-size:0.72rem;color:var(--text-dim)">' + relInfo.join(' &middot; ') + '</div>';
-          var dealInfo = [];
-          if (t.deal && t.deal.commercial_model) dealInfo.push('Model: ' + t.deal.commercial_model);
-          if (t.deal && t.deal.start_date) dealInfo.push('Start: ' + t.deal.start_date);
-          if (t.territories && t.territories.length) dealInfo.push('Territories: ' + t.territories.join(', '));
-          if (dealInfo.length) html += '<div style="margin-top:6px;font-size:0.72rem;color:var(--text-dim)">' + dealInfo.join(' &middot; ') + '</div>';
-          html += '</div>';
+          html += '<div class="card" style="padding:14px"><div style="display:flex;justify-content:space-between;gap:8px"><strong>' + esc(t.title || 'Untitled') + '</strong>' + (t.isrc ? tag(t.isrc, true) : '') + '</div><div style="font-size:0.78rem;color:var(--text-dim)">' + esc(t.artist || 'N/A') + '</div></div>';
         });
-
-        if (data.release) {
-          html += '<div class="card" style="padding:14px;border-color:var(--accent)">';
-          html += '<div class="card-title">Release</div>';
-          html += '<strong>' + esc(data.release.title) + '</strong> (' + esc(data.release.type || 'Album') + ')';
-          var rm = [];
-          if (data.release.label) rm.push('Label: ' + data.release.label);
-          if (data.release.upc) rm.push('UPC: ' + data.release.upc);
-          if (data.release.release_date) rm.push('Release: ' + data.release.release_date);
-          if (data.release.original_release_date && data.release.original_release_date !== data.release.release_date) rm.push('Original: ' + data.release.original_release_date);
-          if (data.release.parental_advisory) rm.push('Advisory: ' + data.release.parental_advisory);
-          if (rm.length) html += '<div style="margin-top:6px;font-size:0.78rem;color:var(--text-dim)">' + rm.join(' &middot; ') + '</div>';
-          var dealRm = [];
-          if (data.release.deal && data.release.deal.commercial_model) dealRm.push('Model: ' + data.release.deal.commercial_model);
-          if (data.release.deal && data.release.deal.start_date) dealRm.push('Start: ' + data.release.deal.start_date);
-          if (data.territories && data.territories.length) dealRm.push('Territories: ' + data.territories.join(', '));
-          if (dealRm.length) html += '<div style="margin-top:6px;font-size:0.78rem;color:var(--text-dim)">' + dealRm.join(' &middot; ') + '</div>';
-          html += '</div>';
-        }
-
-        html += '<div style="text-align:center;margin-top:10px;font-size:0.8rem;color:var(--text-dim)">' + (data.tracks || []).length + ' tracks ready for ORBIT registration</div>';
-
+        if (data.release) html += '<div class="card" style="padding:14px;border-color:var(--accent)"><div class="card-title">Release</div><strong>' + esc(data.release.title || 'N/A') + '</strong><div style="font-size:0.78rem;color:var(--text-dim)">Territories: ' + esc((data.territories || []).join(', ') || 'N/A') + '</div></div>';
         $('#ddex-results').innerHTML = html;
-        var btn = $('#ddex-continue');
-        if (btn) btn.disabled = false;
-      } catch(err) {
+      } catch (err) {
         $('#ddex-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
       }
+      this.disabled = false;
     });
   }
 
-  // ----- Section 3: Register -----
-  function renderRegister() {
-    var html = '<div class="section-title">Registration</div>';
-    html += '<div class="section-subtitle">Establish provenance — fingerprint, watermark, analyze, and record to the ledger.</div>';
-    html += '<div class="card" id="reg-form">';
-    html += trackSelectHtml('reg-track-select');
-    html += '<div class="dropzone" id="reg-drop"><div class="dropzone-label"><strong>Drop audio file here</strong>or select from library</div><input type="file" id="reg-file" accept="audio/*"><div class="file-name" id="reg-filename"></div></div>';
-    html += '<div class="field"><label>Title *</label><input type="text" id="reg-title" placeholder="Track title"></div>';
-    html += '<div class="field"><label>Artist *</label><input type="text" id="reg-artist" placeholder="Artist name"></div>';
-    html += '<div class="row"><div class="field"><label>ISRC</label><input type="text" id="reg-isrc" placeholder="USRC12400001"></div><div class="field"><label>Genre</label><input type="text" id="reg-genre" placeholder="Electronic"></div></div>';
-    html += '<button class="btn btn-full" id="reg-btn" disabled>Register</button>';
-    html += '</div>';
-    html += '<div id="reg-loading"></div>';
-    html += '<div id="reg-results"></div>';
-    html += navBar({ continueId: 'reg-continue' });
+  // ========== Module 6 ==========
+  function renderChain(regs) {
+    var html = '';
+    regs.forEach(function(r, i) {
+      if (i > 0) html += '<div class="chain-arrow">&#8595;</div>';
+      var meta = r.metadata || {};
+      html += '<div class="chain-node"><div class="chain-icon ' + (i === 0 ? 'origin' : 'transfer') + '">' + (i === 0 ? '&#9733;' : '&#8594;') + '</div><div class="chain-detail"><div class="chain-label">' + (i === 0 ? 'ORIGIN' : 'TRANSFER') + '</div><div class="chain-value">' + esc(r.platform || 'N/A') + '</div><div style="font-size:0.72rem;color:var(--text-dim)">' + esc(meta.title || '') + ' by ' + esc(meta.artist || '') + '</div></div></div>';
+    });
     return html;
   }
 
-  function bindRegister() {
-    var regBlob = null, regFilename = null;
+  function renderM6Results() {
+    var html = '';
+    if (state.module6.result) {
+      html += '<div class="card"><div class="card-title">Registration Complete</div><div class="result-grid">'
+        + row('Registration ID', '<strong>' + state.module6.result.registration_id + '</strong>')
+        + row('Fingerprint', truncHash(state.module6.result.fingerprint_hash, 24))
+        + '</div></div>';
+    }
+    if (state.module6.transfer) {
+      html += '<div class="card"><div class="card-title">Transfer Initiated</div><div class="result-grid">'
+        + row('Transfer ID', '<strong>' + state.module6.transfer.transfer_id + '</strong>')
+        + row('Status', esc(state.module6.transfer.status || 'pending'))
+        + '</div></div>';
+    }
+    if (state.module6.accept) {
+      html += '<div class="card"><div class="card-title">Transfer Accepted</div><div class="result-grid">'
+        + row('New Registration ID', '<strong>' + state.module6.accept.new_registration_id + '</strong>')
+        + '</div></div>';
+      if (state.module6.accept.full_chain && state.module6.accept.full_chain.length) {
+        html += '<div class="card"><div class="card-title">Provenance Chain</div>' + renderChain(state.module6.accept.full_chain) + '</div>';
+      }
+    }
+    if (state.module6.chain && state.module6.chain.registrations) {
+      html += '<div class="card"><div class="card-title">Chain Lookup</div>' + renderChain(state.module6.chain.registrations) + '</div>';
+    }
+    return html;
+  }
 
-    var sel = $('#reg-track-select');
-    sel.addEventListener('change', async function() {
+  function renderM6() {
+    var body = '<div class="card">'
+      + trackSelectHtml('m6-track')
+      + '<div class="dropzone" id="m6-drop"><div class="dropzone-label"><strong>Upload/select a track for full custody transfer flow</strong></div><input type="file" id="m6-file" accept="audio/*"><div class="file-name" id="m6-filename"></div></div>'
+      + '<div class="field"><label>Title *</label><input id="m6-title" type="text" placeholder="Track title"></div>'
+      + '<div class="field"><label>Artist *</label><input id="m6-artist" type="text" placeholder="Artist name"></div>'
+      + '<div class="row"><div class="field"><label>ISRC</label><input id="m6-isrc" type="text" placeholder="USRC12400001"></div><div class="field"><label>Genre</label><input id="m6-genre" type="text" placeholder="Electronic"></div></div>'
+      + '<div class="row">'
+      + '<button class="btn" id="m6-reg-btn" disabled>1) Register</button>'
+      + '<button class="btn btn-outline" id="m6-transfer-btn" disabled>2) Transfer</button>'
+      + '</div>'
+      + '<div class="row">'
+      + '<button class="btn btn-outline" id="m6-accept-btn" disabled>3) Accept</button>'
+      + '<button class="btn btn-outline" id="m6-chain-btn" disabled>4) Lookup Chain</button>'
+      + '</div>'
+      + '<div id="m6-results">' + renderM6Results() + '</div>'
+      + '</div>';
+    return moduleScaffold(
+      'Provenance & Rights Transfer',
+      'Combined register -> transfer -> accept -> chain lookup in one custody flow.',
+      'Manual rights management, chain-of-title spreadsheets, blockchain provenance startups',
+      'Ed25519 cryptographic signatures. Immutable provenance chain. Platform-to-platform custody transfer.',
+      body
+    );
+  }
+
+  function bindM6() {
+    bindBackToHub();
+    var blob = null;
+    var fileName = null;
+    var regBtn = $('#m6-reg-btn');
+    var transferBtn = $('#m6-transfer-btn');
+    var acceptBtn = $('#m6-accept-btn');
+    var chainBtn = $('#m6-chain-btn');
+
+    $('#m6-track').addEventListener('change', async function() {
       if (!this.value) return;
-      var msg = $('#reg-track-select-msg');
-      msg.textContent = 'Loading...';
+      $('#m6-track-msg').textContent = 'Loading...';
       try {
-        var blob = await loadTrackBlob(this.value);
-        regBlob = blob; regFilename = this.value;
-        $('#reg-filename').textContent = this.value;
-        $('#reg-btn').disabled = false;
-        msg.textContent = '';
-        var meta = state.demoTracks.find(function(t) { return t.filename === sel.value; });
-        if (meta) {
-          $('#reg-title').value = meta.title;
-          $('#reg-artist').value = meta.artist;
-          $('#reg-genre').value = meta.genre;
+        blob = await loadTrackBlob(this.value);
+        fileName = this.value;
+        $('#m6-filename').textContent = this.value;
+        regBtn.disabled = false;
+        $('#m6-track-msg').textContent = '';
+        var m = getTrackMeta(this.value);
+        if (m) {
+          $('#m6-title').value = m.title || '';
+          $('#m6-artist').value = m.artist || '';
+          $('#m6-genre').value = m.genre || '';
         }
-        // Fill ISRC from DDEX if available
-        if (state.ddexParsed && state.ddexParsed.tracks) {
-          var ddexTrack = state.ddexParsed.tracks.find(function(t) { return t.filename === sel.value || t.title === (meta && meta.title); });
-          if (ddexTrack && ddexTrack.isrc) $('#reg-isrc').value = ddexTrack.isrc;
-        }
-      } catch(e) { msg.textContent = 'Failed to load'; }
+      } catch (e) {
+        $('#m6-track-msg').textContent = 'Failed to load';
+      }
     });
+    bindFileInput('m6', function(b) { blob = b; }, function(n) { fileName = n; });
+    $('#m6-file').addEventListener('change', function() { regBtn.disabled = !this.files.length; });
 
-    var fi = $('#reg-file');
-    fi.addEventListener('change', function() {
-      if (fi.files.length) { regBlob = fi.files[0]; regFilename = fi.files[0].name; $('#reg-filename').textContent = regFilename; $('#reg-btn').disabled = false; }
-    });
-
-    var dz = $('#reg-drop');
-    dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('dragover'); });
-    dz.addEventListener('dragleave', function() { dz.classList.remove('dragover'); });
-    dz.addEventListener('drop', function(e) {
-      e.preventDefault(); dz.classList.remove('dragover');
-      if (e.dataTransfer.files.length) { fi.files = e.dataTransfer.files; regBlob = e.dataTransfer.files[0]; regFilename = e.dataTransfer.files[0].name; $('#reg-filename').textContent = regFilename; $('#reg-btn').disabled = false; }
-    });
-
-    $('#reg-btn').addEventListener('click', async function() {
-      if (!regBlob) return;
-      var title = $('#reg-title').value.trim();
-      var artist = $('#reg-artist').value.trim();
-      if (!title || !artist) { $('#reg-results').innerHTML = '<div class="error-msg">Title and artist are required.</div>'; return; }
-
+    regBtn.addEventListener('click', async function() {
+      if (!blob) return;
+      var title = $('#m6-title').value.trim();
+      var artist = $('#m6-artist').value.trim();
+      if (!title || !artist) { $('#m6-results').innerHTML = '<div class="error-msg">Title and artist are required.</div>'; return; }
       this.disabled = true;
-      $('#reg-loading').innerHTML = '<div class="loading-inline"><span class="spinner"></span>Registering audio with ORBIT...</div>';
-      $('#reg-results').innerHTML = '';
       clearLog();
-      addLogMsg('--- Registration ---');
-
+      addLogMsg('--- Module 6 Registration ---');
       var fd = new FormData();
-      fd.append('audio', regBlob, regFilename || 'track');
+      fd.append('audio', blob, fileName || 'track');
       fd.append('title', title);
       fd.append('artist', artist);
-      var isrc = $('#reg-isrc').value.trim();
-      var genre = $('#reg-genre').value.trim();
-      if (isrc) fd.append('isrc', isrc);
-      if (genre) fd.append('genre', genre);
-
+      if ($('#m6-isrc').value.trim()) fd.append('isrc', $('#m6-isrc').value.trim());
+      if ($('#m6-genre').value.trim()) fd.append('genre', $('#m6-genre').value.trim());
       try {
         var res = await fetch('/api/register', { method: 'POST', body: fd });
         var data = await res.json();
-        $('#reg-loading').innerHTML = '';
+        if (!res.ok || data.error) throw new Error(data.error || 'Registration failed');
         addLog(data.processing_log || []);
-
-        if (!res.ok || data.error) { $('#reg-results').innerHTML = '<div class="error-msg">' + esc(data.error) + '</div>'; $('#reg-btn').disabled = false; return; }
-
+        state.module6.result = data;
         state.regResult = data;
-        $('#reg-results').innerHTML = renderRegResult(data);
-        var btn = $('#reg-continue');
-        if (btn) btn.disabled = false;
-
-        // Set up download if available
-        if (data.has_watermarked_audio && data.watermarked_audio_b64) {
-          try {
-            var raw = atob(data.watermarked_audio_b64);
-            var arr = new Uint8Array(raw.length);
-            for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
-            var blob = new Blob([arr], { type: 'audio/wav' });
-            var dlEl = document.getElementById('dl-wm');
-            if (dlEl) {
-              dlEl.href = URL.createObjectURL(blob);
-              var ext = regFilename && regFilename.lastIndexOf('.') > 0 ? regFilename.substring(regFilename.lastIndexOf('.')) : '.wav';
-              var base = regFilename && regFilename.lastIndexOf('.') > 0 ? regFilename.substring(0, regFilename.lastIndexOf('.')) : 'track';
-              dlEl.download = base + '.orbit' + ext;
-            }
-          } catch(e) {}
-        }
-      } catch(err) {
-        $('#reg-loading').innerHTML = '';
-        $('#reg-results').innerHTML = '<div class="error-msg">Network error: ' + esc(err.message) + '</div>';
-        $('#reg-btn').disabled = false;
+        transferBtn.disabled = false;
+        chainBtn.disabled = false;
+        $('#m6-results').innerHTML = renderM6Results();
+      } catch (err) {
+        $('#m6-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
       }
     });
-  }
-
-  function renderRegResult(d) {
-    var html = '<div style="text-align:center;margin:14px 0">' + badge('Registered', 'success') + '</div>';
-
-    // --- Identity & Provenance ---
-    html += '<div class="card" style="padding:14px;margin-bottom:10px"><div class="card-title">Identity &amp; Provenance</div>';
-    html += '<div class="result-grid">';
-    html += row('Registration ID', '<strong>' + d.registration_id + '</strong>');
-    html += row('Fingerprint', truncHash(d.fingerprint_hash, 24));
-    html += row('Watermark Hash', truncHash(d.watermark_hash, 24));
-    html += row('Watermark Method', d.watermark_method || 'spread');
-    if (d.watermark_sdr) html += row('Watermark SDR', d.watermark_sdr.toFixed(1) + ' dB');
-    html += row('Entry Hash', truncHash(d.entry_hash, 24));
-    html += row('Signature', badge('Ed25519 Signed', 'success'));
-    html += row('Timestamp', d.registered_at || 'N/A');
-    html += '</div></div>';
-
-    // --- Track Metadata ---
-    html += '<div class="card" style="padding:14px;margin-bottom:10px"><div class="card-title">Track Metadata</div>';
-    html += '<div class="result-grid">';
-    if (d.metadata) {
-      if (d.metadata.title) html += row('Title', '<strong>' + esc(d.metadata.title) + '</strong>');
-      if (d.metadata.artist) html += row('Artist', esc(d.metadata.artist));
-      if (d.metadata.isrc) html += row('ISRC', d.metadata.isrc);
-      if (d.metadata.duration_ms) html += row('Duration', (d.metadata.duration_ms / 1000).toFixed(1) + 's');
-    }
-    if (d.processing_time_ms) html += row('Processing Time', d.processing_time_ms + ' ms');
-    html += '</div></div>';
-
-    // --- AI Detection (expanded) ---
-    if (d.ai_detection) {
-      var ai = d.ai_detection;
-      var rec = ai.recommendation || 'N/A';
-      var aiType = rec === 'LIKELY_HUMAN' ? 'success' : rec === 'REVIEW' ? 'warning' : 'error';
-      var pct = ai.score != null ? Math.round(ai.score * 100) : 0;
-      var scoreColor = aiType === 'success' ? 'var(--green)' : aiType === 'error' ? 'var(--red)' : 'var(--yellow)';
-
-      html += '<div class="card" style="padding:14px;margin-bottom:10px"><div class="card-title">AI Content Detection</div>';
-      html += '<div style="text-align:center;margin:8px 0">' + badge(rec.replace(/_/g, ' '), aiType) + '</div>';
-      html += confBar('Overall AI Score', pct, scoreColor);
-
-      if (ai.signals) {
-        html += '<div style="margin-top:10px;font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Signal Breakdown</div>';
-        if (ai.signals.semantic) {
-          var semScore = Math.round((ai.signals.semantic.aiScore || 0) * 100);
-          html += confBar('Semantic Probe', semScore, 'var(--accent-2)');
-        }
-        if (ai.signals.anomalies) {
-          var anomScore = Math.round((ai.signals.anomalies.anomalyScore || 0) * 100);
-          html += confBar('Anomaly Detection', anomScore, 'var(--yellow)');
-        }
-        if (ai.signals.catalog && ai.signals.catalog.provenanceScore != null) {
-          var catScore = Math.round((ai.signals.catalog.provenanceScore) * 100);
-          html += confBar('Catalog Provenance', catScore, 'var(--accent)');
-        }
-        if (ai.signals.metadata && ai.signals.metadata.metadataScore != null) {
-          var metaScore = Math.round((ai.signals.metadata.metadataScore || 0) * 100);
-          html += confBar('Metadata Analysis', metaScore, 'var(--text-dim)');
-        }
-      }
-
-      if (ai.flags && ai.flags.length > 0) {
-        html += '<div style="margin-top:8px" class="tags">';
-        ai.flags.forEach(function(f) { html += tag(f, true); });
-        html += '</div>';
-      } else {
-        html += '<div style="margin-top:8px;font-size:0.72rem;color:var(--green)">No flags raised</div>';
-      }
-      html += '</div>';
-    }
-
-    // --- Catalog Check ---
-    if (d.catalog_check) html += renderCatalogCheck(d.catalog_check);
-
-    // --- Download ---
-    if (d.has_watermarked_audio) {
-      html += '<div style="text-align:center"><a class="download-link" id="dl-wm" href="#">Download Watermarked File</a></div>';
-    }
-
-    return html;
-  }
-
-  function renderCatalogCheck(cc) {
-    var cls = 'no-match', icon = '&#9679;', title = 'Catalog Check', detail = '';
-    if (cc.status === 'verified_known_work') {
-      cls = 'verified'; icon = '&#10003;'; title = 'Verified Known Work';
-      if (cc.musicbrainz) detail = esc(cc.musicbrainz.title) + ' by ' + esc(cc.musicbrainz.artist);
-      if (cc.corroboration) detail += ' &mdash; corroboration: ' + (cc.corroboration.score * 100).toFixed(0) + '%';
-    } else if (cc.status === 'known_work_unverified') {
-      cls = 'flagged'; icon = '&#9888;'; title = 'Known Work &mdash; Metadata Mismatch';
-      if (cc.musicbrainz) detail = 'AcoustID matched: ' + esc(cc.musicbrainz.title) + ' by ' + esc(cc.musicbrainz.artist);
-    } else if (cc.status === 'no_match') {
-      icon = '&#10003;'; title = 'No Known-Work Match'; detail = 'Likely original content';
-    } else {
-      detail = cc.status || 'Unavailable';
-    }
-    return '<div style="margin-top:12px;padding:12px;border-radius:var(--radius);background:var(--surface-2);border:1px solid var(--border)">' +
-      '<div style="font-size:0.8rem;font-weight:600;margin-bottom:4px"><span>' + icon + '</span> ' + title + '</div>' +
-      (detail ? '<div style="font-size:0.72rem;color:var(--text-dim)">' + detail + '</div>' : '') + '</div>';
-  }
-
-  // ----- Section 4: Transfer -----
-  function renderTransfer() {
-    var regId = state.regResult ? state.regResult.registration_id : null;
-    var title = state.regResult && state.regResult.metadata ? state.regResult.metadata.title : 'Track';
-
-    var html = '<div class="section-title">Platform-to-Platform Transfer</div>';
-    html += '<div class="section-subtitle">Rights move with the music. Transfer ownership between platforms with cryptographic proof.</div>';
-
-    if (!regId) {
-      html += '<div class="card"><div class="error-msg">Complete registration in the previous step first.</div></div>';
-      html += navBar();
-      return html;
-    }
-
-    html += '<div class="compare-cols">';
-    html += '<div class="card" style="text-align:center"><div class="card-title">Platform A (Sender)</div><div style="font-size:1.6rem;margin:8px 0">&#127925;</div><strong>ohnrshyp</strong><div style="font-size:0.72rem;color:var(--text-dim);margin-top:4px">Owns: ' + esc(title) + '<br>Registration #' + regId + '</div></div>';
-    html += '<div class="card" style="text-align:center"><div class="card-title">Platform B (Recipient)</div><div style="font-size:1.6rem;margin:8px 0">&#127911;</div><strong>test-platform</strong><div style="font-size:0.72rem;color:var(--text-dim);margin-top:4px">Awaiting transfer</div></div>';
-    html += '</div>';
-
-    html += '<button class="btn btn-full" id="transfer-btn">Initiate Transfer</button>';
-    html += '<div id="transfer-results"></div>';
-    html += navBar({ continueId: 'transfer-continue' });
-    return html;
-  }
-
-  function bindTransfer() {
-    var transferBtn = $('#transfer-btn');
-    if (!transferBtn) return;
 
     transferBtn.addEventListener('click', async function() {
+      if (!state.module6.result) return;
       this.disabled = true;
-      var resultsEl = $('#transfer-results');
-      resultsEl.innerHTML = '<div class="loading-inline"><span class="spinner"></span>Initiating transfer...</div>';
-      clearLog();
-      addLogMsg('--- Transfer ---');
-
+      addLogMsg('--- Module 6 Transfer ---');
       try {
         var res = await fetch('/api/transfer', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ registration_id: state.regResult.registration_id }),
+          body: JSON.stringify({ registration_id: state.module6.result.registration_id }),
         });
         var data = await res.json();
-        if (!res.ok || data.error) { resultsEl.innerHTML = '<div class="error-msg">' + esc(data.error) + '</div>'; this.disabled = false; return; }
-
-        state.transferResult = data;
-        addLogMsg('✅ Transfer initiated: ID=' + data.transfer_id);
-        addLogMsg('   From: ' + data.from_platform + ' → To: ' + data.to_platform);
-        addLogMsg('   Status: ' + data.status);
-        addLogMsg('   Expires: ' + data.expires_at);
-
-        resultsEl.innerHTML = '<div class="result-grid" style="margin-top:14px">' +
-          row('Transfer ID', '<strong>' + data.transfer_id + '</strong>') +
-          row('Status', badge('PENDING', 'warning')) +
-          row('From', data.from_platform) +
-          row('To', data.to_platform) +
-          row('Expires', data.expires_at || 'N/A') +
-          '</div>' +
-          '<button class="btn btn-full" id="accept-btn" style="margin-top:14px">Accept Transfer (Platform B)</button>' +
-          '<div id="accept-results"></div>';
-
-        $('#accept-btn').addEventListener('click', async function() {
-          this.disabled = true;
-          var accEl = $('#accept-results');
-          accEl.innerHTML = '<div class="loading-inline"><span class="spinner"></span>Accepting transfer...</div>';
-          addLogMsg('Platform B accepting transfer...');
-
-          try {
-            var res2 = await fetch('/api/accept-transfer', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ transfer_id: data.transfer_id }),
-            });
-            var acc = await res2.json();
-            if (!res2.ok || acc.error) { accEl.innerHTML = '<div class="error-msg">' + esc(acc.error) + '</div>'; return; }
-
-            state.acceptResult = acc;
-            addLogMsg('✅ Transfer accepted!');
-            addLogMsg('   New Registration ID: ' + acc.new_registration_id);
-            if (acc.full_chain) {
-              addLogMsg('   Chain length: ' + acc.full_chain.length + ' entries');
-              acc.full_chain.forEach(function(c) {
-                addLogMsg('   → ' + c.type + ': ' + c.platform + ' @ ' + (c.timestamp || 'N/A'));
-              });
-            }
-
-            var html2 = '<div style="text-align:center;margin:14px 0">' + badge('Transfer Accepted', 'success') + '</div>';
-            html2 += '<div class="result-grid">' +
-              row('New Registration ID', '<strong>' + acc.new_registration_id + '</strong>') +
-              row('Platform', 'test-platform') +
-              '</div>';
-
-            if (acc.full_chain && acc.full_chain.length > 0) {
-              html2 += '<div style="margin-top:14px">';
-              acc.full_chain.forEach(function(c, i) {
-                if (i > 0) html2 += '<div class="chain-arrow">&#8595;</div>';
-                var iconCls = c.type === 'origin' ? 'origin' : 'transfer';
-                var iconChar = c.type === 'origin' ? '&#9733;' : '&#8594;';
-                html2 += '<div class="chain-node"><div class="chain-icon ' + iconCls + '">' + iconChar + '</div><div class="chain-detail">';
-                html2 += '<div class="chain-label">' + c.type.toUpperCase() + '</div>';
-                html2 += '<div class="chain-value">' + esc(c.platform) + '</div>';
-                html2 += '<div style="font-size:0.72rem;color:var(--text-dim)">' + (c.timestamp || '') + '</div>';
-                html2 += '</div></div>';
-              });
-              html2 += '</div>';
-            }
-
-            accEl.innerHTML = html2;
-            var btn = $('#transfer-continue');
-            if (btn) btn.disabled = false;
-          } catch(err) {
-            accEl.innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
-          }
-        });
-      } catch(err) {
-        resultsEl.innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
-        this.disabled = false;
+        if (!res.ok || data.error) throw new Error(data.error || 'Transfer failed');
+        state.module6.transfer = data;
+        acceptBtn.disabled = false;
+        $('#m6-results').innerHTML = renderM6Results();
+      } catch (err) {
+        $('#m6-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
       }
     });
-  }
 
-  // ----- Section 5: No Rights Conflict -----
-  function renderConflict() {
-    var fpHash = state.regResult ? state.regResult.fingerprint_hash : null;
-
-    var html = '<div class="section-title">Provenance Chain — No Conflict</div>';
-    html += '<div class="section-subtitle">What if someone else tries to claim this track? ORBIT has the answer.</div>';
-
-    if (!fpHash) {
-      html += '<div class="card"><div class="error-msg">Complete registration and transfer in previous steps first.</div></div>';
-      return html;
-    }
-
-    html += '<div class="card">';
-    html += '<div style="font-size:0.85rem;margin-bottom:12px">Fingerprint: <code style="color:var(--accent);font-size:0.78rem">' + truncHash(fpHash, 32) + '</code></div>';
-    html += '<button class="btn btn-full" id="chain-btn">Lookup Provenance Chain</button>';
-    html += '</div>';
-    html += '<div id="chain-results"></div>';
-    html += navBar({ continueId: 'chain-continue' });
-    return html;
-  }
-
-  function bindConflict() {
-    var chainBtn = $('#chain-btn');
-    if (!chainBtn) return;
+    acceptBtn.addEventListener('click', async function() {
+      if (!state.module6.transfer) return;
+      this.disabled = true;
+      addLogMsg('--- Module 6 Accept Transfer ---');
+      try {
+        var res = await fetch('/api/accept-transfer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transfer_id: state.module6.transfer.transfer_id }),
+        });
+        var data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Accept failed');
+        state.module6.accept = data;
+        $('#m6-results').innerHTML = renderM6Results();
+      } catch (err) {
+        $('#m6-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
+      }
+    });
 
     chainBtn.addEventListener('click', async function() {
+      var fp = state.module6.result && state.module6.result.fingerprint_hash;
+      if (!fp) return;
       this.disabled = true;
-      var el = $('#chain-results');
-      el.innerHTML = '<div class="loading-inline"><span class="spinner"></span>Looking up provenance chain...</div>';
-      clearLog();
-      addLogMsg('--- Provenance Chain Lookup ---');
-
-      var fpHash = state.regResult.fingerprint_hash;
-
+      addLogMsg('--- Module 6 Chain Lookup ---');
       try {
-        var res = await fetch('/api/chain/' + encodeURIComponent(fpHash));
+        var res = await fetch('/api/chain/' + encodeURIComponent(fp));
         var data = await res.json();
-        if (!res.ok || data.error) { el.innerHTML = '<div class="error-msg">' + esc(data.error) + '</div>'; this.disabled = false; return; }
-
-        state.chainResult = data;
-
-        var chainData = data.data || data;
-        var regs = chainData.registrations || [];
-        var transfers = chainData.transfers || [];
-
-        addLogMsg('✅ Chain lookup complete');
-        addLogMsg('   Registrations: ' + regs.length);
-        addLogMsg('   Transfers: ' + transfers.length);
-        regs.forEach(function(r) {
-          addLogMsg('   → Platform: ' + r.platform + ', ID: ' + r.registration_id + ', Sig: verified');
-        });
-
-        var html = '';
-
-        // Build chain visualization
-        html += '<div style="margin-top:14px">';
-        regs.forEach(function(r, i) {
-          if (i > 0) html += '<div class="chain-arrow">&#8595;</div>';
-          var isFirst = i === 0;
-          var meta = r.metadata || {};
-          html += '<div class="chain-node"><div class="chain-icon ' + (isFirst ? 'origin' : 'transfer') + '">' + (isFirst ? '&#9733;' : '&#8594;') + '</div><div class="chain-detail">';
-          html += '<div class="chain-label">' + (isFirst ? 'ORIGIN' : 'TRANSFER') + '</div>';
-          html += '<div class="chain-value">' + esc(r.platform || '') + '</div>';
-          html += '<div style="font-size:0.72rem;color:var(--text-dim)">' + esc(meta.title || '') + ' by ' + esc(meta.artist || '') + '</div>';
-          html += '<div style="font-size:0.72rem;color:var(--text-dim)">Registered: ' + (r.registered_at || r.timestamp || 'N/A') + '</div>';
-          html += '<div style="font-size:0.72rem;color:var(--green)">Signature: &#10003; Verified</div>';
-          html += '</div></div>';
-        });
-        html += '</div>';
-
-        // Verdict
-        var artist = state.regResult.metadata ? state.regResult.metadata.artist : 'Unknown';
-        var title = state.regResult.metadata ? state.regResult.metadata.title : 'Unknown';
-        html += '<div class="card" style="margin-top:14px;border-color:var(--green);background:rgba(0,214,143,0.04)">';
-        html += '<div style="text-align:center">' + badge('No Conflict', 'success') + '</div>';
-        html += '<div style="margin-top:10px;font-size:0.85rem;text-align:center">';
-        html += '<strong>"' + esc(title) + '"</strong> by ' + esc(artist) + '<br>';
-        html += '<span style="color:var(--text-dim);font-size:0.78rem">';
-        if (regs.length === 1) {
-          html += 'Registered by <strong>' + esc(regs[0].platform) + '</strong>. Single registrant. Provenance is clear.';
-        } else {
-          html += 'Registered by <strong>' + esc(regs[0].platform) + '</strong>';
-          if (regs.length > 1) html += ', transferred to <strong>' + esc(regs[regs.length - 1].platform) + '</strong>';
-          html += '. All signatures cryptographically verified. No ambiguity.';
-        }
-        html += '</span></div></div>';
-
-        el.innerHTML = html;
-        var ccBtn = $('#chain-continue');
-        if (ccBtn) ccBtn.disabled = false;
-      } catch(err) {
-        el.innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
-        this.disabled = false;
+        if (!res.ok || data.error) throw new Error(data.error || 'Chain lookup failed');
+        var c = data.data || data;
+        state.module6.chain = c;
+        $('#m6-results').innerHTML = renderM6Results();
+      } catch (err) {
+        $('#m6-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
       }
+      this.disabled = false;
     });
   }
 
-  // ========== Section binding dispatcher ==========
-  function bindSection(n) {
-    var fns = [noopBind, bindAIDetect, bindDDEX, bindRegister, bindTransfer, bindConflict, noopBind, noopBind];
-    fns[n]();
+  // ========== Closing slide ==========
+  function renderClosing() {
+    return '<div class="slide-section">'
+      + '<h1 class="slide-headline">You are currently paying 3-6 vendors plus internal headcount for what ORBIT does in one stack.</h1>'
+      + '<p class="slide-subline">This is not software consolidation. It is an operational model change for labels and distributors.</p>'
+      + '<div class="slide-two-col" style="max-width:700px">'
+      + '<div class="slide-col-card" style="text-align:center"><h3 style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em">Setup &amp; Integration</h3><div style="font-size:1.8rem;font-weight:800;color:var(--accent);margin:8px 0">$1,500</div><div style="font-size:0.76rem;color:var(--text-dim)">One-time onboarding and integration support</div></div>'
+      + '<div class="slide-col-card" style="text-align:center"><h3 style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em">First Month</h3><div style="font-size:1.8rem;font-weight:800;color:var(--accent);margin:8px 0">$4,000<span style="font-size:0.7rem;font-weight:400;color:var(--text-dim)">/mo</span></div><div style="font-size:0.76rem;color:var(--text-dim)">50% introductory rate</div></div>'
+      + '</div>'
+      + '<div style="max-width:700px;margin:14px auto 0;font-size:0.8rem;color:var(--text-dim)">After first month: $8,000/mo on a rolling 6-month commitment.</div>'
+      + '<div style="margin-top:20px"><button class="btn btn-outline" id="closing-hub">Back to Platform Overview</button></div>'
+      + '</div>';
+  }
+
+  function bindClosing() {
+    var b = $('#closing-hub');
+    if (b) b.addEventListener('click', function() { goToView('hub'); });
+  }
+
+  // ========== Rendering dispatcher ==========
+  function renderView() {
+    var panel = $('#contentPanel');
+    if (currentView === 'hub') panel.innerHTML = '<div class="section active">' + renderHub() + '</div>';
+    else if (currentView === 'mod-ai-detect') panel.innerHTML = '<div class="section active">' + renderM1() + '</div>';
+    else if (currentView === 'mod-analysis') panel.innerHTML = '<div class="section active">' + renderM2() + '</div>';
+    else if (currentView === 'mod-fingerprint') panel.innerHTML = '<div class="section active">' + renderM3() + '</div>';
+    else if (currentView === 'mod-watermark') panel.innerHTML = '<div class="section active">' + renderM4() + '</div>';
+    else if (currentView === 'mod-ddex') panel.innerHTML = '<div class="section active">' + renderDDEX() + '</div>';
+    else if (currentView === 'mod-provenance') panel.innerHTML = '<div class="section active">' + renderM6() + '</div>';
+    else panel.innerHTML = '<div class="section active">' + renderClosing() + '</div>';
+
+    var view = VIEWS.find(function(v) { return v.id === currentView; });
+    var isDemo = view && view.type === 'demo';
+    $('#logPanel').style.display = isDemo ? '' : 'none';
+
+    if (currentView === 'hub') bindHub();
+    else if (currentView === 'mod-ai-detect') bindM1();
+    else if (currentView === 'mod-analysis') bindM2();
+    else if (currentView === 'mod-fingerprint') bindM3();
+    else if (currentView === 'mod-watermark') bindM4();
+    else if (currentView === 'mod-ddex') bindDDEX();
+    else if (currentView === 'mod-provenance') bindM6();
+    else bindClosing();
   }
 
   // ========== Init ==========
   async function init() {
-    // Check status
     try {
       var res = await fetch('/api/status');
       if (!res.ok) throw new Error();
       var d = await res.json();
       $('#statusDot').className = 'status-dot ok';
       $('#statusText').textContent = 'Connected to ' + (d.server || 'ORBIT');
-    } catch(e) {
+    } catch (_) {
       $('#statusDot').className = 'status-dot err';
       $('#statusText').textContent = 'Server unreachable';
     }
-
-    // Load track list
     try {
       var tRes = await fetch('/api/demo-tracks');
       var tData = await tRes.json();
       state.demoTracks = tData.tracks || [];
-    } catch(e) {}
-
-    renderProgress();
-    renderSection(0);
+    } catch (_) {}
+    renderIndicator();
+    renderView();
   }
 
-  // Expose navigation for inline onclick handlers
-  window._demo = { nextStep: nextStep, prevStep: prevStep };
-
+  window._demo = { goToView: goToView };
   init();
 })();
 </script>
