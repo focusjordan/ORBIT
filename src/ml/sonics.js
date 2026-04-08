@@ -24,6 +24,12 @@ const SONICS_CONFIG = {
   },
 };
 
+function parseJsonPayload(stdout) {
+  const jsonStart = stdout.indexOf('{');
+  const jsonStr = jsonStart >= 0 ? stdout.slice(jsonStart) : stdout;
+  return JSON.parse(jsonStr);
+}
+
 function resolveModelVariant() {
   if (process.env.ORBIT_SONICS_MODEL) {
     return process.env.ORBIT_SONICS_MODEL;
@@ -95,7 +101,7 @@ async function checkEnvironment() {
       proc.on('close', (code) => {
         if (code === 0) {
           try {
-            resolve(JSON.parse(stdout));
+            resolve(parseJsonPayload(stdout));
           } catch (err) {
             resolve({
               available: true,
@@ -107,7 +113,7 @@ async function checkEnvironment() {
         }
 
         try {
-          const payload = JSON.parse(stdout);
+          const payload = parseJsonPayload(stdout);
           resolve({
             available: false,
             message: payload.message || 'SONICS check failed',
@@ -203,7 +209,7 @@ async function detect(input, options = {}) {
         const elapsed = Date.now() - startTime;
         if (code !== 0) {
           try {
-            const errPayload = JSON.parse(stdout);
+            const errPayload = parseJsonPayload(stdout);
             reject(new Error(`SONICS error (${errPayload.error}): ${errPayload.message}`));
           } catch (_) {
             reject(new Error(`SONICS failed (code ${code}): ${stderr || stdout}`));
@@ -212,7 +218,7 @@ async function detect(input, options = {}) {
         }
 
         try {
-          const payload = JSON.parse(stdout);
+          const payload = parseJsonPayload(stdout);
           const normalized = normalizeResult(payload);
           if (!normalized.processingTimeMs) normalized.processingTimeMs = elapsed;
           resolve(normalized);

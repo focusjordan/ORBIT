@@ -68,7 +68,23 @@ const cmd = new Command('detect')
             console.log();
             console.log(chalk.dim('  Signals:'));
             for (const [key, val] of Object.entries(aiDetection.signals)) {
-              const sigScore = typeof val === 'number' ? (val * 100).toFixed(1) + '%' : String(val);
+              let sigScore = String(val);
+              if (typeof val === 'number') {
+                sigScore = (val * 100).toFixed(1) + '%';
+              } else if (val && typeof val === 'object') {
+                const numeric =
+                  val.aiScore ??
+                  val.anomalyScore ??
+                  val.suspicionScore ??
+                  val.provenanceScore ??
+                  val.watermarkScore ??
+                  val.sonicsScore;
+                if (typeof numeric === 'number') {
+                  sigScore = (numeric * 100).toFixed(1) + '%';
+                } else if (val.available === false) {
+                  sigScore = 'unavailable';
+                }
+              }
               out.field(command, `  ${key}`, sigScore);
             }
           }

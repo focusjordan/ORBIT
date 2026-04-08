@@ -9,7 +9,7 @@ const out = require('../output');
 const cmd = new Command('analyze')
   .description('AI-powered audio analysis — genre, mood, BPM, key, instruments, vocals')
   .argument('<file>', 'path to audio file')
-  .option('--include <fields>', 'comma-separated list: genre,mood,bpm,key,instruments,vocals,fingerprint,embedding')
+  .option('--include <fields>', 'comma-separated list: genre,mood,bpm,key,instruments,vocals,fingerprint,embedding,ai_detection,catalog_check')
   .action(async (file, opts, command) => {
     if (!fs.existsSync(file)) {
       out.fail(command, `File not found: ${file}`);

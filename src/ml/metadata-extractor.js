@@ -8,7 +8,9 @@
  * registration.
  * 
  * Components Integrated:
- * - CLAP (clap.js): Genre, mood, instruments, vocals detection + audio embeddings
+ * - CLAP (clap.js): Mood, vocals, and fallback genre/instrument detection
+ * - PANNs (panns.js): Primary instruments + 2048-dim embeddings
+ * - wav2vec2 genre classifier (genre-classifier.js): Primary genre detection
  * - Audio Analysis (audio-analysis.js): BPM, key, energy, loudness
  * 
  * Output follows ORBIT_ENHANCEMENTS.md Section 5 (Enhanced Verification Response)
@@ -64,7 +66,9 @@ const EXTRACTOR_CONFIG = {
  * Extract all AI metadata from an audio file
  * 
  * This is the main entry point that combines all extractors:
- * - CLAP: genre, mood, instruments, vocals + audio embeddings
+ * - wav2vec2 genre: primary genre detection
+ * - PANNs: primary instrument tags + optional 2048-dim embedding
+ * - CLAP: mood, vocals, and fallback genre/instrument detection
  * - Audio Analysis: BPM, key, energy, loudness, danceability
  * 
  * @param {string|Buffer} input - Audio file path or buffer
@@ -338,7 +342,7 @@ async function extractMetadata(input, options = {}) {
       extractionStatus.embedding = `error: ${error.message}`;
       
       if (verbose) {
-        console.log(`   ✗ CLAP Embedding: Failed - ${error.message}`);
+        console.log(`   ✗ PANNs Embedding: Failed - ${error.message}`);
       }
       
       if (cfg.failOnError) {
@@ -560,7 +564,13 @@ function formatForDatabase(extractionResult) {
 
 /**
  * Format audio embedding for PostgreSQL vector storage
- * Uses CLAP 512-dim embeddings (Apache 2.0 licensed)
+ * Uses PANNs 2048-dim embeddings.
+ *
+ * IMPORTANT:
+ * - Registration similarity search still stores CLAP 512-dim vectors in
+ *   `audio_embedding`.
+ * - This formatter is for metadata-extractor embedding output only.
+ * - Persisting PANNs embeddings requires a separate schema/index migration.
  * 
  * @param {Float32Array|null} embedding - Audio embedding
  * @returns {string|null} PostgreSQL vector format or null

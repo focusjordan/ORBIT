@@ -276,8 +276,9 @@ async function similarHandler(req, res) {
  *     vocals: {present, confidence, gender, ...}
  *   },
  *   embeddings?: {
- *     clap: <512-dim vector>,
- *     clap_dim: 512
+ *     audio: <2048-dim vector>,
+ *     dim: 2048,
+ *     model: "panns_cnn14"
  *   },
  *   fingerprint?: {
  *     chromaprint_hash: string
@@ -371,7 +372,7 @@ async function analyzeHandler(req, res) {
     
     if (needsClap || needsAudioAnalysis || needsEmbedding) {
       try {
-        log('🧠 Running CLAP audio analysis...');
+        log('🧠 Running metadata extraction pipeline...');
         metadataResult = await metadataExtractor.extractMetadata(audioBuffer, {
           includeEmbedding: needsEmbedding,
           verbose,
@@ -546,8 +547,9 @@ async function analyzeHandler(req, res) {
     // Add embedding if requested
     if (needsEmbedding && metadataResult?.embedding) {
       response.embeddings = {
-        clap: Array.from(metadataResult.embedding),
-        clap_dim: metadataResult.embedding.length,
+        audio: Array.from(metadataResult.embedding),
+        dim: metadataResult.embedding.length,
+        model: 'panns_cnn14',
       };
     }
     
@@ -633,8 +635,8 @@ router.get('/info', (req, res) => {
       },
     ],
     ml_features: {
-      embeddings: 'CLAP 512-dim (Apache 2.0 licensed)',
-      classification: 'Zero-shot genre/mood/instruments via CLAP',
+      embeddings: 'CLAP 512-dim for similarity; PANNs 2048-dim from /analyze embedding output',
+      classification: 'wav2vec2 genre + PANNs instruments + CLAP mood/vocals',
       signal_analysis: 'BPM/key detection via librosa',
       fingerprinting: 'Chromaprint + CLAP semantic',
       catalog_check: 'AcoustID + ACRCloud + MusicBrainz',

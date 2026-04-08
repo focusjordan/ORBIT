@@ -487,7 +487,10 @@ async function registerHandler(req, res) {
     
     // ========================================================================
     // 10. OPTIONAL: COMPUTE AUDIO EMBEDDING (Session 22 - CLAP)
-    // Uses CLAP embeddings (Apache 2.0) instead of MERT (non-commercial)
+    // Uses CLAP embeddings (Apache 2.0) instead of MERT (non-commercial).
+    // NOTE: metadata-extractor may emit PANNs 2048-dim embeddings for analysis
+    // responses, but registration similarity search remains CLAP 512-dim until
+    // a dedicated schema/index migration is completed.
     // ========================================================================
     
     let audioEmbedding = null;

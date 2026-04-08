@@ -8,8 +8,8 @@
  * 
  * Session 19: Added embedding update and similarity queries
  * Session 22: Switched from MERT (non-commercial) to CLAP embeddings (Apache 2.0)
- *             Database column remains 'mert_embedding' for backwards compatibility
- *             but stores CLAP 512-dim vectors
+ *             Similarity search now uses `audio_embedding` (vector(512)).
+ *             Note: legacy `mert_embedding` may still exist in older schemas.
  */
 
 const { pool } = require('../config/database');
@@ -352,7 +352,7 @@ const queries = {
   // ============================================================================
   // Audio Embedding Queries (Session 19, updated Session 22)
   // Uses CLAP embeddings (512-dim, Apache 2.0 licensed)
-  // Database column 'mert_embedding' retained for backwards compatibility
+  // Stored in `audio_embedding` (vector(512)).
   // ============================================================================
   
   /**
@@ -364,7 +364,7 @@ const queries = {
   updateAudioEmbedding: async (registrationId, embedding) => {
     const result = await pool.query(
       `UPDATE orbit_registrations
-       SET mert_embedding = $2::vector
+       SET audio_embedding = $2::vector
        WHERE id = $1
        RETURNING id, title, artist`,
       [registrationId, embedding]
@@ -392,10 +392,10 @@ const queries = {
     let query = `
       SELECT 
         id, title, artist, isrc, origin_platform, owner_id, created_at,
-        1 - (mert_embedding <=> $1::vector) as similarity
+        1 - (audio_embedding <=> $1::vector) as similarity
       FROM orbit_registrations
-      WHERE mert_embedding IS NOT NULL
-        AND 1 - (mert_embedding <=> $1::vector) > $2
+      WHERE audio_embedding IS NOT NULL
+        AND 1 - (audio_embedding <=> $1::vector) > $2
     `;
     
     const params = [embedding, threshold];
@@ -421,7 +421,7 @@ const queries = {
     const result = await pool.query(
       `SELECT EXISTS(
         SELECT 1 FROM orbit_registrations 
-        WHERE id = $1 AND mert_embedding IS NOT NULL
+        WHERE id = $1 AND audio_embedding IS NOT NULL
       ) as exists`,
       [registrationId]
     );
@@ -435,7 +435,7 @@ const queries = {
    */
   getRegistrationWithEmbedding: async (registrationId) => {
     const result = await pool.query(
-      `SELECT id, title, artist, mert_embedding::text as audio_embedding
+      `SELECT id, title, artist, audio_embedding::text as audio_embedding
        FROM orbit_registrations 
        WHERE id = $1`,
       [registrationId]
@@ -468,7 +468,7 @@ const queries = {
     const result = await pool.query(
       `SELECT COUNT(*) as count 
        FROM orbit_registrations 
-       WHERE mert_embedding IS NOT NULL`
+       WHERE audio_embedding IS NOT NULL`
     );
     return parseInt(result.rows[0].count, 10);
   }

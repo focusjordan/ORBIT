@@ -1650,11 +1650,23 @@ function getAllFlags(detectionResult) {
   if (detectionResult.signals?.sonics?.flags) {
     flags.push(...detectionResult.signals.sonics.flags);
   }
+  if (detectionResult.signals?.watermark?.flags) {
+    flags.push(...detectionResult.signals.watermark.flags);
+  }
   if (detectionResult.v2?.signals?.knn?.flags) {
     flags.push(...detectionResult.v2.signals.knn.flags);
   }
   if (detectionResult.v2?.signals?.sonics?.flags) {
     flags.push(...detectionResult.v2.signals.sonics.flags);
+  }
+  if (detectionResult.v3?.signals?.knn?.flags) {
+    flags.push(...detectionResult.v3.signals.knn.flags);
+  }
+  if (detectionResult.v3?.signals?.sonics?.flags) {
+    flags.push(...detectionResult.v3.signals.sonics.flags);
+  }
+  if (detectionResult.v3?.signals?.watermark?.flags) {
+    flags.push(...detectionResult.v3.signals.watermark.flags);
   }
   
   return [...new Set(flags)];
