@@ -25,6 +25,9 @@
  */
 
 const clap = require('./clap');
+const aiKnn = require('./ai-knn');
+const audioAnalysis = require('./audio-analysis');
+const runtimeConfig = require('../config');
 
 // ============================================================================
 // CONFIGURATION
@@ -34,26 +37,54 @@ const clap = require('./clap');
  * AI Detection Configuration
  */
 const AI_DETECTION_CONFIG = {
-  // Weights for combining signals (must sum to 1.0)
+  // Legacy weights for combining signals (must sum to 1.0)
   weights: {
-    semantic: 0.30,    // CLAP zero-shot probe
-    anomaly: 0.20,     // Audio analysis anomalies
-    metadata: 0.15,    // Metadata/behavioral patterns
-    catalog: 0.35,     // AcoustID provenance mismatch (strongest signal for covers)
+    semantic: 0.30,
+    anomaly: 0.20,
+    metadata: 0.15,
+    catalog: 0.35,
   },
-  
+
+  // V2 weights (includes KNN as additive signal)
+  weightsV2: {
+    semantic: 0.24,
+    anomaly: 0.23,
+    metadata: 0.17,
+    catalog: 0.28,
+    knn: 0.08,
+  },
+
   // Thresholds for recommendations
   thresholds: {
-    likelyAI: 0.55,    // Score >= 0.55 → LIKELY_AI (lowered -- catalog signal is decisive)
-    review: 0.30,      // Score >= 0.30 → REVIEW
-    // Below 0.30 → LIKELY_HUMAN
+    likelyAI: 0.55,
+    review: 0.30,
+  },
+
+  thresholdsV2: {
+    likelyAI: 0.58,
+    review: 0.34,
   },
   
   // Anomaly detection thresholds
   anomalyThresholds: {
-    perfectTempo: 0.98,       // BPM confidence above this is suspicious
-    perfectKey: 0.95,         // Key confidence above this is suspicious
-    lowDynamicRange: 4,       // Loudness range below this (dB) is suspicious
+    perfectTempo: 0.98,
+    perfectKey: 0.95,
+    lowDynamicRange: 4,
+    lowHarmonicity: 0.25,
+    highLoopRepetition: 0.82,
+    highTempoStability: 0.94,
+    lowCrestFactor: 4.0,
+    lowSpectralCentroidCv: 0.15,
+    lowSpectralBandwidthCv: 0.12,
+    steepSpectralRolloff: 0.08,
+    lowSpectralFluxCv: 0.35,
+    lowZcrCv: 0.25,
+    lowMfccVariance: 15.0,
+    lowChromaEntropy: 0.75,
+    flatEnergyArc: 0.0001,
+    checkerboardPeak: 0.25,
+    lowSubbandEntropy: 0.6,
+    hfHarmonicAnomaly: 0.7,
   },
   
   // Duration patterns (in seconds) typical of AI generators
@@ -61,6 +92,47 @@ const AI_DETECTION_CONFIG = {
     min: 115,   // ~1:55
     max: 215,   // ~3:35
   },
+
+  metadataThresholdsV2: {
+    suspiciousSampleRates: [32000, 48000],
+    suspiciousBitDepths: [16, 24],
+    contributorCountMin: 1,
+    shortDurationSignatureSec: 95,
+  },
+
+  // Known AI generator encoder/format fingerprints
+  aiEncoderSignatures: [
+    { pattern: /suno/i, generator: 'Suno' },
+    { pattern: /udio/i, generator: 'Udio' },
+    { pattern: /mubert/i, generator: 'Mubert' },
+    { pattern: /soundraw/i, generator: 'SoundRaw' },
+    { pattern: /aiva/i, generator: 'AIVA' },
+    { pattern: /boomy/i, generator: 'Boomy' },
+    { pattern: /beatoven/i, generator: 'Beatoven' },
+    { pattern: /loudly/i, generator: 'Loudly' },
+  ],
+
+  // Suno: 44100/32-bit float WAV; Udio: 44100/16-bit WAV
+  aiFormatCombos: [
+    { sample_rate: 44100, bits: 32, sample_fmt: 'flt', generator: 'Suno' },
+    { sample_rate: 44100, bits: 32, sample_fmt: 'f32le', generator: 'Suno' },
+    { sample_rate: 44100, bits: 16, sample_fmt: 's16', generator: 'Udio' },
+    { sample_rate: 44100, bits: 16, sample_fmt: 's16p', generator: 'Udio' },
+  ],
+
+  // Generic album values typical of AI generators
+  genericAlbumPatterns: [
+    /^untitled$/i,
+    /^unknown$/i,
+    /^album$/i,
+    /^my\s+album$/i,
+    /^single$/i,
+    /^demo$/i,
+    /^music$/i,
+    /^ai\s*(music|songs?|tracks?|album)?$/i,
+  ],
+
+  creationUploadMaxGapSec: 300,
 };
 
 // Regex patterns for detecting AI self-declaration in metadata text
@@ -98,7 +170,7 @@ const AI_TEXT_PATTERNS = {
  * CLAP matches audio-to-text semantic similarity, so we describe what AI
  * audio actually *sounds like* vs what human recordings *sound like*.
  */
-const AI_DETECTION_PROMPTS = [
+const AI_DETECTION_PROMPTS_V1 = [
   // AI artifact indicators — describe what AI audio sounds like
   { 
     label: 'ai_generated', 
@@ -144,6 +216,32 @@ const AI_DETECTION_PROMPTS = [
   },
 ];
 
+const AI_DETECTION_PROMPTS_V2 = [
+  { label: 'ai_generated', prompt: 'unnatural vocal formants with digital shimmer artifacts' },
+  { label: 'ai_generated', prompt: 'repetitive phrase-level structure with low section variation' },
+  { label: 'ai_generated', prompt: 'uniformly loud synthetic mastering with limited macro-dynamics' },
+  { label: 'ai_generated', prompt: 'hyper-clean transients with machine-perfect rhythmic quantization' },
+  { label: 'ai_generated', prompt: 'blurred harmonic overtones and smeared timbral boundaries' },
+  { label: 'human_performance', prompt: 'natural vocal phrasing with breath and articulation nuance' },
+  { label: 'human_performance', prompt: 'arrangement evolution with intentional section contrast' },
+  { label: 'human_performance', prompt: 'organic dynamic movement between verse and chorus' },
+  { label: 'human_performance', prompt: 'imperfect but expressive groove and timing feel' },
+  { label: 'human_performance', prompt: 'distinct instrument timbres with natural acoustic depth' },
+];
+
+function resolveFeatureFlags(overrides = {}) {
+  const cfg = runtimeConfig.ai || {};
+  return {
+    v2Enabled: overrides.v2Enabled ?? cfg.v2Enabled ?? false,
+    shadowMode: overrides.shadowMode ?? cfg.shadowMode ?? false,
+    registerAnalysisEnabled: overrides.registerAnalysisEnabled ?? cfg.registerAnalysisEnabled ?? false,
+    knnEnabled: overrides.knnEnabled ?? cfg.knnEnabled ?? false,
+    promptsV2Enabled: overrides.promptsV2Enabled ?? cfg.promptsV2Enabled ?? false,
+    metadataV2Enabled: overrides.metadataV2Enabled ?? cfg.metadataV2Enabled ?? false,
+    crossSignalV2Enabled: overrides.crossSignalV2Enabled ?? cfg.crossSignalV2Enabled ?? false,
+  };
+}
+
 // ============================================================================
 // SIGNAL 1: ZERO-SHOT CLAP PROBE
 // ============================================================================
@@ -157,13 +255,17 @@ const AI_DETECTION_PROMPTS = [
  * @returns {Promise<{aiScore: number, humanScore: number, confidence: number, prompts: Object}>}
  */
 async function probeAIGenerated(input, options = {}) {
-  const { verbose = process.env.ORBIT_ML_VERBOSE === 'true' } = options;
+  const {
+    verbose = process.env.ORBIT_ML_VERBOSE === 'true',
+    useV2Prompts = false,
+  } = options;
   
   if (verbose) {
     console.log('🤖 AI Detection: Running semantic probe...');
   }
   
-  const prompts = AI_DETECTION_PROMPTS.map(p => p.prompt);
+  const promptBank = useV2Prompts ? AI_DETECTION_PROMPTS_V2 : AI_DETECTION_PROMPTS_V1;
+  const prompts = promptBank.map(p => p.prompt);
   const results = await clap.classifyWithLabels(input, prompts, { verbose: false });
   
   // Aggregate scores by label
@@ -172,7 +274,7 @@ async function probeAIGenerated(input, options = {}) {
   const promptResults = {};
   
   for (const r of results) {
-    const entry = AI_DETECTION_PROMPTS.find(p => p.prompt === r.label);
+    const entry = promptBank.find(p => p.prompt === r.label);
     if (entry) {
       promptResults[r.label] = r.confidence;
       if (entry.label === 'ai_generated') {
@@ -184,8 +286,8 @@ async function probeAIGenerated(input, options = {}) {
   }
   
   // Normalize scores (3 prompts each category)
-  const aiPromptCount = AI_DETECTION_PROMPTS.filter(p => p.label === 'ai_generated').length;
-  const humanPromptCount = AI_DETECTION_PROMPTS.filter(p => p.label === 'human_performance').length;
+  const aiPromptCount = promptBank.filter(p => p.label === 'ai_generated').length;
+  const humanPromptCount = promptBank.filter(p => p.label === 'human_performance').length;
   
   aiScore = aiScore / aiPromptCount;
   humanScore = humanScore / humanPromptCount;
@@ -203,10 +305,16 @@ async function probeAIGenerated(input, options = {}) {
     console.log(`   Confidence: ${(confidence * 100).toFixed(1)}%`);
   }
   
+  const flags = [];
+  if (normalizedAI >= 0.67) flags.push('SEMANTIC_AI_DOMINANT');
+  if (confidence >= 0.18) flags.push('SEMANTIC_HIGH_CONFIDENCE');
+
   return {
     aiScore: Math.round(normalizedAI * 1000) / 1000,
     humanScore: Math.round((1 - normalizedAI) * 1000) / 1000,
     confidence: Math.round(confidence * 1000) / 1000,
+    flags,
+    prompt_set: useV2Prompts ? 'v2' : 'v1',
     rawScores: {
       ai: Math.round(aiScore * 1000) / 1000,
       human: Math.round(humanScore * 1000) / 1000,
@@ -230,7 +338,8 @@ async function probeAIGenerated(input, options = {}) {
  * @param {Object} analysisResult - Result from metadata-extractor (includes ai_forensics when enabled)
  * @returns {{anomalyScore: number, flags: string[], details: Object}}
  */
-function checkAudioAnomalies(analysisResult) {
+function checkAudioAnomalies(analysisResult, options = {}) {
+  const { v2Enabled = false } = options;
   const flags = [];
   const details = {};
   let anomalyScore = 0;
@@ -262,6 +371,15 @@ function checkAudioAnomalies(analysisResult) {
       flags.push('UNIFORM_ENERGY');
       details.energy = energy;
       anomalyScore += 0.08;
+    }
+  }
+
+  if (v2Enabled) {
+    const dynamicRangeDb = analysisResult.dynamic_range_db ?? analysisResult.loudness_range_db;
+    if (dynamicRangeDb !== undefined && dynamicRangeDb !== null && dynamicRangeDb < thresholds.lowDynamicRange) {
+      flags.push('LOW_DYNAMIC_RANGE');
+      details.dynamic_range_db = dynamicRangeDb;
+      anomalyScore += 0.07;
     }
   }
   
@@ -301,6 +419,111 @@ function checkAudioAnomalies(analysisResult) {
       flags.push('METRONOMIC_TIMING');
       details.onset_cv = onsets.coefficient_of_variation;
       anomalyScore += 0.10;
+    }
+
+    if (v2Enabled) {
+      const harmonicity = forensics.harmonicity;
+      if (harmonicity && harmonicity.available && harmonicity.harmonic_ratio < thresholds.lowHarmonicity) {
+        flags.push('LOW_HARMONICITY');
+        details.harmonic_ratio = harmonicity.harmonic_ratio;
+        anomalyScore += 0.08;
+      }
+      if (harmonicity && harmonicity.hf_anomalous) {
+        flags.push('HF_HARMONIC_ANOMALY');
+        details.hf_harmonic_ratio = harmonicity.hf_harmonic_ratio;
+        anomalyScore += 0.06;
+      }
+
+      const repetition = forensics.loop_repetition;
+      if (repetition && repetition.available && repetition.repetition_score > thresholds.highLoopRepetition) {
+        flags.push('HIGH_LOOP_REPETITION');
+        details.loop_repetition_score = repetition.repetition_score;
+        anomalyScore += 0.08;
+      }
+
+      const tempoRegularity = forensics.tempo_regularity;
+      if (tempoRegularity && tempoRegularity.available && tempoRegularity.stability > thresholds.highTempoStability) {
+        flags.push('HIGH_TEMPO_STABILITY');
+        details.tempo_stability = tempoRegularity.stability;
+        anomalyScore += 0.07;
+      }
+
+      const crest = forensics.crest_factor;
+      if (crest && crest.available && crest.low_crest) {
+        flags.push('LOW_CREST_FACTOR');
+        details.crest_factor = crest.crest_factor;
+        anomalyScore += 0.06;
+      }
+
+      const centroidVar = forensics.spectral_centroid_var;
+      if (centroidVar && centroidVar.available && centroidVar.low_variance) {
+        flags.push('LOW_SPECTRAL_CENTROID_VARIANCE');
+        details.spectral_centroid_cv = centroidVar.cv;
+        anomalyScore += 0.05;
+      }
+
+      const bwVar = forensics.spectral_bandwidth_var;
+      if (bwVar && bwVar.available && bwVar.low_variance) {
+        flags.push('LOW_SPECTRAL_BANDWIDTH_VARIANCE');
+        details.spectral_bandwidth_cv = bwVar.cv;
+        anomalyScore += 0.05;
+      }
+
+      const rolloff = forensics.spectral_rolloff;
+      if (rolloff && rolloff.available && rolloff.steep_rolloff) {
+        flags.push('STEEP_SPECTRAL_ROLLOFF');
+        details.spectral_rolloff_steepness = rolloff.steepness;
+        anomalyScore += 0.05;
+      }
+
+      const flux = forensics.spectral_flux;
+      if (flux && flux.available && flux.low_flux_variance) {
+        flags.push('LOW_SPECTRAL_FLUX_VARIANCE');
+        details.spectral_flux_cv = flux.cv;
+        anomalyScore += 0.06;
+      }
+
+      const zcrVar = forensics.zcr_variance;
+      if (zcrVar && zcrVar.available && zcrVar.low_variance) {
+        flags.push('LOW_ZCR_VARIANCE');
+        details.zcr_cv = zcrVar.cv;
+        anomalyScore += 0.05;
+      }
+
+      const mfcc = forensics.mfcc_temporal;
+      if (mfcc && mfcc.available && mfcc.low_variance) {
+        flags.push('LOW_MFCC_VARIANCE');
+        details.mfcc_mean_variance = mfcc.mean_variance;
+        anomalyScore += 0.06;
+      }
+
+      const chromaEnt = forensics.chroma_entropy;
+      if (chromaEnt && chromaEnt.available && chromaEnt.low_entropy) {
+        flags.push('LOW_CHROMA_ENTROPY');
+        details.chroma_entropy_normalized = chromaEnt.normalized;
+        anomalyScore += 0.05;
+      }
+
+      const arc = forensics.energy_arc;
+      if (arc && arc.available && arc.flat_arc) {
+        flags.push('FLAT_ENERGY_ARC');
+        details.energy_arc_variance = arc.arc_variance;
+        anomalyScore += 0.06;
+      }
+
+      const checker = forensics.checkerboard;
+      if (checker && checker.available && checker.has_artifacts) {
+        flags.push('CHECKERBOARD_ARTIFACTS');
+        details.checkerboard_peak = checker.peak_autocorr;
+        anomalyScore += 0.08;
+      }
+
+      const subband = forensics.subband_energy;
+      if (subband && subband.available && subband.low_entropy) {
+        flags.push('LOW_SUBBAND_ENTROPY');
+        details.subband_distribution_entropy = subband.distribution_entropy;
+        anomalyScore += 0.05;
+      }
     }
   }
   
@@ -353,7 +576,12 @@ function scanTextForAIIndicators(texts) {
  * @param {number} durationSeconds - Track duration in seconds
  * @returns {{suspicionScore: number, flags: string[], details: Object}}
  */
-function checkMetadataPatterns(metadata, durationSeconds) {
+function checkMetadataPatterns(metadata, durationSeconds, options = {}) {
+  const {
+    metadataV2Enabled = false,
+    crossSignalV2Enabled = false,
+    analysisResult = null,
+  } = options;
   const flags = [];
   const details = {};
   let suspicionScore = 0;
@@ -402,6 +630,145 @@ function checkMetadataPatterns(metadata, durationSeconds) {
   if (metadata) {
     if (!metadata.isrc && !metadata.upc) {
       flags.push('NO_IDENTIFIERS');
+      suspicionScore += 0.05;
+    }
+  }
+
+  if (metadataV2Enabled && metadata) {
+    const thresholds = AI_DETECTION_CONFIG.metadataThresholdsV2;
+
+    if (metadata.album_title && !metadata.track_number) {
+      flags.push('ALBUM_WITHOUT_TRACK_NUMBER');
+      suspicionScore += 0.03;
+    }
+
+    // --- Encoder / software tag scanning ---
+    const fileMeta = options.fileMetadata || {};
+    const encoderFields = [fileMeta.encoder, fileMeta.encoding_tool, fileMeta.software].filter(Boolean);
+    for (const field of encoderFields) {
+      for (const sig of AI_DETECTION_CONFIG.aiEncoderSignatures) {
+        if (sig.pattern.test(field)) {
+          flags.push('AI_ENCODER_SIGNATURE');
+          details.encoder_match = { field, generator: sig.generator };
+          suspicionScore += 0.20;
+          break;
+        }
+      }
+      if (flags.includes('AI_ENCODER_SIGNATURE')) break;
+    }
+
+    // --- Sample rate + bit depth combo matching (Suno/Udio fingerprints) ---
+    const sampleRate = Number(fileMeta.sample_rate || metadata.sample_rate || 0);
+    const bitDepth = Number(fileMeta.bits_per_raw_sample || fileMeta.bits_per_sample || metadata.bit_depth || 0);
+    const sampleFmt = fileMeta.sample_fmt || '';
+    if (sampleRate > 0 && (bitDepth > 0 || sampleFmt)) {
+      for (const combo of AI_DETECTION_CONFIG.aiFormatCombos) {
+        const rateMatch = combo.sample_rate === sampleRate;
+        const bitsMatch = combo.bits === bitDepth;
+        const fmtMatch = combo.sample_fmt && sampleFmt.includes(combo.sample_fmt);
+        if (rateMatch && (bitsMatch || fmtMatch)) {
+          flags.push('AI_FORMAT_COMBO_MATCH');
+          details.format_combo = { sample_rate: sampleRate, bits: bitDepth, sample_fmt: sampleFmt, generator: combo.generator };
+          suspicionScore += 0.10;
+          break;
+        }
+      }
+    }
+    if (!flags.includes('AI_FORMAT_COMBO_MATCH')) {
+      if (sampleRate > 0 && thresholds.suspiciousSampleRates.includes(sampleRate)) {
+        flags.push('SUSPICIOUS_SAMPLE_RATE_PROFILE');
+        details.sample_rate = sampleRate;
+        suspicionScore += 0.03;
+      }
+      if (bitDepth > 0 && thresholds.suspiciousBitDepths.includes(bitDepth)) {
+        flags.push('SUSPICIOUS_BIT_DEPTH_PROFILE');
+        details.bit_depth = bitDepth;
+        suspicionScore += 0.02;
+      }
+    }
+
+    // --- Album field: AI text scan + blank/generic detection ---
+    const albumTitle = metadata.album_title || fileMeta.album || '';
+    if (albumTitle) {
+      const albumTextHit = scanTextForAIIndicators([albumTitle]);
+      if (albumTextHit.tier) {
+        flags.push('AI_ALBUM_TEXT');
+        details.album_text_match = albumTextHit.matched;
+        suspicionScore += albumTextHit.tier === 'strong' ? 0.12 : 0.06;
+      }
+      for (const pattern of AI_DETECTION_CONFIG.genericAlbumPatterns) {
+        if (pattern.test(albumTitle.trim())) {
+          flags.push('GENERIC_ALBUM_TITLE');
+          details.album_title = albumTitle;
+          suspicionScore += 0.04;
+          break;
+        }
+      }
+    } else if (!albumTitle && metadata.album_title === undefined) {
+      flags.push('BLANK_ALBUM');
+      suspicionScore += 0.03;
+    }
+
+    // --- Comment / description tag scanning ---
+    const commentField = fileMeta.comment || metadata.comment || metadata.description || '';
+    if (commentField) {
+      const commentHit = scanTextForAIIndicators([commentField]);
+      if (commentHit.tier) {
+        flags.push('AI_COMMENT_TAG');
+        details.comment_match = commentHit.matched;
+        suspicionScore += commentHit.tier === 'strong' ? 0.15 : 0.08;
+      }
+    }
+
+    // --- Creation date vs upload proximity ---
+    const creationTime = fileMeta.creation_time || metadata.creation_time;
+    if (creationTime) {
+      const created = new Date(creationTime);
+      const now = new Date();
+      if (!isNaN(created.getTime())) {
+        const gapSec = Math.abs(now.getTime() - created.getTime()) / 1000;
+        if (gapSec < AI_DETECTION_CONFIG.creationUploadMaxGapSec) {
+          flags.push('CREATION_UPLOAD_PROXIMITY');
+          details.creation_upload_gap_sec = Math.round(gapSec);
+          suspicionScore += 0.06;
+        }
+      }
+    }
+
+    const contributorFields = ['composers', 'writers', 'producers', 'lyricists'];
+    const contributorCount = contributorFields.reduce((count, key) => {
+      const value = metadata[key];
+      if (Array.isArray(value)) return count + value.length;
+      if (typeof value === 'string' && value.trim()) return count + 1;
+      return count;
+    }, 0);
+    details.contributor_count = contributorCount;
+    if (contributorCount < thresholds.contributorCountMin) {
+      flags.push('LOW_CONTRIBUTOR_DISCLOSURE');
+      suspicionScore += 0.04;
+    }
+
+    if (metadata.label && metadata.catalog_number) {
+      const hasSyntheticCatalog = /^(AI|GEN|AUTO|TMP)[-_]/i.test(String(metadata.catalog_number));
+      if (hasSyntheticCatalog) {
+        flags.push('SYNTHETIC_LABEL_CATALOG_PATTERN');
+        details.catalog_number = metadata.catalog_number;
+        suspicionScore += 0.04;
+      }
+    }
+
+    if (durationSeconds > 0 && durationSeconds <= thresholds.shortDurationSignatureSec) {
+      flags.push('SHORT_DURATION_SIGNATURE');
+      suspicionScore += 0.04;
+    }
+  }
+
+  if (crossSignalV2Enabled && analysisResult) {
+    const topGenre = analysisResult.genre?.[0]?.label || null;
+    const vocalPresent = analysisResult.vocals?.present;
+    if (topGenre && /ambient|classical|instrumental/i.test(topGenre) && vocalPresent === true) {
+      flags.push('VOCAL_NATURALNESS_MISMATCH');
+      details.genre_vocal_mismatch = { genre: topGenre, vocals_present: vocalPresent };
       suspicionScore += 0.05;
     }
   }
@@ -499,17 +866,20 @@ async function detectAI(audioInput, options = {}) {
     analysisResult = null,
     catalogResult = null,
     verbose = process.env.ORBIT_ML_VERBOSE === 'true',
+    flags: flagOverrides = {},
   } = options;
-  
+
+  const featureFlags = resolveFeatureFlags(flagOverrides);
+  const shouldComputeV2 = featureFlags.v2Enabled || featureFlags.shadowMode;
   const startTime = Date.now();
-  
+
   if (verbose) {
     console.log('🤖 AI Detection: Starting multi-signal analysis...');
   }
-  
+
   const weights = AI_DETECTION_CONFIG.weights;
   const thresholds = AI_DETECTION_CONFIG.thresholds;
-  
+
   // Initialize result structure
   const result = {
     score: null,
@@ -520,14 +890,85 @@ async function detectAI(audioInput, options = {}) {
       metadata: null,
       catalog: null,
     },
+    active_flags: featureFlags,
     processing_time_ms: 0,
   };
-  
+
+  function aggregateScores(signalScores, weightingConfig, floorInputs = null, thresholdConfig = thresholds) {
+    const catalogInformative = signalScores.catalog > 0 ||
+      signalScores.catalogFlags?.includes('KNOWN_WORK_METADATA_MISMATCH');
+    const knnInformative = typeof signalScores.knn === 'number';
+
+    let wSemantic = weightingConfig.semantic || 0;
+    let wAnomaly = weightingConfig.anomaly || 0;
+    let wMetadata = weightingConfig.metadata || 0;
+    let wCatalog = weightingConfig.catalog || 0;
+    let wKnn = weightingConfig.knn || 0;
+
+    if (!catalogInformative) wCatalog = 0;
+    if (!knnInformative) wKnn = 0;
+
+    const sum = wSemantic + wAnomaly + wMetadata + wCatalog + wKnn;
+    if (sum > 0) {
+      wSemantic /= sum;
+      wAnomaly /= sum;
+      wMetadata /= sum;
+      wCatalog /= sum;
+      wKnn /= sum;
+    }
+
+    const weighted =
+      (signalScores.semantic * wSemantic) +
+      (signalScores.anomaly * wAnomaly) +
+      (signalScores.metadata * wMetadata) +
+      (signalScores.catalog * wCatalog) +
+      ((signalScores.knn || 0) * wKnn);
+
+    let scoreFloor = 0;
+    if (floorInputs) {
+      const metaFlags = floorInputs.metaFlags || [];
+      const anomalyFlags = floorInputs.anomalyFlags || [];
+      const forensicHits = anomalyFlags.filter(f =>
+        ['FREQ_CUTOFF_16K', 'LOW_PHASE_ENTROPY', 'SPECTRAL_SMEARING', 'METRONOMIC_TIMING'].includes(f));
+      if (metaFlags.includes('AI_SELF_DECLARED') && forensicHits.length >= 1) {
+        scoreFloor = 0.75;
+      } else if (metaFlags.includes('AI_SELF_DECLARED')) {
+        scoreFloor = 0.60;
+      } else if (metaFlags.includes('AI_TEXT_INDICATOR') && forensicHits.length >= 1) {
+        scoreFloor = 0.55;
+      } else if (forensicHits.length >= 2) {
+        scoreFloor = 0.45;
+      }
+    }
+
+    const finalScore = Math.max(weighted, scoreFloor);
+    const roundedScore = Math.round(finalScore * 1000) / 1000;
+    let recommendation = 'LIKELY_HUMAN';
+    if (roundedScore >= thresholdConfig.likelyAI) {
+      recommendation = 'LIKELY_AI';
+    } else if (roundedScore >= thresholdConfig.review) {
+      recommendation = 'REVIEW';
+    }
+
+    return {
+      score: roundedScore,
+      recommendation,
+      weights_used: {
+        semantic: wSemantic,
+        anomaly: wAnomaly,
+        metadata: wMetadata,
+        catalog: wCatalog,
+        knn: wKnn,
+      },
+      score_floor_applied: scoreFloor > weighted ? scoreFloor : null,
+    };
+  }
+
   try {
-    // Signal 1: Semantic CLAP probe
+    // Signal 1: Semantic CLAP probe (legacy baseline)
     let semanticScore = 0;
     try {
-      const semanticResult = await probeAIGenerated(audioInput, { verbose });
+      const semanticResult = await probeAIGenerated(audioInput, { verbose, useV2Prompts: false });
       result.signals.semantic = semanticResult;
       semanticScore = semanticResult.aiScore;
     } catch (error) {
@@ -541,7 +982,7 @@ async function detectAI(audioInput, options = {}) {
     // Signal 2: Audio anomalies (use provided analysis or skip)
     let anomalyScore = 0;
     if (analysisResult) {
-      const anomalyResult = checkAudioAnomalies(analysisResult);
+      const anomalyResult = checkAudioAnomalies(analysisResult, { v2Enabled: false });
       result.signals.anomalies = anomalyResult;
       anomalyScore = anomalyResult.anomalyScore;
     } else {
@@ -555,7 +996,11 @@ async function detectAI(audioInput, options = {}) {
     // Signal 3: Metadata patterns
     const duration = analysisResult?.duration || 
                      (metadata.duration_ms ? metadata.duration_ms / 1000 : 0);
-    const metadataPatterns = checkMetadataPatterns(metadata, duration);
+    const metadataPatterns = checkMetadataPatterns(metadata, duration, {
+      metadataV2Enabled: false,
+      crossSignalV2Enabled: false,
+      analysisResult,
+    });
     result.signals.metadata = metadataPatterns;
     const metadataScore = metadataPatterns.suspicionScore;
     
@@ -565,67 +1010,186 @@ async function detectAI(audioInput, options = {}) {
     result.signals.catalog = catalogSignal;
     catalogScore = catalogSignal.provenanceScore;
     
-    // Determine effective weights.
-    // When catalog signal is non-informative (no_match or unavailable),
-    // redistribute its weight proportionally among the other signals so
-    // they aren't capped at (1 - catalog_weight) of the total.
-    const catalogInformative = catalogScore > 0 ||
-      catalogSignal.flags?.includes('KNOWN_WORK_METADATA_MISMATCH');
+    const legacyAggregate = aggregateScores(
+      {
+        semantic: semanticScore,
+        anomaly: anomalyScore,
+        metadata: metadataScore,
+        catalog: catalogScore,
+        catalogFlags: catalogSignal.flags || [],
+      },
+      weights,
+      {
+        metaFlags: metadataPatterns.flags,
+        anomalyFlags: result.signals.anomalies?.flags || [],
+      },
+      thresholds
+    );
 
-    let wSemantic = weights.semantic;
-    let wAnomaly  = weights.anomaly;
-    let wMetadata = weights.metadata;
-    let wCatalog  = weights.catalog;
+    result.legacy = {
+      score: legacyAggregate.score,
+      recommendation: legacyAggregate.recommendation,
+      weights_used: legacyAggregate.weights_used,
+      score_floor_applied: legacyAggregate.score_floor_applied,
+      signals: result.signals,
+    };
 
-    if (!catalogInformative) {
-      const nonCatalogSum = weights.semantic + weights.anomaly + weights.metadata;
-      wSemantic = weights.semantic / nonCatalogSum;
-      wAnomaly  = weights.anomaly  / nonCatalogSum;
-      wMetadata = weights.metadata / nonCatalogSum;
-      wCatalog  = 0;
+    let v2Result = null;
+    if (shouldComputeV2) {
+      const semanticV2 = await probeAIGenerated(audioInput, {
+        verbose: false,
+        useV2Prompts: featureFlags.promptsV2Enabled,
+      }).catch((error) => ({ aiScore: 0, error: error.message, flags: ['SEMANTIC_V2_ERROR'] }));
+
+      const anomalyV2 = analysisResult
+        ? checkAudioAnomalies(analysisResult, { v2Enabled: true })
+        : { anomalyScore: 0, flags: ['NO_ANALYSIS_PROVIDED'], details: {} };
+
+      let fileMetadata = {};
+      if (featureFlags.metadataV2Enabled) {
+        try {
+          fileMetadata = await audioAnalysis.extractFileMetadata(audioInput);
+        } catch (fmErr) {
+          fileMetadata = { available: false, reason: 'extraction_error', error: fmErr.message };
+        }
+      }
+
+      const metadataV2 = checkMetadataPatterns(metadata, duration, {
+        metadataV2Enabled: featureFlags.metadataV2Enabled,
+        crossSignalV2Enabled: featureFlags.crossSignalV2Enabled,
+        analysisResult,
+        fileMetadata: fileMetadata.available ? fileMetadata : {},
+      });
+
+      let adjustedAnomalyV2Score = anomalyV2.anomalyScore || 0;
+      if (featureFlags.crossSignalV2Enabled) {
+        const topGenre = analysisResult?.genre?.[0]?.label || null;
+        const anomalyFlags = anomalyV2.flags || [];
+        if (topGenre && /classical|jazz|acoustic/i.test(topGenre) && anomalyFlags.includes('METRONOMIC_TIMING')) {
+          adjustedAnomalyV2Score = Math.min(1, adjustedAnomalyV2Score + 0.06);
+        }
+        if (topGenre && /edm|electronic|techno/i.test(topGenre) && anomalyFlags.includes('METRONOMIC_TIMING')) {
+          adjustedAnomalyV2Score = Math.max(0, adjustedAnomalyV2Score - 0.04);
+        }
+      }
+
+      let knnSignal = { available: false, status: 'disabled' };
+      if (featureFlags.knnEnabled) {
+        try {
+          knnSignal = await aiKnn.classifyWithReferences(audioInput);
+        } catch (knnError) {
+          knnSignal = {
+            available: false,
+            status: 'unavailable',
+            reason: 'knn_error',
+            details: { error: knnError.message },
+          };
+        }
+      }
+
+      const v2Aggregate = aggregateScores(
+        {
+          semantic: semanticV2.aiScore || 0,
+          anomaly: adjustedAnomalyV2Score,
+          metadata: metadataV2.suspicionScore || 0,
+          catalog: catalogScore,
+          knn: knnSignal.available ? knnSignal.aiLikelihood : null,
+          catalogFlags: catalogSignal.flags || [],
+        },
+        AI_DETECTION_CONFIG.weightsV2,
+        {
+          metaFlags: metadataV2.flags || [],
+          anomalyFlags: anomalyV2.flags || [],
+        },
+        AI_DETECTION_CONFIG.thresholdsV2
+      );
+
+      v2Result = {
+        score: v2Aggregate.score,
+        recommendation: v2Aggregate.recommendation,
+        weights_used: v2Aggregate.weights_used,
+        score_floor_applied: v2Aggregate.score_floor_applied,
+        signals: {
+          semantic: semanticV2,
+          anomalies: anomalyV2,
+          metadata: metadataV2,
+          catalog: catalogSignal,
+          knn: knnSignal,
+        },
+      };
+
+      if (knnSignal.available && knnSignal.distanceMargin > 0.06) {
+        v2Result.signals.knn.flags = ['KNN_AI_REFERENCE_CLOSER'];
+      } else if (knnSignal.available && knnSignal.distanceMargin < -0.06) {
+        v2Result.signals.knn.flags = ['KNN_HUMAN_REFERENCE_CLOSER'];
+      } else if (!knnSignal.available && featureFlags.knnEnabled) {
+        v2Result.signals.knn.flags = ['KNN_UNAVAILABLE_FAIL_OPEN'];
+      }
     }
 
-    const weightedScore =
-      (semanticScore * wSemantic) +
-      (anomalyScore  * wAnomaly) +
-      (metadataScore * wMetadata) +
-      (catalogScore  * wCatalog);
-
-    // Signal-override floors: certain flag combinations are strong enough
-    // to override the weighted average. Self-declaration isn't a heuristic —
-    // it's the uploader telling you the content is AI.
-    const metaFlags = metadataPatterns.flags;
-    const anomalyFlags = result.signals.anomalies?.flags || [];
-    const forensicHits = anomalyFlags.filter(f =>
-      ['FREQ_CUTOFF_16K', 'LOW_PHASE_ENTROPY', 'SPECTRAL_SMEARING', 'METRONOMIC_TIMING'].includes(f));
-
-    let scoreFloor = 0;
-    if (metaFlags.includes('AI_SELF_DECLARED') && forensicHits.length >= 1) {
-      scoreFloor = 0.75;
-    } else if (metaFlags.includes('AI_SELF_DECLARED')) {
-      scoreFloor = 0.60;
-    } else if (metaFlags.includes('AI_TEXT_INDICATOR') && forensicHits.length >= 1) {
-      scoreFloor = 0.55;
-    } else if (forensicHits.length >= 2) {
-      scoreFloor = 0.45;
-    }
-
-    const combinedScore = Math.max(weightedScore, scoreFloor);
-
-    result.score = Math.round(combinedScore * 1000) / 1000;
-    result.weights_used = { semantic: wSemantic, anomaly: wAnomaly, metadata: wMetadata, catalog: wCatalog };
-    if (scoreFloor > 0 && scoreFloor > weightedScore) {
-      result.score_floor_applied = scoreFloor;
-    }
-    
-    // Determine recommendation
-    if (result.score >= thresholds.likelyAI) {
-      result.recommendation = 'LIKELY_AI';
-    } else if (result.score >= thresholds.review) {
-      result.recommendation = 'REVIEW';
+    const activeModel = featureFlags.v2Enabled ? 'v2' : 'legacy';
+    if (featureFlags.v2Enabled && v2Result) {
+      result.score = v2Result.score;
+      result.recommendation = v2Result.recommendation;
+      result.signals = v2Result.signals;
+      result.weights_used = v2Result.weights_used;
+      if (v2Result.score_floor_applied !== null) result.score_floor_applied = v2Result.score_floor_applied;
     } else {
-      result.recommendation = 'LIKELY_HUMAN';
+      result.score = legacyAggregate.score;
+      result.recommendation = legacyAggregate.recommendation;
+      result.weights_used = legacyAggregate.weights_used;
+      if (legacyAggregate.score_floor_applied !== null) result.score_floor_applied = legacyAggregate.score_floor_applied;
     }
+
+    if (featureFlags.shadowMode && !featureFlags.v2Enabled && v2Result) {
+      result.shadow = {
+        legacy: {
+          score: legacyAggregate.score,
+          recommendation: legacyAggregate.recommendation,
+        },
+        v2: {
+          score: v2Result.score,
+          recommendation: v2Result.recommendation,
+        },
+      };
+      result.v2 = v2Result;
+    } else if (v2Result) {
+      result.v2 = v2Result;
+    }
+
+    result.telemetry = {
+      mode: activeModel,
+      active_flags: featureFlags,
+      legacy: {
+        score: legacyAggregate.score,
+        recommendation: legacyAggregate.recommendation,
+        weights_used: legacyAggregate.weights_used,
+      },
+      v2: v2Result
+        ? {
+          score: v2Result.score,
+          recommendation: v2Result.recommendation,
+          weights_used: v2Result.weights_used,
+        }
+        : null,
+      per_signal_contributions: {
+        legacy: {
+          semantic: Math.round(semanticScore * legacyAggregate.weights_used.semantic * 1000) / 1000,
+          anomaly: Math.round(anomalyScore * legacyAggregate.weights_used.anomaly * 1000) / 1000,
+          metadata: Math.round(metadataScore * legacyAggregate.weights_used.metadata * 1000) / 1000,
+          catalog: Math.round(catalogScore * legacyAggregate.weights_used.catalog * 1000) / 1000,
+        },
+        v2: v2Result
+          ? {
+            semantic: Math.round((v2Result.signals.semantic?.aiScore || 0) * v2Result.weights_used.semantic * 1000) / 1000,
+            anomaly: Math.round((v2Result.signals.anomalies?.anomalyScore || 0) * v2Result.weights_used.anomaly * 1000) / 1000,
+            metadata: Math.round((v2Result.signals.metadata?.suspicionScore || 0) * v2Result.weights_used.metadata * 1000) / 1000,
+            catalog: Math.round((v2Result.signals.catalog?.provenanceScore || 0) * v2Result.weights_used.catalog * 1000) / 1000,
+            knn: Math.round(((v2Result.signals.knn?.aiLikelihood || 0) * v2Result.weights_used.knn) * 1000) / 1000,
+          }
+          : null,
+      },
+    };
     
     result.processing_time_ms = Date.now() - startTime;
     
@@ -677,6 +1241,8 @@ function formatForDatabase(detectionResult) {
       score: detectionResult.score,
       recommendation: detectionResult.recommendation,
       signals: detectionResult.signals,
+      telemetry: detectionResult.telemetry || null,
+      active_flags: detectionResult.active_flags || null,
       detected_at: new Date().toISOString(),
       processing_time_ms: detectionResult.processing_time_ms,
     },
@@ -692,6 +1258,9 @@ function formatForDatabase(detectionResult) {
 function getAllFlags(detectionResult) {
   const flags = [];
   
+  if (detectionResult.signals?.semantic?.flags) {
+    flags.push(...detectionResult.signals.semantic.flags);
+  }
   if (detectionResult.signals?.anomalies?.flags) {
     flags.push(...detectionResult.signals.anomalies.flags);
   }
@@ -701,8 +1270,14 @@ function getAllFlags(detectionResult) {
   if (detectionResult.signals?.catalog?.flags) {
     flags.push(...detectionResult.signals.catalog.flags);
   }
+  if (detectionResult.signals?.knn?.flags) {
+    flags.push(...detectionResult.signals.knn.flags);
+  }
+  if (detectionResult.v2?.signals?.knn?.flags) {
+    flags.push(...detectionResult.v2.signals.knn.flags);
+  }
   
-  return flags;
+  return [...new Set(flags)];
 }
 
 // ============================================================================
@@ -727,6 +1302,8 @@ module.exports = {
   
   // Configuration (for testing/tuning)
   config: AI_DETECTION_CONFIG,
-  prompts: AI_DETECTION_PROMPTS,
+  prompts: AI_DETECTION_PROMPTS_V1,
+  promptsV2: AI_DETECTION_PROMPTS_V2,
+  resolveFeatureFlags,
 };
 

@@ -61,6 +61,11 @@ def check_dependencies():
         import numpy
     except ImportError:
         missing.append('numpy')
+
+    try:
+        import scipy.stats
+    except ImportError:
+        missing.append('scipy')
     
     if missing:
         print(json.dumps({
@@ -260,6 +265,25 @@ def calculate_loudness(y, sr):
     return round(float(db), 2)
 
 
+def calculate_dynamic_range(y):
+    """
+    Estimate macro dynamic range in dB using frame RMS percentiles.
+    """
+    import librosa
+    import numpy as np
+
+    rms = librosa.feature.rms(y=y)[0]
+    if len(rms) == 0:
+        return 0.0
+
+    high = np.percentile(rms, 95)
+    low = np.percentile(rms, 10)
+    high = max(high, 1e-10)
+    low = max(low, 1e-10)
+    dr = 20 * np.log10(high / low)
+    return round(float(max(0.0, dr)), 3)
+
+
 # =========================================================================
 # AI SPECTRAL FORENSICS
 # =========================================================================
@@ -444,6 +468,382 @@ def measure_onset_regularity(y, sr):
     }
 
 
+def measure_harmonicity(y, sr=44100):
+    """
+    Estimate harmonicity via harmonic/percussive energy ratio.
+    Also computes high-frequency (>12kHz) harmonic-to-noise ratio.
+    AI forces harmonic structure into bands that should be noise-dominated.
+    """
+    import librosa
+    import numpy as np
+
+    y_harm, y_perc = librosa.effects.hpss(y)
+    harm_energy = float(np.mean(np.abs(y_harm)))
+    perc_energy = float(np.mean(np.abs(y_perc)))
+    total = harm_energy + perc_energy
+    if total <= 1e-10:
+        return {'available': False, 'reason': 'low_energy'}
+    harmonic_ratio = harm_energy / total
+
+    hf_hnr = None
+    if sr >= 24000:
+        n_fft = 4096
+        S_harm = np.abs(librosa.stft(y_harm, n_fft=n_fft))
+        S_perc = np.abs(librosa.stft(y_perc, n_fft=n_fft))
+        freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+        hf_mask = freqs >= 12000
+        hf_harm = float(np.mean(S_harm[hf_mask])) if hf_mask.any() else 0.0
+        hf_perc = float(np.mean(S_perc[hf_mask])) if hf_mask.any() else 0.0
+        hf_total = hf_harm + hf_perc
+        hf_hnr = round(hf_harm / hf_total, 4) if hf_total > 1e-10 else 0.0
+
+    result = {
+        'available': True,
+        'harmonic_ratio': round(harmonic_ratio, 4),
+    }
+    if hf_hnr is not None:
+        result['hf_harmonic_ratio'] = hf_hnr
+        result['hf_anomalous'] = hf_hnr > 0.7
+    return result
+
+
+def measure_crest_factor(y):
+    """
+    Crest factor: peak amplitude / RMS. AI audio lacks transient peaks
+    (drums, plucks) so crest factor is lower than human recordings.
+    """
+    import numpy as np
+
+    rms = float(np.sqrt(np.mean(y ** 2)))
+    if rms <= 1e-10:
+        return {'available': False, 'reason': 'silent'}
+    peak = float(np.max(np.abs(y)))
+    crest = peak / rms
+    return {
+        'available': True,
+        'crest_factor': round(crest, 4),
+        'low_crest': crest < 4.0,
+    }
+
+
+def measure_spectral_centroid_variance(y, sr):
+    """
+    Spectral centroid variance over time. AI has less timbral variation.
+    """
+    import librosa
+    import numpy as np
+
+    centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+    if len(centroid) < 2:
+        return {'available': False, 'reason': 'insufficient_frames'}
+    mean_c = float(np.mean(centroid))
+    std_c = float(np.std(centroid))
+    cv = std_c / mean_c if mean_c > 0 else 0.0
+    return {
+        'available': True,
+        'mean': round(mean_c, 2),
+        'std': round(std_c, 2),
+        'cv': round(cv, 4),
+        'low_variance': cv < 0.15,
+    }
+
+
+def measure_spectral_bandwidth_variance(y, sr):
+    """
+    Spectral bandwidth variance. AI maintains unnaturally consistent bandwidth.
+    """
+    import librosa
+    import numpy as np
+
+    bw = librosa.feature.spectral_bandwidth(y=y, sr=sr)[0]
+    if len(bw) < 2:
+        return {'available': False, 'reason': 'insufficient_frames'}
+    mean_bw = float(np.mean(bw))
+    std_bw = float(np.std(bw))
+    cv = std_bw / mean_bw if mean_bw > 0 else 0.0
+    return {
+        'available': True,
+        'mean': round(mean_bw, 2),
+        'std': round(std_bw, 2),
+        'cv': round(cv, 4),
+        'low_variance': cv < 0.12,
+    }
+
+
+def measure_spectral_rolloff(y, sr):
+    """
+    Spectral rolloff shape — overall rolloff curve steepness, beyond just
+    the 16kHz cutoff check.
+    """
+    import librosa
+    import numpy as np
+
+    rolloff_85 = librosa.feature.spectral_rolloff(y=y, sr=sr, roll_percent=0.85)[0]
+    rolloff_95 = librosa.feature.spectral_rolloff(y=y, sr=sr, roll_percent=0.95)[0]
+    if len(rolloff_85) < 2:
+        return {'available': False, 'reason': 'insufficient_frames'}
+    mean_85 = float(np.mean(rolloff_85))
+    mean_95 = float(np.mean(rolloff_95))
+    steepness = (mean_95 - mean_85) / (mean_95 + 1e-10)
+    return {
+        'available': True,
+        'mean_rolloff_85': round(mean_85, 2),
+        'mean_rolloff_95': round(mean_95, 2),
+        'std_rolloff_85': round(float(np.std(rolloff_85)), 2),
+        'steepness': round(steepness, 4),
+        'steep_rolloff': steepness < 0.08,
+    }
+
+
+def measure_spectral_flux(y, sr, n_fft=2048):
+    """
+    Spectral flux variance. AI has more static spectral evolution;
+    human music has more frame-to-frame change.
+    """
+    import librosa
+    import numpy as np
+
+    S = np.abs(librosa.stft(y, n_fft=n_fft))
+    if S.shape[1] < 3:
+        return {'available': False, 'reason': 'insufficient_frames'}
+    flux = np.sqrt(np.mean(np.diff(S, axis=1) ** 2, axis=0))
+    mean_flux = float(np.mean(flux))
+    std_flux = float(np.std(flux))
+    cv = std_flux / mean_flux if mean_flux > 0 else 0.0
+    return {
+        'available': True,
+        'mean_flux': round(mean_flux, 6),
+        'std_flux': round(std_flux, 6),
+        'cv': round(cv, 4),
+        'low_flux_variance': cv < 0.35,
+    }
+
+
+def measure_zcr_variance(y):
+    """
+    Zero-crossing rate variance. AI waveforms have artificially smooth
+    zero-crossing patterns.
+    """
+    import librosa
+    import numpy as np
+
+    zcr = librosa.feature.zero_crossing_rate(y=y)[0]
+    if len(zcr) < 2:
+        return {'available': False, 'reason': 'insufficient_frames'}
+    mean_zcr = float(np.mean(zcr))
+    std_zcr = float(np.std(zcr))
+    cv = std_zcr / mean_zcr if mean_zcr > 0 else 0.0
+    return {
+        'available': True,
+        'mean_zcr': round(mean_zcr, 6),
+        'std_zcr': round(std_zcr, 6),
+        'cv': round(cv, 4),
+        'low_variance': cv < 0.25,
+    }
+
+
+def measure_mfcc_temporal_stats(y, sr, n_mfcc=13):
+    """
+    MFCC temporal statistics (variance + kurtosis per coefficient).
+    AI audio has less MFCC variation — the timbral palette is narrower.
+    """
+    import librosa
+    import numpy as np
+    from scipy.stats import kurtosis
+
+    mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
+    if mfccs.shape[1] < 4:
+        return {'available': False, 'reason': 'insufficient_frames'}
+    variances = np.var(mfccs, axis=1)
+    kurtoses = kurtosis(mfccs, axis=1, fisher=True)
+    mean_var = float(np.mean(variances))
+    mean_kurt = float(np.mean(kurtoses))
+    return {
+        'available': True,
+        'mean_variance': round(mean_var, 4),
+        'mean_kurtosis': round(mean_kurt, 4),
+        'per_coeff_variance': [round(float(v), 4) for v in variances],
+        'low_variance': mean_var < 15.0,
+        'high_kurtosis': mean_kurt > 5.0,
+    }
+
+
+def measure_chroma_entropy(y, sr):
+    """
+    Chroma entropy. AI tends toward simpler harmonic content — lower entropy.
+    """
+    import librosa
+    import numpy as np
+    from scipy.stats import entropy
+
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    if chroma.shape[1] < 2:
+        return {'available': False, 'reason': 'insufficient_frames'}
+    frame_entropies = []
+    for i in range(chroma.shape[1]):
+        col = chroma[:, i]
+        col_norm = col / (col.sum() + 1e-10)
+        frame_entropies.append(entropy(col_norm, base=2))
+    mean_ent = float(np.mean(frame_entropies))
+    std_ent = float(np.std(frame_entropies))
+    max_entropy = np.log2(12)
+    normalized = mean_ent / max_entropy
+    return {
+        'available': True,
+        'mean_entropy': round(mean_ent, 4),
+        'std_entropy': round(std_ent, 4),
+        'normalized': round(normalized, 4),
+        'low_entropy': normalized < 0.75,
+    }
+
+
+def measure_energy_arc(y, sr, n_segments=8):
+    """
+    Energy arc / temporal envelope. AI tracks often plateau; human tracks
+    have intro/build/drop structure with higher inter-segment variance.
+    """
+    import librosa
+    import numpy as np
+
+    rms = librosa.feature.rms(y=y)[0]
+    if len(rms) < n_segments:
+        return {'available': False, 'reason': 'too_short'}
+    seg_len = len(rms) // n_segments
+    segment_means = []
+    for i in range(n_segments):
+        start = i * seg_len
+        end = start + seg_len
+        segment_means.append(float(np.mean(rms[start:end])))
+    arc_variance = float(np.var(segment_means))
+    arc_range = max(segment_means) - min(segment_means)
+    return {
+        'available': True,
+        'segment_means': [round(s, 6) for s in segment_means],
+        'arc_variance': round(arc_variance, 8),
+        'arc_range': round(arc_range, 6),
+        'flat_arc': arc_variance < 0.0001,
+    }
+
+
+def measure_checkerboard_artifacts(y, sr, n_fft=2048):
+    """
+    Detect checkerboard artifacts from CNN transposed convolution upsampling.
+    These leave grid-like periodic patterns in the 4-20kHz spectrogram sub-band.
+    Detected via 2D autocorrelation on the sub-band spectrogram.
+    """
+    import librosa
+    import numpy as np
+
+    S = np.abs(librosa.stft(y, n_fft=n_fft))
+    freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+    band_mask = (freqs >= 4000) & (freqs <= 20000)
+    S_band = S[band_mask, :]
+    if S_band.shape[0] < 4 or S_band.shape[1] < 8:
+        return {'available': False, 'reason': 'insufficient_subband_data'}
+    S_norm = S_band - np.mean(S_band)
+    from numpy.fft import fft2, ifft2
+    F = fft2(S_norm)
+    ac = np.real(ifft2(F * np.conj(F)))
+    ac /= (np.max(ac) + 1e-10)
+    center_r = min(8, ac.shape[0] // 2)
+    center_c = min(16, ac.shape[1] // 2)
+    region = ac[1:center_r, 1:center_c]
+    peak_val = float(np.max(region))
+    mean_val = float(np.mean(region))
+    return {
+        'available': True,
+        'peak_autocorr': round(peak_val, 4),
+        'mean_autocorr': round(mean_val, 4),
+        'has_artifacts': peak_val > 0.25,
+    }
+
+
+def measure_subband_energy_distribution(y, sr, n_fft=4096):
+    """
+    Sub-band energy distribution across frequency bands.
+    AI models tend toward specific trainable distributions.
+    """
+    import librosa
+    import numpy as np
+
+    S = np.abs(librosa.stft(y, n_fft=n_fft))
+    freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+    mean_spectrum = np.mean(S, axis=1)
+    bands = [
+        ('sub_bass', 20, 60),
+        ('bass', 60, 250),
+        ('low_mid', 250, 500),
+        ('mid', 500, 2000),
+        ('upper_mid', 2000, 4000),
+        ('presence', 4000, 8000),
+        ('brilliance', 8000, 16000),
+        ('air', 16000, 22000),
+    ]
+    energies = {}
+    total_energy = float(np.sum(mean_spectrum) + 1e-10)
+    for name, lo, hi in bands:
+        mask = (freqs >= lo) & (freqs < hi)
+        band_e = float(np.sum(mean_spectrum[mask])) if mask.any() else 0.0
+        energies[name] = round(band_e / total_energy, 6)
+    from scipy.stats import entropy
+    vals = list(energies.values())
+    dist_entropy = entropy(vals, base=2) if sum(vals) > 0 else 0.0
+    max_ent = np.log2(len(bands))
+    return {
+        'available': True,
+        'band_ratios': energies,
+        'distribution_entropy': round(float(dist_entropy), 4),
+        'normalized_entropy': round(float(dist_entropy / max_ent), 4) if max_ent > 0 else 0.0,
+        'low_entropy': dist_entropy < (max_ent * 0.6),
+    }
+
+
+def measure_loop_repetition(y, sr):
+    """
+    Estimate repetitive loop structure using beat-synchronous self-similarity.
+    """
+    import librosa
+    import numpy as np
+
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+    if onset_env.size < 8:
+        return {'available': False, 'reason': 'insufficient_onset_data'}
+    ac = librosa.autocorrelate(onset_env, max_size=min(512, len(onset_env)))
+    if ac.size < 4:
+        return {'available': False, 'reason': 'insufficient_autocorr'}
+    norm = ac / (np.max(ac) + 1e-10)
+    repetition = float(np.mean(norm[2:min(64, norm.size)]))
+    return {
+        'available': True,
+        'repetition_score': round(repetition, 4),
+    }
+
+
+def measure_tempo_regularity(y, sr):
+    """
+    Estimate tempo stability from beat interval variance.
+    """
+    import librosa
+    import numpy as np
+
+    _, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+    if len(beat_frames) < 6:
+        return {'available': False, 'reason': 'too_few_beats'}
+    beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+    intervals = np.diff(beat_times)
+    mean_i = float(np.mean(intervals))
+    std_i = float(np.std(intervals))
+    if mean_i <= 1e-10:
+        return {'available': False, 'reason': 'invalid_intervals'}
+    cv = std_i / mean_i
+    stability = max(0.0, 1.0 - min(1.0, cv))
+    return {
+        'available': True,
+        'stability': round(float(stability), 4),
+        'cv': round(float(cv), 4),
+    }
+
+
 def analyze_audio(audio_path, max_length_seconds=120, ai_forensics=False):
     """
     Perform full audio analysis.
@@ -478,12 +878,14 @@ def analyze_audio(audio_path, max_length_seconds=120, ai_forensics=False):
     key_result = detect_key(y, sr)
     energy = calculate_energy(y)
     loudness_db = calculate_loudness(y, sr)
+    dynamic_range_db = calculate_dynamic_range(y)
     
     result = {
         'bpm': bpm_result,
         'key': key_result,
         'energy': energy,
         'loudness_db': loudness_db,
+        'dynamic_range_db': dynamic_range_db,
         'duration': round(duration, 2),
         'sample_rate': sr,
         'analyzed_length': round(min(duration, max_length_seconds), 2),
@@ -496,6 +898,21 @@ def analyze_audio(audio_path, max_length_seconds=120, ai_forensics=False):
             'phase_entropy': measure_phase_entropy(y, sr),
             'spectral_contrast': measure_spectral_contrast(y, sr),
             'onset_regularity': measure_onset_regularity(y, sr),
+            'harmonicity': measure_harmonicity(y, sr),
+            'loop_repetition': measure_loop_repetition(y, sr),
+            'tempo_regularity': measure_tempo_regularity(y, sr),
+            'dynamic_range_db': dynamic_range_db,
+            'crest_factor': measure_crest_factor(y),
+            'spectral_centroid_var': measure_spectral_centroid_variance(y, sr),
+            'spectral_bandwidth_var': measure_spectral_bandwidth_variance(y, sr),
+            'spectral_rolloff': measure_spectral_rolloff(y, sr),
+            'spectral_flux': measure_spectral_flux(y, sr),
+            'zcr_variance': measure_zcr_variance(y),
+            'mfcc_temporal': measure_mfcc_temporal_stats(y, sr),
+            'chroma_entropy': measure_chroma_entropy(y, sr),
+            'energy_arc': measure_energy_arc(y, sr),
+            'checkerboard': measure_checkerboard_artifacts(y, sr),
+            'subband_energy': measure_subband_energy_distribution(y, sr),
         }
     
     return result
@@ -517,9 +934,17 @@ def main():
     check_dependencies()
     
     try:
+        import numpy as np
+
+        class NumpyEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, (np.bool_, np.generic)):
+                    return obj.item()
+                return super().default(obj)
+
         result = analyze_audio(args.audio_path, max_length_seconds=args.max_length,
                                ai_forensics=args.ai_forensics)
-        print(json.dumps(result))
+        print(json.dumps(result, cls=NumpyEncoder))
         
     except FileNotFoundError as e:
         print(json.dumps({

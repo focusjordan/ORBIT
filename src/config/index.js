@@ -7,6 +7,12 @@
 
 require('dotenv').config();
 
+function parseBooleanEnv(name, fallback = false) {
+  const value = process.env[name];
+  if (value === undefined) return fallback;
+  return String(value).trim().toLowerCase() === 'true';
+}
+
 const config = {
   // Server settings
   server: {
@@ -75,9 +81,27 @@ const config = {
     userAgent: 'ORBIT/1.0.0 (https://github.com/orbit-protocol)',
   },
 
+  // ACRCloud settings (catalog check — commercial catalog identification)
+  acrcloud: {
+    accessKey: process.env.ACRCLOUD_ACCESS_KEY || null,
+    accessSecret: process.env.ACRCLOUD_SECRET_KEY || null,
+    host: process.env.ACRCLOUD_HOST || 'identify-us-west-2.acrcloud.com',
+  },
+
   // Logging settings
   logging: {
     level: process.env.LOG_LEVEL || 'debug',
+  },
+
+  // AI detection rollout flags (all default-off for safety)
+  ai: {
+    v2Enabled: parseBooleanEnv('ORBIT_AI_V2_ENABLED', false),
+    shadowMode: parseBooleanEnv('ORBIT_AI_SHADOW_MODE', false),
+    registerAnalysisEnabled: parseBooleanEnv('ORBIT_AI_REGISTER_ANALYSIS_ENABLED', false),
+    knnEnabled: parseBooleanEnv('ORBIT_AI_KNN_ENABLED', false),
+    promptsV2Enabled: parseBooleanEnv('ORBIT_AI_PROMPTS_V2_ENABLED', false),
+    metadataV2Enabled: parseBooleanEnv('ORBIT_AI_METADATA_V2_ENABLED', false),
+    crossSignalV2Enabled: parseBooleanEnv('ORBIT_AI_CROSSSIGNAL_V2_ENABLED', false),
   },
 };
 
@@ -101,6 +125,10 @@ function validateConfig() {
 
   if (!config.acoustid.apiKey) {
     warnings.push('ACOUSTID_API_KEY not set - catalog check (known-work detection) will be unavailable');
+  }
+
+  if (!config.acrcloud.accessKey || !config.acrcloud.accessSecret) {
+    warnings.push('ACRCLOUD_ACCESS_KEY / ACRCLOUD_SECRET_KEY not set - ACRCloud catalog check will be unavailable');
   }
   
   if (!process.env.DATABASE_URL) {

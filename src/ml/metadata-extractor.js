@@ -115,6 +115,7 @@ async function extractMetadata(input, options = {}) {
     key: null,
     energy: null,
     loudness_db: null,
+    dynamic_range_db: null,
     danceability: null,
     duration: null,
   };
@@ -183,6 +184,7 @@ async function extractMetadata(input, options = {}) {
       result.key = analysisResult.key;
       result.energy = analysisResult.energy;
       result.loudness_db = analysisResult.loudness_db;
+      result.dynamic_range_db = analysisResult.dynamic_range_db;
       result.duration = analysisResult.duration;
       
       // Propagate AI forensic data if available
@@ -407,6 +409,7 @@ function formatForDatabase(extractionResult) {
     key: extractionResult.key,
     energy: extractionResult.energy,
     loudness_db: extractionResult.loudness_db,
+    dynamic_range_db: extractionResult.dynamic_range_db,
     danceability: extractionResult.danceability,
     extracted_at: new Date().toISOString(),
     processing_time_ms: extractionResult.processingTimeMs,

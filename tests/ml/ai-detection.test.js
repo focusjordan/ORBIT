@@ -206,8 +206,14 @@ async function runConfigurationTests() {
   
   runner.test('config has weights that sum to 1.0', () => {
     const weights = aiDetection.config.weights;
-    const sum = weights.semantic + weights.anomaly + weights.metadata;
+    const sum = weights.semantic + weights.anomaly + weights.metadata + weights.catalog;
     assertApproxEqual(sum, 1.0, 0.001, 'Weights should sum to 1.0: ');
+  });
+
+  runner.test('config has v2 weights that sum to 1.0', () => {
+    const weights = aiDetection.config.weightsV2;
+    const sum = weights.semantic + weights.anomaly + weights.metadata + weights.catalog + weights.knn;
+    assertApproxEqual(sum, 1.0, 0.001, 'V2 weights should sum to 1.0: ');
   });
   
   runner.test('config has valid thresholds', () => {
@@ -313,6 +319,70 @@ async function runAnomalyDetectionTests() {
     });
     assertLessOrEqual(result.anomalyScore, 1.0);
   });
+
+  runner.test('default-off parity: low dynamic range is v2-only', () => {
+    const base = {
+      dynamic_range_db: 2.1,
+      bpm: { value: 120, confidence: 0.8 },
+      key: { value: 'A minor', confidence: 0.8 },
+      energy: 0.7,
+    };
+    const legacy = aiDetection.checkAudioAnomalies(base, { v2Enabled: false });
+    const v2 = aiDetection.checkAudioAnomalies(base, { v2Enabled: true });
+    assertFalse(legacy.flags.includes('LOW_DYNAMIC_RANGE'));
+    assertIncludes(v2.flags, 'LOW_DYNAMIC_RANGE');
+  });
+
+  runner.test('default-off parity: all new forensic signals are v2-only', () => {
+    const analysis = {
+      bpm: { value: 120, confidence: 0.8 },
+      key: { value: 'C major', confidence: 0.8 },
+      energy: 0.7,
+      ai_forensics: {
+        crest_factor: { available: true, crest_factor: 2.0, low_crest: true },
+        spectral_centroid_var: { available: true, cv: 0.05, low_variance: true },
+        spectral_bandwidth_var: { available: true, cv: 0.05, low_variance: true },
+        spectral_rolloff: { available: true, steepness: 0.03, steep_rolloff: true },
+        spectral_flux: { available: true, cv: 0.1, low_flux_variance: true },
+        zcr_variance: { available: true, cv: 0.1, low_variance: true },
+        mfcc_temporal: { available: true, mean_variance: 5.0, low_variance: true },
+        chroma_entropy: { available: true, normalized: 0.3, low_entropy: true },
+        energy_arc: { available: true, arc_variance: 0.00001, flat_arc: true },
+        checkerboard: { available: true, peak_autocorr: 0.5, has_artifacts: true },
+        subband_energy: { available: true, distribution_entropy: 0.8, low_entropy: true },
+        harmonicity: { available: true, harmonic_ratio: 0.2, hf_anomalous: true, hf_harmonic_ratio: 0.8 },
+      },
+    };
+    const legacy = aiDetection.checkAudioAnomalies(analysis, { v2Enabled: false });
+    const v2 = aiDetection.checkAudioAnomalies(analysis, { v2Enabled: true });
+
+    const v2OnlyFlags = [
+      'LOW_CREST_FACTOR', 'LOW_SPECTRAL_CENTROID_VARIANCE', 'LOW_SPECTRAL_BANDWIDTH_VARIANCE',
+      'STEEP_SPECTRAL_ROLLOFF', 'LOW_SPECTRAL_FLUX_VARIANCE', 'LOW_ZCR_VARIANCE',
+      'LOW_MFCC_VARIANCE', 'LOW_CHROMA_ENTROPY', 'FLAT_ENERGY_ARC',
+      'CHECKERBOARD_ARTIFACTS', 'LOW_SUBBAND_ENTROPY', 'HF_HARMONIC_ANOMALY',
+    ];
+    for (const flag of v2OnlyFlags) {
+      assertFalse(legacy.flags.includes(flag), `Legacy should NOT have ${flag}: `);
+      assertIncludes(v2.flags, flag);
+    }
+  });
+
+  runner.test('v2 anomaly score increases with each new forensic signal', () => {
+    const base = {
+      bpm: { value: 120, confidence: 0.8 },
+      key: { value: 'C major', confidence: 0.8 },
+      energy: 0.7,
+      ai_forensics: {
+        crest_factor: { available: true, crest_factor: 2.0, low_crest: true },
+        checkerboard: { available: true, peak_autocorr: 0.5, has_artifacts: true },
+      },
+    };
+    const result = aiDetection.checkAudioAnomalies(base, { v2Enabled: true });
+    assertGreaterThan(result.anomalyScore, 0.1);
+    assertIncludes(result.flags, 'LOW_CREST_FACTOR');
+    assertIncludes(result.flags, 'CHECKERBOARD_ARTIFACTS');
+  });
   
   return runner.run();
 }
@@ -370,7 +440,120 @@ async function runMetadataPatternTests() {
     const result = aiDetection.checkMetadataPatterns({}, 180);
     assertLessOrEqual(result.suspicionScore, 1.0);
   });
+
+  runner.test('default-off parity: metadata v2 checks are gated', () => {
+    const metadata = {
+      album_title: 'Demo Album',
+      sample_rate: 48000,
+      bit_depth: 24,
+      catalog_number: 'AI-123',
+      label: 'Label',
+    };
+    const legacy = aiDetection.checkMetadataPatterns(metadata, 80, { metadataV2Enabled: false });
+    const v2 = aiDetection.checkMetadataPatterns(metadata, 80, { metadataV2Enabled: true });
+    assertFalse(legacy.flags.includes('ALBUM_WITHOUT_TRACK_NUMBER'));
+    assertIncludes(v2.flags, 'ALBUM_WITHOUT_TRACK_NUMBER');
+  });
+
+  runner.test('v2: detects AI encoder signature', () => {
+    const result = aiDetection.checkMetadataPatterns({}, 200, {
+      metadataV2Enabled: true,
+      fileMetadata: { encoder: 'Suno Audio v3.5', sample_rate: 44100, bits_per_raw_sample: 32, sample_fmt: 'flt' },
+    });
+    assertIncludes(result.flags, 'AI_ENCODER_SIGNATURE');
+    assertIncludes(result.flags, 'AI_FORMAT_COMBO_MATCH');
+    assertGreaterThan(result.suspicionScore, 0.25);
+  });
+
+  runner.test('v2: detects Udio format combo', () => {
+    const result = aiDetection.checkMetadataPatterns({}, 200, {
+      metadataV2Enabled: true,
+      fileMetadata: { sample_rate: 44100, bits_per_raw_sample: 16, sample_fmt: 's16' },
+    });
+    assertIncludes(result.flags, 'AI_FORMAT_COMBO_MATCH');
+    assertEqual(result.details.format_combo.generator, 'Udio');
+  });
+
+  runner.test('v2: does NOT flag non-AI encoder', () => {
+    const result = aiDetection.checkMetadataPatterns({}, 200, {
+      metadataV2Enabled: true,
+      fileMetadata: { encoder: 'LAME3.100', sample_rate: 44100, bits_per_raw_sample: 16 },
+    });
+    assertFalse(result.flags.includes('AI_ENCODER_SIGNATURE'));
+  });
+
+  runner.test('v2: detects generic album title', () => {
+    const result = aiDetection.checkMetadataPatterns({ album_title: 'Untitled' }, 200, {
+      metadataV2Enabled: true,
+    });
+    assertIncludes(result.flags, 'GENERIC_ALBUM_TITLE');
+  });
+
+  runner.test('v2: detects AI text in album field', () => {
+    const result = aiDetection.checkMetadataPatterns({ album_title: 'AI Generated Music Vol 1' }, 200, {
+      metadataV2Enabled: true,
+    });
+    assertIncludes(result.flags, 'AI_ALBUM_TEXT');
+  });
+
+  runner.test('v2: detects AI keywords in comment tag', () => {
+    const result = aiDetection.checkMetadataPatterns({}, 200, {
+      metadataV2Enabled: true,
+      fileMetadata: { comment: 'Made with Suno AI' },
+    });
+    assertIncludes(result.flags, 'AI_COMMENT_TAG');
+  });
+
+  runner.test('v2: detects creation-upload proximity', () => {
+    const now = new Date().toISOString();
+    const result = aiDetection.checkMetadataPatterns({}, 200, {
+      metadataV2Enabled: true,
+      fileMetadata: { creation_time: now },
+    });
+    assertIncludes(result.flags, 'CREATION_UPLOAD_PROXIMITY');
+  });
+
+  runner.test('v2: does NOT flag creation-upload with old date', () => {
+    const result = aiDetection.checkMetadataPatterns({}, 200, {
+      metadataV2Enabled: true,
+      fileMetadata: { creation_time: '2020-01-01T00:00:00Z' },
+    });
+    assertFalse(result.flags.includes('CREATION_UPLOAD_PROXIMITY'));
+  });
+
+  runner.test('v2: all new metadata signals gated behind flag', () => {
+    const result = aiDetection.checkMetadataPatterns({}, 200, {
+      metadataV2Enabled: false,
+      fileMetadata: {
+        encoder: 'Suno Audio v3.5',
+        comment: 'Made with Suno AI',
+        creation_time: new Date().toISOString(),
+      },
+    });
+    assertFalse(result.flags.includes('AI_ENCODER_SIGNATURE'));
+    assertFalse(result.flags.includes('AI_COMMENT_TAG'));
+    assertFalse(result.flags.includes('CREATION_UPLOAD_PROXIMITY'));
+  });
   
+  return runner.run();
+}
+
+async function runFlagResolutionTests() {
+  const runner = new TestRunner('Feature Flag Resolution');
+
+  runner.test('resolveFeatureFlags supports explicit overrides', () => {
+    const flags = aiDetection.resolveFeatureFlags({
+      v2Enabled: true,
+      shadowMode: true,
+      metadataV2Enabled: true,
+      crossSignalV2Enabled: true,
+    });
+    assertTrue(flags.v2Enabled);
+    assertTrue(flags.shadowMode);
+    assertTrue(flags.metadataV2Enabled);
+    assertTrue(flags.crossSignalV2Enabled);
+  });
+
   return runner.run();
 }
 
@@ -432,6 +615,22 @@ async function runUtilityFunctionTests() {
   runner.test('getAllFlags handles null result', () => {
     const flags = aiDetection.getAllFlags({});
     assertEqual(flags.length, 0);
+  });
+
+  runner.test('v2+knn fail-open on missing references', async () => {
+    const result = await aiDetection.detectAI(Buffer.from([1, 2, 3, 4]), {
+      metadata: {},
+      analysisResult: null,
+      verbose: false,
+      flags: {
+        v2Enabled: false,
+        shadowMode: true,
+        knnEnabled: true,
+      },
+    });
+    assertDefined(result.recommendation);
+    const flags = aiDetection.getAllFlags(result);
+    assertTrue(flags.includes('KNN_UNAVAILABLE_FAIL_OPEN') || result.recommendation === 'DETECTION_ERROR');
   });
   
   return runner.run();
@@ -553,6 +752,7 @@ async function main() {
   results.push(await runConfigurationTests());
   results.push(await runAnomalyDetectionTests());
   results.push(await runMetadataPatternTests());
+  results.push(await runFlagResolutionTests());
   results.push(await runUtilityFunctionTests());
   results.push(await runIntegrationTests());
   

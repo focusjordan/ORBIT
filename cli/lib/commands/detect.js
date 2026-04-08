@@ -35,7 +35,7 @@ const cmd = new Command('detect')
       // The verify endpoint also returns ai_detection when the track is registered.
       // For standalone detection, we use analyze which returns the full analysis.
       const result = await client.analyze(audioBuffer, {
-        include: ['genre', 'mood', 'bpm', 'key', 'instruments', 'vocals'],
+        include: ['genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 'ai_detection'],
       });
       out.clearProgress(command);
 

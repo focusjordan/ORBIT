@@ -330,6 +330,86 @@ function calculateDanceability(analysisResult) {
   return Math.round(danceability * 10000) / 10000;
 }
 
+/**
+ * Extract encoder/format metadata from an audio file or buffer via ffprobe.
+ * Returns encoder tag, format name, bit depth, sample rate, and comment fields.
+ *
+ * @param {string|Buffer} input - Audio file path or buffer
+ * @returns {Promise<Object>} Extracted file-level metadata
+ */
+async function extractFileMetadata(input) {
+  let audioPath;
+  let tempFile = null;
+
+  if (Buffer.isBuffer(input)) {
+    tempFile = path.join(
+      os.tmpdir(),
+      `orbit-ffprobe-${Date.now()}-${Math.random().toString(36).slice(2)}.audio`
+    );
+    fs.writeFileSync(tempFile, input);
+    audioPath = tempFile;
+  } else if (typeof input === 'string') {
+    audioPath = input;
+  } else {
+    return { available: false, reason: 'invalid_input' };
+  }
+
+  try {
+    return await new Promise((resolve) => {
+      const args = [
+        '-v', 'quiet',
+        '-print_format', 'json',
+        '-show_format',
+        '-show_streams',
+        audioPath,
+      ];
+      const proc = spawn('ffprobe', args, { timeout: 10000 });
+      let stdout = '';
+      let stderr = '';
+      proc.stdout.on('data', (d) => { stdout += d.toString(); });
+      proc.stderr.on('data', (d) => { stderr += d.toString(); });
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          resolve({ available: false, reason: 'ffprobe_failed', error: stderr || `exit ${code}` });
+          return;
+        }
+        try {
+          const data = JSON.parse(stdout);
+          const fmt = data.format || {};
+          const tags = fmt.tags || {};
+          const audioStream = (data.streams || []).find(s => s.codec_type === 'audio') || {};
+
+          resolve({
+            available: true,
+            encoder: tags.encoder || tags.ENCODER || null,
+            encoding_tool: tags.encoding_tool || tags.ENCODING_TOOL || null,
+            software: tags.software || tags.SOFTWARE || null,
+            comment: tags.comment || tags.COMMENT || tags.description || tags.DESCRIPTION || null,
+            album: tags.album || tags.ALBUM || null,
+            creation_time: tags.creation_time || tags.date || tags.DATE || null,
+            format_name: fmt.format_name || null,
+            bit_rate: fmt.bit_rate ? parseInt(fmt.bit_rate, 10) : null,
+            sample_rate: audioStream.sample_rate ? parseInt(audioStream.sample_rate, 10) : null,
+            bits_per_raw_sample: audioStream.bits_per_raw_sample ? parseInt(audioStream.bits_per_raw_sample, 10) : null,
+            bits_per_sample: audioStream.bits_per_sample ? parseInt(audioStream.bits_per_sample, 10) : null,
+            sample_fmt: audioStream.sample_fmt || null,
+            codec_name: audioStream.codec_name || null,
+          });
+        } catch (parseErr) {
+          resolve({ available: false, reason: 'parse_failed', error: parseErr.message });
+        }
+      });
+      proc.on('error', (err) => {
+        resolve({ available: false, reason: 'ffprobe_not_found', error: err.message });
+      });
+    });
+  } finally {
+    if (tempFile && fs.existsSync(tempFile)) {
+      fs.unlinkSync(tempFile);
+    }
+  }
+}
+
 // Export configuration for testing
 const config = { ...ANALYSIS_CONFIG };
 
@@ -340,6 +420,7 @@ module.exports = {
   getKey,
   getEnergy,
   checkPythonEnvironment,
+  extractFileMetadata,
   
   // Derived metrics
   calculateDanceability,

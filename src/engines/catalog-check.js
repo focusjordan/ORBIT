@@ -2,20 +2,24 @@
  * ORBIT Catalog Check Engine
  *
  * Prevents fraudulent registration of well-known tracks by cross-referencing
- * incoming audio against AcoustID (~30M fingerprints) and MusicBrainz metadata.
+ * incoming audio against multiple catalogs:
+ *   - AcoustID (~30M fingerprints, open/free)
+ *   - ACRCloud (~100M+ tracks, commercial catalog via paid API)
+ *   - MusicBrainz metadata (recording details for corroboration)
  *
- * Three-step pipeline:
- *   1. AcoustID fingerprint lookup  (raw Chromaprint + duration)
- *   2. MusicBrainz metadata fetch   (recording details for top match)
- *   3. Metadata corroboration        (compare submitted vs known metadata)
+ * Pipeline:
+ *   1. Parallel fingerprint lookup (AcoustID + ACRCloud)
+ *   2. MusicBrainz metadata fetch  (recording details for AcoustID match)
+ *   3. Metadata corroboration      (merge all sources, compare vs submitted)
  *
- * Fail-open: if AcoustID is unreachable or ACOUSTID_API_KEY is missing the
- * check returns { status: 'unavailable' } and registration proceeds normally.
+ * Fail-open: if any service is unreachable or unconfigured, the check
+ * returns partial results and registration proceeds normally.
  *
  * @see src/engines/fingerprint.js   – generates the Chromaprint used here
  * @see src/api/handlers/register.js – integration point (step 6a)
  */
 
+const crypto = require('crypto');
 const config = require('../config');
 
 // ============================================================================
@@ -82,6 +86,101 @@ async function lookupAcoustID(fingerprintRaw, duration) {
     score: top.score,
     recording_id: bestRecording?.id || null,
     recordings,
+  };
+}
+
+// ============================================================================
+// ACRCLOUD LOOKUP
+// ============================================================================
+
+/**
+ * Build HMAC-SHA1 signature for ACRCloud API authentication.
+ *
+ * @param {string} accessKey    - Project access key
+ * @param {string} accessSecret - Project access secret
+ * @param {number} timestamp    - Unix timestamp in seconds
+ * @returns {string} Base64-encoded HMAC-SHA1 signature
+ */
+function buildACRCloudSignature(accessKey, accessSecret, timestamp) {
+  const stringToSign = [
+    'POST',
+    '/v1/identify',
+    accessKey,
+    'audio',
+    '1',
+    String(timestamp),
+  ].join('\n');
+
+  return crypto
+    .createHmac('sha1', accessSecret)
+    .update(Buffer.from(stringToSign, 'utf-8'))
+    .digest('base64');
+}
+
+/**
+ * Query ACRCloud for an audio fingerprint match.
+ *
+ * Sends raw audio bytes to ACRCloud's identification API, which matches
+ * against their commercial catalog (~100M+ tracks across major and indie
+ * distributors).
+ *
+ * @param {Buffer} audioBuffer - Raw audio file bytes (mp3, wav, etc.)
+ * @returns {Promise<{matched: boolean, score?: number, title?: string, artist?: string, album?: string, isrc?: string, label?: string, release_date?: string, acrid?: string}>}
+ */
+async function lookupACRCloud(audioBuffer) {
+  const accessKey = config.acrcloud?.accessKey;
+  const accessSecret = config.acrcloud?.accessSecret;
+  const host = config.acrcloud?.host;
+
+  if (!accessKey || !accessSecret) {
+    return { matched: false, error: 'ACRCLOUD credentials not configured' };
+  }
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = buildACRCloudSignature(accessKey, accessSecret, timestamp);
+
+  const form = new FormData();
+  form.set('access_key', accessKey);
+  form.set('data_type', 'audio');
+  form.set('signature', signature);
+  form.set('signature_version', '1');
+  form.set('timestamp', String(timestamp));
+  form.set('sample_bytes', String(audioBuffer.length));
+  form.set('sample', new Blob([audioBuffer], { type: 'audio/wav' }), 'sample.wav');
+
+  const url = `https://${host}/v1/identify`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    body: form,
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!res.ok) {
+    throw new Error(`ACRCloud returned HTTP ${res.status}`);
+  }
+
+  const body = await res.json();
+
+  if (body.status?.code !== 0 || !body.metadata?.music?.length) {
+    return { matched: false, status_code: body.status?.code, status_msg: body.status?.msg };
+  }
+
+  const top = body.metadata.music[0];
+
+  return {
+    matched: true,
+    score: top.score / 100,
+    acrid: top.acrid || null,
+    title: top.title || null,
+    artist: top.artists?.map(a => a.name).join(', ') || null,
+    album: top.album?.name || null,
+    isrc: top.external_ids?.isrc || null,
+    upc: top.external_ids?.upc || null,
+    label: top.label || null,
+    release_date: top.release_date || null,
+    genres: top.genres?.map(g => g.name) || [],
+    duration_ms: top.duration_in_ms || null,
   };
 }
 
@@ -212,57 +311,98 @@ function corroborateMetadata(submitted, known) {
 // ============================================================================
 
 /**
+ * Merge known metadata from MusicBrainz and ACRCloud into a single object
+ * for corroboration. ACRCloud is preferred when both sources provide a field,
+ * because its commercial catalog is more complete.
+ */
+function mergeKnownMetadata(mbData, acrResult) {
+  if (!mbData && !acrResult?.matched) return null;
+
+  const mb = mbData || {};
+  const acr = (acrResult?.matched && acrResult) || {};
+
+  return {
+    title:   acr.title   || mb.title   || null,
+    artist:  acr.artist  || mb.artist  || null,
+    isrc:    acr.isrc    || mb.isrc    || null,
+    label:   acr.label   || mb.label   || null,
+    album:   acr.album   || mb.release || null,
+    release_date: acr.release_date || null,
+  };
+}
+
+/**
  * Run the full catalog check pipeline.
  *
+ * Step 1: Fire AcoustID and ACRCloud lookups in parallel
+ * Step 2: If AcoustID matched, fetch MusicBrainz metadata
+ * Step 3: Merge all sources and corroborate against submitted metadata
+ *
  * @param {Object} params
- * @param {string} params.fingerprintRaw - Raw Chromaprint string
- * @param {number} params.duration       - Duration in seconds
- * @param {Object} params.metadata       - Submitted metadata { title, artist, isrc, label }
+ * @param {string}  params.fingerprintRaw - Raw Chromaprint string
+ * @param {number}  params.duration       - Duration in seconds
+ * @param {Object}  params.metadata       - Submitted metadata { title, artist, isrc, label }
+ * @param {Buffer} [params.audioBuffer]   - Raw audio bytes (required for ACRCloud)
  * @returns {Promise<Object>} Catalog check result
  */
-async function check({ fingerprintRaw, duration, metadata }) {
+async function check({ fingerprintRaw, duration, metadata, audioBuffer }) {
   const startTime = Date.now();
 
-  // Step 1: AcoustID lookup
-  let acoustidResult;
-  try {
-    acoustidResult = await lookupAcoustID(fingerprintRaw, duration);
-  } catch (err) {
-    console.log(`[CatalogCheck] AcoustID lookup failed: ${err.message}`);
-    return {
-      status: 'unavailable',
-      error: `AcoustID lookup failed: ${err.message}`,
-      processing_time_ms: Date.now() - startTime,
-    };
-  }
+  // Step 1: Parallel lookups — AcoustID (fingerprint) + ACRCloud (audio)
+  const acoustidPromise = lookupAcoustID(fingerprintRaw, duration)
+    .catch(err => {
+      console.log(`[CatalogCheck] AcoustID lookup failed: ${err.message}`);
+      return { matched: false, error: err.message };
+    });
 
-  if (!acoustidResult.matched) {
+  const acrPromise = audioBuffer
+    ? lookupACRCloud(audioBuffer).catch(err => {
+        console.log(`[CatalogCheck] ACRCloud lookup failed: ${err.message}`);
+        return { matched: false, error: err.message };
+      })
+    : Promise.resolve({ matched: false, error: 'No audio buffer provided' });
+
+  const [acoustidResult, acrResult] = await Promise.all([acoustidPromise, acrPromise]);
+
+  const anyMatch = acoustidResult.matched || acrResult.matched;
+
+  if (!anyMatch) {
     return {
       status: 'no_match',
       acoustid: { matched: false, score: acoustidResult.score || null },
+      acrcloud: { matched: false },
       musicbrainz: null,
       corroboration: null,
       processing_time_ms: Date.now() - startTime,
     };
   }
 
-  // Step 2: MusicBrainz metadata fetch (only for top match)
+  // Step 2: MusicBrainz metadata fetch (only if AcoustID matched)
   let mbData = null;
-  if (acoustidResult.recording_id) {
+  if (acoustidResult.matched && acoustidResult.recording_id) {
     try {
       mbData = await fetchMusicBrainz(acoustidResult.recording_id);
     } catch (err) {
       console.log(`[CatalogCheck] MusicBrainz fetch failed: ${err.message}`);
-      // Continue without MusicBrainz data — AcoustID match alone is informative
     }
   }
 
-  // Step 3: Corroboration (only if we have MusicBrainz data)
+  // Step 3: Merge known metadata from all sources and corroborate
+  const knownMetadata = mergeKnownMetadata(mbData, acrResult);
+
   let corroboration = null;
   let status = 'known_work_unverified';
 
-  if (mbData) {
-    corroboration = corroborateMetadata(metadata, mbData);
+  if (knownMetadata) {
+    corroboration = corroborateMetadata(metadata, knownMetadata);
+
+    // ACRCloud high-confidence matches (score >= 0.7) boost the result —
+    // their commercial catalog is authoritative for distributed music.
+    if (acrResult.matched && acrResult.score >= 0.7) {
+      corroboration.acrcloud_boost = true;
+      corroboration.score = Math.min(1, corroboration.score + 0.15);
+    }
+
     status = corroboration.score >= CORROBORATION_THRESHOLD
       ? 'verified_known_work'
       : 'known_work_unverified';
@@ -271,9 +411,19 @@ async function check({ fingerprintRaw, duration, metadata }) {
   return {
     status,
     acoustid: {
-      matched: true,
-      score: acoustidResult.score,
-      recording_id: acoustidResult.recording_id,
+      matched: acoustidResult.matched,
+      score: acoustidResult.score || null,
+      recording_id: acoustidResult.recording_id || null,
+    },
+    acrcloud: {
+      matched: acrResult.matched,
+      score: acrResult.score || null,
+      acrid: acrResult.acrid || null,
+      title: acrResult.title || null,
+      artist: acrResult.artist || null,
+      album: acrResult.album || null,
+      isrc: acrResult.isrc || null,
+      label: acrResult.label || null,
     },
     musicbrainz: mbData,
     corroboration,
@@ -288,7 +438,10 @@ async function check({ fingerprintRaw, duration, metadata }) {
 module.exports = {
   check,
   lookupAcoustID,
+  lookupACRCloud,
+  buildACRCloudSignature,
   fetchMusicBrainz,
+  mergeKnownMetadata,
   corroborateMetadata,
   normalize,
   fuzzyMatch,

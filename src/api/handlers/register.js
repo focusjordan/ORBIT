@@ -36,6 +36,7 @@ const clap = require('../../ml/clap');
 
 // AI music detection (multi-signal analysis)
 const aiDetection = require('../../ml/ai-detection');
+const metadataExtractor = require('../../ml/metadata-extractor');
 
 // Catalog check (AcoustID + MusicBrainz known-work detection)
 const catalogCheck = require('../../engines/catalog-check');
@@ -224,7 +225,7 @@ async function registerHandler(req, res) {
     log('🔍 Generating fingerprint from WATERMARKED audio...');
     const fingerprint = await OrbitFingerprint.generate(watermarkedAudio);
     log(`✅ Fingerprint generated: ${fingerprint.hash.toString('hex').slice(0, 16)}...`);
-    log(`   Duration: ${fingerprint.duration}s`);
+    log(`   Track length: ${fingerprint.duration}s`);
     
     // ========================================================================
     // 6. CHECK FOR DUPLICATES
@@ -258,19 +259,20 @@ async function registerHandler(req, res) {
     }
     
     // ========================================================================
-    // 6a. CATALOG CHECK (AcoustID + MusicBrainz known-work detection)
-    // Cross-references fingerprint against ~30M known recordings via AcoustID,
-    // then corroborates submitted metadata against MusicBrainz.
+    // 6a. CATALOG CHECK (AcoustID + ACRCloud + MusicBrainz)
+    // Cross-references fingerprint against AcoustID (~30M) and ACRCloud
+    // (~100M+), then corroborates submitted metadata against MusicBrainz.
     // Advisory only — does not block registration.
     // ========================================================================
     
     let catalogResult = null;
     
     try {
-      log('🔎 Running catalog check (AcoustID + MusicBrainz)...');
+      log('🔎 Running catalog check (AcoustID + ACRCloud + MusicBrainz)...');
       catalogResult = await catalogCheck.check({
         fingerprintRaw: fingerprint.raw,
         duration: fingerprint.duration,
+        audioBuffer: audioBuffer,
         metadata: {
           title: metadata.title,
           artist: metadata.artist,
@@ -282,11 +284,19 @@ async function registerHandler(req, res) {
       if (catalogResult.status === 'no_match') {
         log('✅ Catalog check: no known-work match (likely original)');
       } else if (catalogResult.status === 'verified_known_work') {
-        log(`✅ Catalog check: verified known work — "${catalogResult.musicbrainz?.title}" by ${catalogResult.musicbrainz?.artist}`);
+        const matchSource = catalogResult.acrcloud?.matched ? 'ACRCloud' : 'AcoustID';
+        const matchTitle = catalogResult.acrcloud?.title || catalogResult.musicbrainz?.title;
+        const matchArtist = catalogResult.acrcloud?.artist || catalogResult.musicbrainz?.artist;
+        log(`✅ Catalog check: verified known work via ${matchSource} — "${matchTitle}" by ${matchArtist}`);
         log(`   Corroboration score: ${catalogResult.corroboration?.score}`);
       } else if (catalogResult.status === 'known_work_unverified') {
         log(`⚠️  Catalog check: KNOWN WORK but metadata does not corroborate`);
-        log(`   AcoustID matched: "${catalogResult.musicbrainz?.title}" by ${catalogResult.musicbrainz?.artist}`);
+        if (catalogResult.acrcloud?.matched) {
+          log(`   ACRCloud matched: "${catalogResult.acrcloud.title}" by ${catalogResult.acrcloud.artist} (score: ${catalogResult.acrcloud.score})`);
+        }
+        if (catalogResult.acoustid?.matched) {
+          log(`   AcoustID matched: "${catalogResult.musicbrainz?.title}" by ${catalogResult.musicbrainz?.artist}`);
+        }
         log(`   Corroboration score: ${catalogResult.corroboration?.score}`);
       } else if (catalogResult.status === 'unavailable') {
         log(`⚠️  Catalog check unavailable: ${catalogResult.error}`);
@@ -533,13 +543,33 @@ async function registerHandler(req, res) {
     // ========================================================================
     
     let aiDetectionResult = null;
+    let aiAnalysisResult = null;
     
     try {
       log('🤖 Running AI music detection...');
+
+      if (config.ai.registerAnalysisEnabled) {
+        try {
+          log('   → Precomputing audio analysis for AI detection (flag enabled)...');
+          aiAnalysisResult = await metadataExtractor.extractMetadata(audioBuffer, {
+            includeEmbedding: false,
+            verbose: false,
+            config: {
+              enableClap: false,
+              enableEmbedding: false,
+              enableAudioAnalysis: true,
+              aiForensics: config.ai.v2Enabled || config.ai.shadowMode,
+            },
+          });
+        } catch (analysisError) {
+          log(`   ⚠️  Register audio analysis unavailable (fail-open): ${analysisError.message}`);
+          aiAnalysisResult = null;
+        }
+      }
       
       aiDetectionResult = await aiDetection.detectAI(audioBuffer, {
         metadata: metadata,
-        analysisResult: null,
+        analysisResult: aiAnalysisResult,
         catalogResult: catalogResult,
         verbose: process.env.ORBIT_ML_VERBOSE === 'true',
       });
@@ -549,6 +579,10 @@ async function registerHandler(req, res) {
       const allFlags = aiDetection.getAllFlags(aiDetectionResult);
       if (allFlags.length > 0) {
         log(`   Flags: ${allFlags.join(', ')}`);
+      }
+      if (aiDetectionResult.telemetry) {
+        const t = aiDetectionResult.telemetry;
+        log(`   Telemetry: mode=${t.mode}, legacy=${t.legacy?.recommendation}, v2=${t.v2?.recommendation || 'n/a'}`);
       }
       
     } catch (aiDetectionError) {
@@ -619,11 +653,23 @@ async function registerHandler(req, res) {
         signals: aiDetectionResult.signals,
         flags: aiDetection.getAllFlags(aiDetectionResult),
         processing_time_ms: aiDetectionResult.processing_time_ms,
+        active_flags: aiDetectionResult.active_flags,
+        telemetry: aiDetectionResult.telemetry || null,
       };
       
       // Add error if detection failed
       if (aiDetectionResult.error) {
         response.ai_detection.error = aiDetectionResult.error;
+      }
+      if (aiDetectionResult.shadow) {
+        response.ai_detection.shadow = aiDetectionResult.shadow;
+      }
+      if (aiDetectionResult.v2) {
+        response.ai_detection.v2 = {
+          score: aiDetectionResult.v2.score,
+          recommendation: aiDetectionResult.v2.recommendation,
+          signals: aiDetectionResult.v2.signals,
+        };
       }
     }
     

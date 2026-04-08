@@ -419,11 +419,12 @@ async function analyzeHandler(req, res) {
     
     if (needsCatalogCheck && fingerprintData) {
       try {
-        log('🔎 Running catalog check (AcoustID + MusicBrainz)...');
+        log('🔎 Running catalog check (AcoustID + ACRCloud + MusicBrainz)...');
         const submittedMeta = req.body.metadata || {};
         catalogResult = await catalogCheck.check({
           fingerprintRaw: fingerprintData.raw,
           duration: fingerprintData.duration,
+          audioBuffer: audioBuffer,
           metadata: {
             title: submittedMeta.title || null,
             artist: submittedMeta.artist || null,
@@ -435,10 +436,18 @@ async function analyzeHandler(req, res) {
         if (catalogResult.status === 'no_match') {
           log('✅ Catalog check: no known-work match');
         } else if (catalogResult.status === 'verified_known_work') {
-          log(`✅ Catalog check: verified known work — "${catalogResult.musicbrainz?.title}" by ${catalogResult.musicbrainz?.artist}`);
+          const src = catalogResult.acrcloud?.matched ? 'ACRCloud' : 'AcoustID';
+          const t = catalogResult.acrcloud?.title || catalogResult.musicbrainz?.title;
+          const a = catalogResult.acrcloud?.artist || catalogResult.musicbrainz?.artist;
+          log(`✅ Catalog check: verified known work via ${src} — "${t}" by ${a}`);
         } else if (catalogResult.status === 'known_work_unverified') {
           log(`⚠️  Catalog check: KNOWN WORK but metadata mismatch`);
-          log(`   AcoustID matched: "${catalogResult.musicbrainz?.title}" by ${catalogResult.musicbrainz?.artist}`);
+          if (catalogResult.acrcloud?.matched) {
+            log(`   ACRCloud matched: "${catalogResult.acrcloud.title}" by ${catalogResult.acrcloud.artist}`);
+          }
+          if (catalogResult.acoustid?.matched) {
+            log(`   AcoustID matched: "${catalogResult.musicbrainz?.title}" by ${catalogResult.musicbrainz?.artist}`);
+          }
         }
       } catch (catErr) {
         log(`⚠️  Catalog check failed (non-fatal): ${catErr.message}`);
@@ -558,9 +567,21 @@ async function analyzeHandler(req, res) {
         signals: aiDetectionResult.signals,
         flags: aiDetection.getAllFlags(aiDetectionResult),
         processing_time_ms: aiDetectionResult.processing_time_ms,
+        active_flags: aiDetectionResult.active_flags,
+        telemetry: aiDetectionResult.telemetry || null,
       };
       if (aiDetectionResult.error) {
         response.ai_detection.error = aiDetectionResult.error;
+      }
+      if (aiDetectionResult.shadow) {
+        response.ai_detection.shadow = aiDetectionResult.shadow;
+      }
+      if (aiDetectionResult.v2) {
+        response.ai_detection.v2 = {
+          score: aiDetectionResult.v2.score,
+          recommendation: aiDetectionResult.v2.recommendation,
+          signals: aiDetectionResult.v2.signals,
+        };
       }
     }
     
@@ -616,6 +637,7 @@ router.get('/info', (req, res) => {
       classification: 'Zero-shot genre/mood/instruments via CLAP',
       signal_analysis: 'BPM/key detection via librosa',
       fingerprinting: 'Chromaprint + CLAP semantic',
+      catalog_check: 'AcoustID + ACRCloud + MusicBrainz',
     },
     note: 'V2 endpoints complement v1 endpoints. Registration still uses /orbit/v1/register',
   });
