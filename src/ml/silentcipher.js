@@ -77,6 +77,14 @@ const SILENTCIPHER_CONFIG = {
   
   // Confidence threshold for valid extraction
   confidenceThreshold: 0.5,
+
+  // Limit BLAS/OpenMP threads to prevent stack-overflow crashes on Apple Silicon
+  env: {
+    ...process.env,
+    OPENBLAS_NUM_THREADS: '1',
+    OMP_NUM_THREADS: '1',
+    MKL_NUM_THREADS: '1',
+  },
 };
 
 /**
@@ -145,6 +153,7 @@ async function checkPythonEnvironment() {
         'check'
       ], {
         cwd: path.dirname(SILENTCIPHER_CONFIG.scriptPath),
+        env: SILENTCIPHER_CONFIG.env,
       });
       
       let stdout = '';
@@ -278,6 +287,7 @@ async function embed(input, payloadHash, options = {}) {
       ], {
         cwd: path.dirname(SILENTCIPHER_CONFIG.scriptPath),
         timeout: SILENTCIPHER_CONFIG.embedTimeout,
+        env: SILENTCIPHER_CONFIG.env,
       });
       
       let stdout = '';
@@ -410,6 +420,7 @@ async function extract(input, options = {}) {
       const proc = spawn(SILENTCIPHER_CONFIG.pythonCommand, args, {
         cwd: path.dirname(SILENTCIPHER_CONFIG.scriptPath),
         timeout: SILENTCIPHER_CONFIG.extractTimeout,
+        env: SILENTCIPHER_CONFIG.env,
       });
       
       let stdout = '';

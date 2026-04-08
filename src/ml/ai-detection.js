@@ -557,7 +557,8 @@ function checkAudioAnomalies(analysisResult, options = {}) {
       const checker = forensics.checkerboard;
       if (checker && checker.available && checker.has_artifacts) {
         flags.push('CHECKERBOARD_ARTIFACTS');
-        details.checkerboard_peak = checker.peak_autocorr;
+        details.checkerboard_cepstral_peak = checker.cepstral_peak_ratio;
+        details.checkerboard_pow2_peak = checker.pow2_peak_ratio;
         anomalyScore += 0.08;
       }
 
@@ -574,28 +575,29 @@ function checkAudioAnomalies(analysisResult, options = {}) {
       if (preEcho && preEcho.available && preEcho.has_pre_echo) {
         flags.push('PRE_ECHO_DETECTED');
         details.pre_echo_ratio = preEcho.mean_pre_echo_ratio;
+        details.pre_echo_slope_ratio = preEcho.positive_slope_ratio;
         anomalyScore += 0.18;
       }
 
       const hfPhase = forensics.hf_phase_incoherence;
       if (hfPhase && hfPhase.available && hfPhase.hf_incoherent) {
         flags.push('HF_PHASE_INCOHERENCE');
-        details.hf_phase_derivative_variance = hfPhase.hf_mean_bin_variance;
+        details.hf_group_delay_variance = hfPhase.mean_group_delay_variance;
         anomalyScore += 0.20;
       }
 
       const msPhase = forensics.ms_phase_coherence;
       if (msPhase && msPhase.available && msPhase.ms_anomalous) {
         flags.push('MS_PHASE_ANOMALY');
-        details.ms_coherence = msPhase.mean_coherence;
-        details.ms_coherence_drop_ratio = msPhase.coherence_drop_ratio;
+        details.low_mid_sm_ratio = msPhase.low_mid_sm_ratio;
+        details.sub_bass_sm_ratio = msPhase.sub_bass_sm_ratio;
         anomalyScore += 0.15;
       }
 
       const jitter = forensics.pitch_jitter;
       if (jitter && jitter.available && jitter.perfect_vibrato) {
         flags.push('PERFECT_VIBRATO');
-        details.f0_accel_variance = jitter.mean_f0_accel_variance;
+        details.modulation_slope = jitter.mean_modulation_slope;
         anomalyScore += 0.12;
       }
     }
@@ -949,26 +951,31 @@ async function checkWatermarkPresence(audioInput, options = {}) {
   let watermarkScore = 0;
 
   // Sub-signal 1: SilentCipher extraction probe
-  try {
-    const extractResult = await silentcipher.extract(audioInput, { verbose: false });
-    details.silentcipher_available = true;
-    details.silentcipher_detected = extractResult.detected;
-    details.silentcipher_confidence = extractResult.confidence || 0;
-
-    if (extractResult.detected) {
-      flags.push('UNKNOWN_WATERMARK_DETECTED');
-      watermarkScore += 0.70;
-      details.watermark_message = extractResult.message;
-
-      if (verbose) {
-        console.log('   Watermark probe: DETECTED unknown watermark');
-      }
-    }
-  } catch (err) {
+  if (process.env.ORBIT_SKIP_SILENTCIPHER === 'true') {
     details.silentcipher_available = false;
-    details.silentcipher_error = err.message;
-    if (verbose) {
-      console.log(`   Watermark probe: SilentCipher unavailable (${err.message})`);
+    details.silentcipher_error = 'skipped (ORBIT_SKIP_SILENTCIPHER)';
+  } else {
+    try {
+      const extractResult = await silentcipher.extract(audioInput, { verbose: false });
+      details.silentcipher_available = true;
+      details.silentcipher_detected = extractResult.detected;
+      details.silentcipher_confidence = extractResult.confidence || 0;
+
+      if (extractResult.detected) {
+        flags.push('UNKNOWN_WATERMARK_DETECTED');
+        watermarkScore += 0.70;
+        details.watermark_message = extractResult.message;
+
+        if (verbose) {
+          console.log('   Watermark probe: DETECTED unknown watermark');
+        }
+      }
+    } catch (err) {
+      details.silentcipher_available = false;
+      details.silentcipher_error = err.message;
+      if (verbose) {
+        console.log(`   Watermark probe: SilentCipher unavailable (${err.message})`);
+      }
     }
   }
 
@@ -1118,16 +1125,12 @@ async function detectAI(audioInput, options = {}) {
         scoreFloor = 0.90;
       } else if (watermarkFlags.includes('UNKNOWN_WATERMARK_DETECTED')) {
         scoreFloor = 0.65;
-      } else if (metaFlags.includes('AI_TEXT_INDICATOR') && forensicHits.length >= 1) {
+      } else if (metaFlags.includes('AI_TEXT_INDICATOR') && forensicHits.length >= 2) {
         scoreFloor = 0.65;
-      } else if (watermarkFlags.includes('STEGANOGRAPHIC_NOISE_FLOOR') && forensicHits.length >= 1) {
-        scoreFloor = 0.60;
       } else if (metaFlags.includes('AI_TEXT_INDICATOR')) {
         scoreFloor = 0.55;
-      } else if (forensicHits.length >= 3) {
+      } else if (forensicHits.length >= 4) {
         scoreFloor = 0.50;
-      } else if (forensicHits.length >= 2) {
-        scoreFloor = 0.45;
       }
     }
 

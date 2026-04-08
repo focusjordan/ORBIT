@@ -40,6 +40,15 @@ const ANALYSIS_CONFIG = {
   
   // Timeout for analysis (ms)
   timeout: 60000, // 1 minute
+
+  // Environment for Python subprocesses — limit BLAS/OpenMP threads to
+  // prevent stack-overflow crashes on Apple Silicon (M1, 8 GB).
+  env: {
+    ...process.env,
+    OPENBLAS_NUM_THREADS: '1',
+    OMP_NUM_THREADS: '1',
+    MKL_NUM_THREADS: '1',
+  },
 };
 
 /**
@@ -69,7 +78,7 @@ async function checkPythonEnvironment() {
       const proc = spawn(ANALYSIS_CONFIG.pythonCommand, [
         '-c',
         'import librosa, numpy; print("ok")'
-      ]);
+      ], { env: ANALYSIS_CONFIG.env });
       
       let output = '';
       let errorOutput = '';
@@ -181,6 +190,7 @@ async function analyze(input, options = {}) {
 
       const proc = spawn(ANALYSIS_CONFIG.pythonCommand, args, {
         timeout: ANALYSIS_CONFIG.timeout,
+        env: ANALYSIS_CONFIG.env,
       });
       
       let stdout = '';

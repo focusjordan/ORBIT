@@ -348,7 +348,7 @@ async function runAnomalyDetectionTests() {
         mfcc_temporal: { available: true, mean_variance: 5.0, low_variance: true },
         chroma_entropy: { available: true, normalized: 0.3, low_entropy: true },
         energy_arc: { available: true, arc_variance: 0.00001, flat_arc: true },
-        checkerboard: { available: true, peak_autocorr: 0.5, has_artifacts: true },
+        checkerboard: { available: true, cepstral_peak_ratio: 10.0, pow2_peak_ratio: 7.0, has_artifacts: true },
         subband_energy: { available: true, distribution_entropy: 0.8, low_entropy: true },
         harmonicity: { available: true, harmonic_ratio: 0.2, hf_anomalous: true, hf_harmonic_ratio: 0.8 },
       },
@@ -375,7 +375,7 @@ async function runAnomalyDetectionTests() {
       energy: 0.7,
       ai_forensics: {
         crest_factor: { available: true, crest_factor: 2.0, low_crest: true },
-        checkerboard: { available: true, peak_autocorr: 0.5, has_artifacts: true },
+        checkerboard: { available: true, cepstral_peak_ratio: 10.0, pow2_peak_ratio: 7.0, has_artifacts: true },
       },
     };
     const result = aiDetection.checkAudioAnomalies(base, { v2Enabled: true });
@@ -801,10 +801,10 @@ async function runV3ForensicsTests() {
       key: { value: 'C major', confidence: 0.8 },
       energy: 0.7,
       ai_forensics: {
-        pre_echo: { available: true, mean_pre_echo_ratio: 0.25, has_pre_echo: true },
-        hf_phase_incoherence: { available: true, hf_mean_bin_variance: 3.5, hf_incoherent: true },
-        ms_phase_coherence: { available: true, mean_coherence: 0.3, coherence_drop_ratio: 0.5, ms_anomalous: true },
-        pitch_jitter: { available: true, mean_f0_accel_variance: 0.3, vibrato_detected: true, perfect_vibrato: true },
+        pre_echo: { available: true, mean_pre_echo_ratio: 0.35, positive_slope_ratio: 0.7, has_pre_echo: true },
+        hf_phase_incoherence: { available: true, mean_group_delay_variance: 6.0, hf_incoherent: true },
+        ms_phase_coherence: { available: true, low_mid_sm_ratio: 0.7, sub_bass_sm_ratio: 0.4, ms_anomalous: true },
+        pitch_jitter: { available: true, mean_modulation_slope: -0.1, perfect_vibrato: true },
       },
     };
 
@@ -824,10 +824,10 @@ async function runV3ForensicsTests() {
       key: { value: 'C major', confidence: 0.8 },
       energy: 0.7,
       ai_forensics: {
-        pre_echo: { available: true, mean_pre_echo_ratio: 0.25, has_pre_echo: true },
-        hf_phase_incoherence: { available: true, hf_mean_bin_variance: 3.5, hf_incoherent: true },
-        ms_phase_coherence: { available: true, mean_coherence: 0.3, coherence_drop_ratio: 0.5, ms_anomalous: true },
-        pitch_jitter: { available: true, mean_f0_accel_variance: 0.3, vibrato_detected: true, perfect_vibrato: true },
+        pre_echo: { available: true, mean_pre_echo_ratio: 0.35, positive_slope_ratio: 0.7, has_pre_echo: true },
+        hf_phase_incoherence: { available: true, mean_group_delay_variance: 6.0, hf_incoherent: true },
+        ms_phase_coherence: { available: true, low_mid_sm_ratio: 0.7, sub_bass_sm_ratio: 0.4, ms_anomalous: true },
+        pitch_jitter: { available: true, mean_modulation_slope: -0.1, perfect_vibrato: true },
       },
     };
 
@@ -846,10 +846,10 @@ async function runV3ForensicsTests() {
       key: { value: 'C major', confidence: 0.99 },
       energy: 0.5,
       ai_forensics: {
-        pre_echo: { available: true, mean_pre_echo_ratio: 0.4, has_pre_echo: true },
-        hf_phase_incoherence: { available: true, hf_mean_bin_variance: 5.0, hf_incoherent: true },
-        ms_phase_coherence: { available: true, mean_coherence: 0.2, coherence_drop_ratio: 0.6, ms_anomalous: true },
-        pitch_jitter: { available: true, mean_f0_accel_variance: 0.2, vibrato_detected: true, perfect_vibrato: true },
+        pre_echo: { available: true, mean_pre_echo_ratio: 0.45, positive_slope_ratio: 0.8, has_pre_echo: true },
+        hf_phase_incoherence: { available: true, mean_group_delay_variance: 8.0, hf_incoherent: true },
+        ms_phase_coherence: { available: true, low_mid_sm_ratio: 0.8, sub_bass_sm_ratio: 0.5, ms_anomalous: true },
+        pitch_jitter: { available: true, mean_modulation_slope: -0.05, perfect_vibrato: true },
         spectral_cutoff: { available: true, cutoff_freq: 16000, has_cutoff: true },
         phase_entropy: { available: true, mean_entropy: 1.5, low_entropy: true },
         spectral_contrast: { available: true, mean_contrast: 8.0, low_contrast: true },
@@ -891,12 +891,12 @@ async function runV3ForensicsTests() {
       key: { value: 'C major', confidence: 0.8 },
       energy: 0.7,
       ai_forensics: {
-        checkerboard: { available: true, peak_autocorr: 0.45, has_artifacts: false },
+        checkerboard: { available: true, cepstral_peak_ratio: 4.0, pow2_peak_ratio: 3.0, has_artifacts: false },
       },
     };
     const result = aiDetection.checkAudioAnomalies(analysis, { v2Enabled: true });
     assertFalse(result.flags.includes('CHECKERBOARD_ARTIFACTS'),
-      'peak_autocorr 0.45 should NOT trigger CHECKERBOARD_ARTIFACTS: ');
+      'moderate cepstral_peak_ratio should NOT trigger CHECKERBOARD_ARTIFACTS: ');
   });
 
   runner.test('CHECKERBOARD fires on high peaks', () => {
@@ -905,7 +905,7 @@ async function runV3ForensicsTests() {
       key: { value: 'C major', confidence: 0.8 },
       energy: 0.7,
       ai_forensics: {
-        checkerboard: { available: true, peak_autocorr: 0.75, has_artifacts: true },
+        checkerboard: { available: true, cepstral_peak_ratio: 12.0, pow2_peak_ratio: 8.0, has_artifacts: true },
       },
     };
     const result = aiDetection.checkAudioAnomalies(analysis, { v2Enabled: true });

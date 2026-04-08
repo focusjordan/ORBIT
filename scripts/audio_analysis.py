@@ -727,34 +727,52 @@ def measure_energy_arc(y, sr, n_segments=8):
 
 def measure_checkerboard_artifacts(y, sr, n_fft=2048):
     """
-    Detect checkerboard artifacts from CNN transposed convolution upsampling.
-    These leave grid-like periodic patterns in the 4-20kHz spectrogram sub-band.
-    Detected via 2D autocorrelation on the sub-band spectrogram.
+    Detect vocoder upsampling artifacts via cepstral analysis.
+
+    Neural vocoders (HiFi-GAN, etc.) use transposed-convolution upsampling
+    that imprints periodic artifacts at quefrencies corresponding to powers-
+    of-2 upsampling ratios.  The previous 2D-autocorrelation approach was
+    detecting the STFT's own grid structure (always present).
+
+    The real cepstrum (IFFT of log-magnitude spectrum) exposes these rigid
+    peaks in the high-quefrency region without the STFT grid confound.
     """
     import librosa
     import numpy as np
 
-    S = np.abs(librosa.stft(y, n_fft=n_fft))
-    freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
-    band_mask = (freqs >= 4000) & (freqs <= 20000)
-    S_band = S[band_mask, :]
-    if S_band.shape[0] < 4 or S_band.shape[1] < 8:
-        return {'available': False, 'reason': 'insufficient_subband_data'}
-    S_norm = S_band - np.mean(S_band)
-    from numpy.fft import fft2, ifft2
-    F = fft2(S_norm)
-    ac = np.real(ifft2(F * np.conj(F)))
-    ac /= (np.max(ac) + 1e-10)
-    center_r = min(8, ac.shape[0] // 2)
-    center_c = min(16, ac.shape[1] // 2)
-    region = ac[1:center_r, 1:center_c]
-    peak_val = float(np.max(region))
-    mean_val = float(np.mean(region))
+    S = np.abs(librosa.stft(y, n_fft=n_fft)) + 1e-10
+    log_S = np.log(S)
+    mean_log = np.mean(log_S, axis=1)
+
+    cepstrum = np.real(np.fft.ifft(mean_log))
+    n = len(cepstrum)
+    if n < 64:
+        return {'available': False, 'reason': 'insufficient_cepstrum_length'}
+
+    # High-quefrency region: skip low quefrencies (< 16) which carry
+    # spectral envelope info; look at 16..n//2 for upsampling artifacts.
+    high_q = cepstrum[16:n // 2]
+    if len(high_q) < 16:
+        return {'available': False, 'reason': 'insufficient_high_quefrency'}
+
+    # Vocoder artifacts appear as sharp, isolated peaks.  Measure peak-
+    # to-median ratio — a rigid spike stands out against the noise floor.
+    median_val = float(np.median(np.abs(high_q)))
+    peak_val = float(np.max(np.abs(high_q)))
+    peak_ratio = peak_val / (median_val + 1e-12)
+
+    # Check for peaks at power-of-2 quefrencies (typical upsampling ratios)
+    pow2_quefrencies = [q for q in [32, 64, 128, 256, 512] if q < len(high_q)]
+    pow2_vals = [float(np.abs(high_q[q - 16])) for q in pow2_quefrencies]
+    pow2_peak = max(pow2_vals) if pow2_vals else 0.0
+    pow2_ratio = pow2_peak / (median_val + 1e-12)
+
     return {
         'available': True,
-        'peak_autocorr': round(peak_val, 4),
-        'mean_autocorr': round(mean_val, 4),
-        'has_artifacts': peak_val > 0.55,
+        'cepstral_peak_ratio': round(peak_ratio, 4),
+        'pow2_peak_ratio': round(pow2_ratio, 4),
+        'median_level': round(median_val, 6),
+        'has_artifacts': peak_ratio > 8.0 or pow2_ratio > 6.0,
     }
 
 
@@ -800,100 +818,145 @@ def measure_subband_energy_distribution(y, sr, n_fft=4096):
 
 def measure_pre_echo(y, sr):
     """
-    Detect pre-echo / transient smearing from vocoder reconstruction.
+    Detect micro-temporal pre-echo from neural vocoder reconstruction.
 
-    Acoustic instruments create near-instantaneous step-function transients.
-    Latent diffusion vocoders reconstruct waveforms through denoising steps,
-    causing energy to bleed backward in time just before the attack.
+    Real transients have near-zero energy in the 2-5 ms window immediately
+    before the attack.  Neural vocoders (HiFi-GAN, EnCodec) produce micro-
+    ringing in this window due to denoising/decoding steps.
 
-    For each percussive onset we measure the ratio of energy in a short window
-    before the onset to the energy after it.  Human audio: ratio near zero.
-    AI audio: anomalously high ratio due to reverse-time smearing.
+    Key improvements over v1:
+    - 3 ms pre-onset window (was 10 ms — too wide, captured compressor attack)
+    - High-pass filter > 4 kHz before measurement (low-freq rumble masks it)
+    - Measures energy envelope slope, not just RMS ratio (vocoder pre-echo
+      has an unnatural linear/exponential ramp vs natural reflections)
     """
     import librosa
     import numpy as np
+    from scipy.signal import butter, sosfilt
 
-    onset_frames = librosa.onset.onset_detect(y=y, sr=sr, units='samples')
+    # 4 kHz high-pass filter to isolate micro-transient region
+    sos = butter(4, 4000, btype='high', fs=sr, output='sos')
+    y_hf = sosfilt(sos, y)
+
+    onset_frames = librosa.onset.onset_detect(y=y_hf, sr=sr, units='samples')
     if len(onset_frames) < 3:
         return {'available': False, 'reason': 'too_few_onsets'}
 
-    pre_window = int(0.010 * sr)   # 10 ms before onset
-    post_window = int(0.010 * sr)  # 10 ms after onset
+    pre_ms = 0.003    # 3 ms before onset
+    post_ms = 0.005   # 5 ms after onset
+    pre_window = int(pre_ms * sr)
+    post_window = int(post_ms * sr)
 
     ratios = []
+    slopes = []
     for onset in onset_frames:
         pre_start = max(0, onset - pre_window)
-        post_end = min(len(y), onset + post_window)
+        post_end = min(len(y_hf), onset + post_window)
         if onset - pre_start < pre_window // 2 or post_end - onset < post_window // 2:
             continue
-        pre_energy = float(np.mean(y[pre_start:onset] ** 2))
-        post_energy = float(np.mean(y[onset:post_end] ** 2))
+        pre_seg = y_hf[pre_start:onset]
+        post_seg = y_hf[onset:post_end]
+        pre_energy = float(np.mean(pre_seg ** 2))
+        post_energy = float(np.mean(post_seg ** 2))
         if post_energy > 1e-12:
             ratios.append(pre_energy / post_energy)
+
+        # Measure energy envelope slope in pre-onset window
+        if len(pre_seg) >= 4:
+            env = pre_seg ** 2
+            # Linear fit: positive slope = energy ramping up toward onset
+            x = np.arange(len(env), dtype=np.float64)
+            slope = float(np.polyfit(x, env, 1)[0])
+            slopes.append(slope)
 
     if len(ratios) < 3:
         return {'available': False, 'reason': 'insufficient_valid_onsets'}
 
     mean_ratio = float(np.mean(ratios))
     median_ratio = float(np.median(ratios))
+    mean_slope = float(np.mean(slopes)) if slopes else 0.0
+    positive_slope_ratio = sum(1 for s in slopes if s > 0) / len(slopes) if slopes else 0.0
+
     return {
         'available': True,
         'mean_pre_echo_ratio': round(mean_ratio, 6),
         'median_pre_echo_ratio': round(median_ratio, 6),
+        'mean_slope': round(mean_slope, 8),
+        'positive_slope_ratio': round(positive_slope_ratio, 4),
         'onset_count': len(ratios),
-        'has_pre_echo': mean_ratio > 0.15,
+        'has_pre_echo': mean_ratio > 0.30 and positive_slope_ratio > 0.6,
     }
 
 
 def measure_hf_phase_incoherence(y, sr, n_fft=4096):
     """
-    Measure phase derivative variance specifically above 8 kHz.
+    Measure group delay variance at transient onsets above 4 kHz.
 
-    AI models synthesise magnitude spectrograms well but approximate
-    the phase.  Above 8 kHz, where phase shifts rapidly, this leads to
-    instantaneous-frequency wrapping errors that manifest as high variance
-    in the temporal phase derivative.
+    Group delay = -d(phase)/d(frequency).  Real percussive transients have
+    aligned group delay across frequency bins (all frequencies arrive at the
+    microphone simultaneously).  AI vocoders smear this vertical alignment.
 
-    Human audio shows structured phase correlation from physical resonance;
-    AI audio shows chaotic, high-variance noise in these bins.
+    Key improvement over v1: measures group delay (phase vs frequency)
+    instead of instantaneous frequency (phase vs time).  The old metric
+    was chaotic above 8 kHz in all real-world audio.
     """
     import librosa
     import numpy as np
 
     nyquist = sr / 2
-    if nyquist < 10000:
+    if nyquist < 8000:
         return {'available': False, 'reason': f'sample_rate {sr} too low for HF analysis'}
 
-    D = librosa.stft(y, n_fft=n_fft)
+    onset_frames = librosa.onset.onset_detect(y=y, sr=sr, units='frames',
+                                               hop_length=n_fft // 4)
+    if len(onset_frames) < 3:
+        return {'available': False, 'reason': 'too_few_onsets'}
+
+    hop_length = n_fft // 4
+    D = librosa.stft(y, n_fft=n_fft, hop_length=hop_length)
     freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
-    hf_mask = freqs >= 8000
+    hf_mask = freqs >= 4000
+    phase = np.angle(D)
 
-    phase = np.angle(D[hf_mask, :])
-    if phase.shape[1] < 4:
-        return {'available': False, 'reason': 'insufficient_frames'}
+    # Group delay: negative derivative of phase with respect to frequency
+    # Compute per-frame across frequency bins in the HF region
+    gd_variances = []
+    for frame_idx in onset_frames:
+        if frame_idx >= phase.shape[1]:
+            continue
+        frame_phase = phase[hf_mask, frame_idx]
+        if len(frame_phase) < 8:
+            continue
+        unwrapped = np.unwrap(frame_phase)
+        group_delay = -np.diff(unwrapped)
+        gd_variances.append(float(np.var(group_delay)))
 
-    unwrapped = np.unwrap(phase, axis=1)
-    phase_deriv = np.diff(unwrapped, axis=1)
-    variance = float(np.var(phase_deriv))
-    mean_var_per_bin = float(np.mean(np.var(phase_deriv, axis=1)))
+    if len(gd_variances) < 3:
+        return {'available': False, 'reason': 'insufficient_onset_frames'}
+
+    mean_gd_var = float(np.mean(gd_variances))
+    median_gd_var = float(np.median(gd_variances))
 
     return {
         'available': True,
-        'hf_phase_derivative_variance': round(variance, 6),
-        'hf_mean_bin_variance': round(mean_var_per_bin, 6),
-        'hf_incoherent': mean_var_per_bin > 2.5,
+        'mean_group_delay_variance': round(mean_gd_var, 6),
+        'median_group_delay_variance': round(median_gd_var, 6),
+        'onset_count': len(gd_variances),
+        'hf_incoherent': mean_gd_var > 5.0,
     }
 
 
 def measure_ms_phase_coherence(y_stereo, sr, n_fft=2048):
     """
-    Mid/Side cross-spectral phase coherence for stereo files.
+    Per-band Mid/Side coherence with focus on low-mid phase decorrelation.
 
-    In real recordings, L and R channels share correlated reverb tails
-    because they exist in a common acoustic space.  AI generators often
-    produce L/R with mathematically decorrelated phase relationships.
+    Mix engineers widen highs/mids but keep low-end centered (below ~400 Hz)
+    to avoid phase cancellation on playback systems.  AI generators
+    hallucinate phase relationships across the entire spectrum, often
+    producing decorrelated or anti-correlated Side energy in the low-mids.
 
-    Expects y_stereo with shape (2, N).  If the file is mono, skip.
+    Key improvement over v1: per-Mel-band analysis instead of global M/S
+    coherence.  Specifically flags low-mid (100-400 Hz) anomalies.
     """
     import librosa
     import numpy as np
@@ -912,39 +975,60 @@ def measure_ms_phase_coherence(y_stereo, sr, n_fft=2048):
 
     D_mid = librosa.stft(mid, n_fft=n_fft)
     D_side = librosa.stft(side, n_fft=n_fft)
+    freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
 
     if D_mid.shape[1] < 4:
         return {'available': False, 'reason': 'insufficient_frames'}
 
-    csd = D_mid * np.conj(D_side)
-    magnitude = np.abs(csd) + 1e-10
-    coherence = np.abs(np.mean(csd / magnitude, axis=0))
-    mean_coherence = float(np.mean(coherence))
+    # Per-band analysis
+    bands = [
+        ('sub_bass', 20, 100),
+        ('low_mid', 100, 400),
+        ('mid', 400, 2000),
+        ('high_mid', 2000, 8000),
+        ('high', 8000, sr // 2),
+    ]
 
-    drops = int(np.sum(coherence < 0.3))
-    drop_ratio = drops / len(coherence)
+    band_results = {}
+    for name, lo, hi in bands:
+        mask = (freqs >= lo) & (freqs < hi)
+        if not np.any(mask):
+            continue
+        mid_band = D_mid[mask, :]
+        side_band = D_side[mask, :]
+        mid_energy = float(np.mean(np.abs(mid_band) ** 2))
+        side_energy_band = float(np.mean(np.abs(side_band) ** 2))
+        # Side-to-mid ratio: > 1.0 means more Side than Mid (suspicious in low end)
+        sm_ratio = side_energy_band / (mid_energy + 1e-12)
+        band_results[name] = round(sm_ratio, 4)
+
+    low_mid_ratio = band_results.get('low_mid', 0.0)
+    sub_bass_ratio = band_results.get('sub_bass', 0.0)
+
+    # Real engineers: low_mid Side/Mid ratio should be well below 0.5
+    # AI generators: often > 0.5 due to hallucinated stereo in low end
+    ms_anomalous = low_mid_ratio > 0.5 or sub_bass_ratio > 0.3
 
     return {
         'available': True,
-        'mean_coherence': round(mean_coherence, 4),
-        'coherence_drop_ratio': round(float(drop_ratio), 4),
-        'coherence_drops': drops,
-        'ms_anomalous': mean_coherence < 0.4 or drop_ratio > 0.35,
+        'band_sm_ratios': band_results,
+        'low_mid_sm_ratio': low_mid_ratio,
+        'sub_bass_sm_ratio': sub_bass_ratio,
+        'ms_anomalous': ms_anomalous,
     }
 
 
 def measure_pitch_jitter(y, sr):
     """
-    Analyse vocal pitch micro-variations (jitter) in sustained notes.
+    Detect synthetic vibrato via modulation spectrum of the f0 contour.
 
-    AI models generate vibrato from smooth latent representations —
-    often a near-perfect LFO.  Human vocal cords are driven by muscles,
-    introducing micro-variations (jitter/shimmer) into the vibrato.
+    Human vocal jitter has a distinct 1/f (pink noise) slope in the
+    modulation spectrum.  AI-generated jitter looks like flat white noise
+    or has rigid LFO spikes from smooth latent-space interpolation.
 
-    We extract the f0 contour with pYIN, find sustained pitched segments,
-    and measure the second derivative of f0 (pitch acceleration).  In AI
-    vocals the second derivative is remarkably clean; in human vocals it
-    carries a band of neuromuscular noise.
+    Key improvement over v1: analyses the FFT of the f0 contour itself
+    (modulation spectrum) instead of f0 acceleration variance, which
+    was falsely triggered by controlled human vibrato.
     """
     import librosa
     import numpy as np
@@ -962,88 +1046,101 @@ def measure_pitch_jitter(y, sr):
     if len(voiced_indices) < 10:
         return {'available': False, 'reason': 'insufficient_voiced_frames'}
 
+    # Find sustained voiced segments (>= 30 frames)
     segments = []
     seg_start = voiced_indices[0]
     for i in range(1, len(voiced_indices)):
         if voiced_indices[i] != voiced_indices[i - 1] + 1:
             seg_len = voiced_indices[i - 1] - seg_start + 1
-            if seg_len >= 20:
+            if seg_len >= 30:
                 segments.append((seg_start, voiced_indices[i - 1] + 1))
             seg_start = voiced_indices[i]
     seg_len = voiced_indices[-1] - seg_start + 1
-    if seg_len >= 20:
+    if seg_len >= 30:
         segments.append((seg_start, voiced_indices[-1] + 1))
 
     if len(segments) == 0:
         return {'available': False, 'reason': 'no_sustained_segments'}
 
-    accel_variances = []
+    spectral_slopes = []
     for start, end in segments:
         seg_f0 = f0[start:end]
         if np.any(np.isnan(seg_f0)):
             continue
-        d2 = np.diff(seg_f0, n=2)
-        if len(d2) >= 4:
-            accel_variances.append(float(np.var(d2)))
+        # Remove DC (mean pitch) to isolate modulation
+        seg_f0_centered = seg_f0 - np.mean(seg_f0)
+        # FFT of f0 contour = modulation spectrum
+        mod_spectrum = np.abs(np.fft.rfft(seg_f0_centered))
+        if len(mod_spectrum) < 4:
+            continue
+        # Fit log-log slope (skip DC bin)
+        mod_spectrum = mod_spectrum[1:]
+        log_freq = np.log(np.arange(1, len(mod_spectrum) + 1) + 1e-10)
+        log_mag = np.log(mod_spectrum + 1e-10)
+        if len(log_freq) >= 4:
+            slope = float(np.polyfit(log_freq, log_mag, 1)[0])
+            spectral_slopes.append(slope)
 
-    if len(accel_variances) == 0:
+    if len(spectral_slopes) == 0:
         return {'available': False, 'reason': 'no_valid_segments'}
 
-    mean_accel_var = float(np.mean(accel_variances))
-    has_vibrato = any(v > 0.01 for v in accel_variances)
+    mean_slope = float(np.mean(spectral_slopes))
 
+    # Human vibrato: negative slope (1/f, pink noise, typically -0.5 to -2.0)
+    # AI vibrato: slope near 0 (flat/white) or has LFO spikes
     return {
         'available': True,
-        'mean_f0_accel_variance': round(mean_accel_var, 6),
-        'segment_count': len(accel_variances),
-        'vibrato_detected': has_vibrato,
-        'perfect_vibrato': has_vibrato and mean_accel_var < 0.5,
+        'mean_modulation_slope': round(mean_slope, 4),
+        'segment_count': len(spectral_slopes),
+        'perfect_vibrato': mean_slope > -0.3,
     }
 
 
 def measure_noise_floor_structure(y, sr, n_fft=4096):
     """
-    Detect structured pseudo-random noise in the residual noise floor.
+    Detect structured pseudo-random noise in the HPSS residual.
 
     AI platform watermarks (Suno, Udio, etc.) embed spread-spectrum
-    pseudo-random sequences into the audio.  After comb-filtering out
-    musical harmonics, human noise floors are brownian/pink (no repeating
-    structure), while watermarked audio shows autocorrelation peaks from
-    the repeating pseudo-random carrier.
+    pseudo-random sequences.  To detect them we must isolate the noise
+    floor from musical content.
 
-    This does NOT decode the watermark — it only detects its presence.
+    Key improvement over v1: uses Harmonic-Percussive Source Separation
+    (HPSS) instead of a simple comb filter.  The old comb filter leaked
+    harmonics into the residual, causing false autocorrelation in all
+    audio.  HPSS + median filtering of the residual spectrogram produces
+    a much cleaner noise floor for autocorrelation analysis.
+
+    Note: blind spread-spectrum detection is inherently difficult without
+    the carrier sequence.  This is a best-effort statistical test.
     """
     import librosa
     import numpy as np
+    from scipy.ndimage import median_filter
 
-    S = librosa.stft(y, n_fft=n_fft)
-    mag = np.abs(S)
-    phase = np.angle(S)
+    # HPSS: separate harmonic and percussive components
+    y_harmonic, y_percussive = librosa.effects.hpss(y)
 
-    median_mag = np.median(mag, axis=1, keepdims=True)
-    harmonic_mask = mag > (median_mag * 3.0)
-    residual_mag = mag.copy()
-    residual_mag[harmonic_mask] = 0.0
+    # Residual = original minus both harmonic and percussive
+    residual = y - y_harmonic - y_percussive
 
-    residual = librosa.istft(residual_mag * np.exp(1j * phase), length=len(y))
+    if float(np.max(np.abs(residual))) < 1e-8:
+        return {'available': False, 'reason': 'silent_residual'}
 
-    frame_len = int(0.025 * sr)
-    hop = frame_len // 2
-    n_frames = max(1, (len(residual) - frame_len) // hop)
-    if n_frames < 16:
+    # Compute residual spectrogram and median-filter it to remove
+    # any remaining tonal/transient leakage
+    S_res = np.abs(librosa.stft(residual, n_fft=n_fft))
+    S_filtered = median_filter(S_res, size=(1, 5))
+
+    # Frame-level power from the filtered residual
+    frame_power = np.mean(S_filtered ** 2, axis=0)
+    if len(frame_power) < 16:
         return {'available': False, 'reason': 'insufficient_residual_frames'}
-
-    frames = np.array([
-        residual[i * hop: i * hop + frame_len]
-        for i in range(n_frames)
-    ])
-
-    frame_power = np.mean(frames ** 2, axis=1)
     if np.max(frame_power) < 1e-14:
         return {'available': False, 'reason': 'silent_residual'}
 
-    ac = np.correlate(frame_power - np.mean(frame_power),
-                      frame_power - np.mean(frame_power), mode='full')
+    # Autocorrelation of frame power envelope
+    fp_centered = frame_power - np.mean(frame_power)
+    ac = np.correlate(fp_centered, fp_centered, mode='full')
     ac = ac[len(ac) // 2:]
     ac_norm = ac / (ac[0] + 1e-15)
 
@@ -1058,7 +1155,7 @@ def measure_noise_floor_structure(y, sr, n_fft=4096):
         'available': True,
         'residual_autocorr_peak': round(peak_val, 4),
         'residual_autocorr_mean': round(mean_val, 4),
-        'has_structured_noise': peak_val > 0.35,
+        'has_structured_noise': peak_val > 0.55,
     }
 
 
