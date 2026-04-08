@@ -58,6 +58,7 @@ __pycache__/
 
 # Marketing / internal docs (not for repo)
 docs/LINKEDIN_CONTENT_CALENDAR.md
+docs/AGENT_SESSION_PROMPTS.md
 
 # Generated test output
 tests/corpus-results.json

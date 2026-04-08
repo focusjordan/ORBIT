@@ -77,6 +77,18 @@ const MODEL_CONFIGS = {
   //   custom: true,
   //   loader: 'mert',
   // },
+
+  // PANNs for audio tagging + 2048-dim embeddings (loaded via Python bridge)
+  panns: {
+    id: 'Cnn14_mAP=0.431.pth',
+    task: 'audio-tagging',
+    size: '~320MB',
+    embeddingDim: 2048,
+    description: 'Audio tagging + embeddings',
+    custom: true,
+    loader: 'python-bridge',
+    available: true,
+  },
   
   // SilentCipher for neural watermarking (future - Session 22)
   silentCipher: {
@@ -375,8 +387,11 @@ class ModelManager {
     const status = {};
     
     for (const [key, config] of Object.entries(MODEL_CONFIGS)) {
-      // Custom models (SilentCipher, WMCodec) not yet available
-      const isAvailable = !config.custom;
+      // Custom models may explicitly declare availability when implemented
+      // through external bridges (for example, PANNs via Python).
+      const isAvailable = typeof config.available === 'boolean'
+        ? config.available
+        : !config.custom;
       
       status[key] = {
         loaded: this.isLoaded(key),

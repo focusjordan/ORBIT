@@ -22,6 +22,8 @@ const fs = require('fs');
 
 // Import ML modules
 const clap = require('./clap');
+const panns = require('./panns');
+const genreClassifier = require('./genre-classifier');
 // MERT DISABLED - CC BY-NC 4.0 license incompatible with commercial use
 // const mert = require('./mert');
 const audioAnalysis = require('./audio-analysis');
@@ -32,19 +34,26 @@ const audioAnalysis = require('./audio-analysis');
 const EXTRACTOR_CONFIG = {
   // Enable/disable individual extractors
   enableClap: true,
-  enableEmbedding: true,  // Uses CLAP embeddings (Apache 2.0)
+  enablePanns: true,
+  enableGenreClassifier: true,
+  enablePannsEmbedding: true, // PANNs 2048-dim embeddings
+  enableEmbedding: true, // Backward-compatible alias (mapped to enablePannsEmbedding)
   enableAudioAnalysis: true,
   
   // CLAP configuration
   clapGenreTopK: 3,
   clapMoodTopK: 3,
   clapInstrumentThreshold: 0.15,
+
+  // PANNs / genre classifier configuration
+  pannsTopK: 20,
+  genreTopK: 3,
   
   // Audio analysis configuration
   audioAnalysisMaxLength: 120,
   aiForensics: false,
   
-  // Embedding configuration (CLAP 512-dim)
+  // Embedding configuration (PANNs 2048-dim)
   embeddingMaxLength: 30,
   
   // Whether to fail on partial extraction errors
@@ -91,6 +100,8 @@ async function extractMetadata(input, options = {}) {
   
   // Merge configuration
   const cfg = { ...EXTRACTOR_CONFIG, ...config };
+  // Backward compatibility: enableEmbedding drives PANNs embedding toggle.
+  cfg.enablePannsEmbedding = cfg.enablePannsEmbedding && cfg.enableEmbedding;
   
   const startTime = Date.now();
   
@@ -102,6 +113,8 @@ async function extractMetadata(input, options = {}) {
   const extractionStatus = {
     clap: 'pending',
     audioAnalysis: 'pending',
+    panns: 'pending',
+    genreClassifier: 'pending',
     embedding: 'pending',
   };
   
@@ -120,34 +133,116 @@ async function extractMetadata(input, options = {}) {
     duration: null,
   };
   
-  // Optional embedding storage (CLAP - Apache 2.0)
+  // Optional embedding storage (PANNs - 2048 dim)
   let audioEmbedding = null;
+  let shouldUseClapGenreFallback = true;
+  let shouldUseClapInstrumentFallback = true;
   
   // ==========================================
-  // CLAP Extraction (genre, mood, instruments, vocals)
+  // Genre Classifier Extraction (wav2vec2)
+  // ==========================================
+  if (cfg.enableGenreClassifier) {
+    try {
+      if (verbose) {
+        console.log('   → GenreClassifier: Classifying top genres...');
+      }
+      
+      result.genre = await genreClassifier.classify(input, {
+        topK: cfg.genreTopK,
+        verbose: false,
+      });
+      
+      extractionStatus.genreClassifier = 'success';
+      shouldUseClapGenreFallback = !result.genre || result.genre.length === 0;
+      
+    } catch (error) {
+      extractionStatus.genreClassifier = `error: ${error.message}`;
+      
+      if (verbose) {
+        console.log(`   ✗ GenreClassifier: Failed - ${error.message}`);
+      }
+    }
+  } else {
+    extractionStatus.genreClassifier = 'disabled';
+  }
+  
+  // ==========================================
+  // PANNs Extraction (music tags, instruments)
+  // ==========================================
+  if (cfg.enablePanns) {
+    try {
+      if (verbose) {
+        console.log('   → PANNs: Extracting music tags...');
+      }
+      
+      const tags = await panns.tag(input, {
+        topK: cfg.pannsTopK,
+        verbose: false,
+      });
+      
+      const instrumentTags = filterPannsInstrumentTags(tags);
+      if (instrumentTags.length > 0) {
+        result.instruments = instrumentTags;
+        shouldUseClapInstrumentFallback = false;
+      }
+      
+      extractionStatus.panns = 'success';
+      
+      if (verbose) {
+        console.log(`   ✓ PANNs: Complete (${tags.length} tags, ${instrumentTags.length} instruments)`);
+      }
+      
+    } catch (error) {
+      extractionStatus.panns = `error: ${error.message}`;
+      
+      if (verbose) {
+        console.log(`   ✗ PANNs: Failed - ${error.message}`);
+      }
+    }
+  } else {
+    extractionStatus.panns = 'disabled';
+  }
+  
+  // ==========================================
+  // CLAP Extraction (mood, vocals + fallback genre/instruments)
   // ==========================================
   if (cfg.enableClap) {
     try {
       if (verbose) {
-        console.log('   → CLAP: Extracting genre, mood, instruments, vocals...');
+        console.log('   → CLAP: Extracting mood/vocals (+ fallbacks)...');
       }
       
-      const clapResult = await clap.analyzeAudio(input, {
-        genreTopK: cfg.clapGenreTopK,
-        moodTopK: cfg.clapMoodTopK,
-        instrumentThreshold: cfg.clapInstrumentThreshold,
-        verbose: false, // Suppress CLAP's own verbose output
+      result.mood = await clap.classifyMood(input, {
+        topK: cfg.clapMoodTopK,
+        verbose: false,
       });
       
-      result.genre = clapResult.genre;
-      result.mood = clapResult.mood;
-      result.instruments = clapResult.instruments;
-      result.vocals = clapResult.vocals;
+      result.vocals = await clap.detectVocals(input, {
+        verbose: false,
+      });
+      
+      if (shouldUseClapGenreFallback) {
+        result.genre = await clap.classifyGenre(input, {
+          topK: cfg.clapGenreTopK,
+          verbose: false,
+        });
+      }
+      
+      if (shouldUseClapInstrumentFallback) {
+        result.instruments = await clap.detectInstruments(input, {
+          threshold: cfg.clapInstrumentThreshold,
+          verbose: false,
+        });
+      }
       
       extractionStatus.clap = 'success';
       
       if (verbose) {
-        console.log(`   ✓ CLAP: Complete (${clapResult.processingTimeMs}ms)`);
+        const fallbackInfo = [
+          shouldUseClapGenreFallback ? 'genre fallback used' : 'genre from wav2vec2',
+          shouldUseClapInstrumentFallback ? 'instruments fallback used' : 'instruments from PANNs',
+        ].join(', ');
+        console.log(`   ✓ CLAP: Complete (${fallbackInfo})`);
       }
       
     } catch (error) {
@@ -217,30 +312,26 @@ async function extractMetadata(input, options = {}) {
   }
   
   // ==========================================
-  // Audio Embedding (CLAP - Apache 2.0, commercially licensable)
-  // Replaces MERT which is CC BY-NC 4.0 (non-commercial only)
+  // Audio Embedding (PANNs - MIT, 2048-dim)
+  // NOTE: DB pgvector column must be migrated from 512 -> 2048 dims.
+  // Do not change schema here; migration handled separately.
   // ==========================================
-  if (cfg.enableEmbedding) {
+  if (cfg.enablePannsEmbedding && cfg.enablePanns) {
     try {
       if (verbose) {
-        console.log('   → CLAP: Generating audio embedding...');
+        console.log('   → PANNs: Generating audio embedding...');
       }
       
-      const embeddingResult = await clap.getAudioEmbedding(input, {
+      const embeddingResult = await panns.getEmbedding(input, {
         verbose: false,
       });
       
-      audioEmbedding = embeddingResult.embedding;
-      
-      // If duration wasn't set by audio analysis, use embedding duration
-      if (result.duration === null) {
-        result.duration = embeddingResult.duration;
-      }
+      audioEmbedding = embeddingResult;
       
       extractionStatus.embedding = 'success';
       
       if (verbose) {
-        console.log(`   ✓ CLAP Embedding: Complete (${embeddingResult.processingTimeMs}ms)`);
+        console.log(`   ✓ PANNs Embedding: Complete (${audioEmbedding.length}-dim)`);
       }
       
     } catch (error) {
@@ -274,7 +365,11 @@ async function extractMetadata(input, options = {}) {
   
   if (verbose) {
     console.log(`✅ MetadataExtractor: Complete in ${(totalTime / 1000).toFixed(1)}s`);
-    console.log(`   Status: CLAP=${extractionStatus.clap}, AudioAnalysis=${extractionStatus.audioAnalysis}, Embedding=${extractionStatus.embedding}`);
+    console.log(
+      `   Status: CLAP=${extractionStatus.clap}, PANNs=${extractionStatus.panns}, `
+      + `GenreClassifier=${extractionStatus.genreClassifier}, `
+      + `AudioAnalysis=${extractionStatus.audioAnalysis}, Embedding=${extractionStatus.embedding}`
+    );
   }
   
   return result;
@@ -296,6 +391,9 @@ async function extractClapOnly(input, options = {}) {
     config: {
       enableClap: true,
       enableEmbedding: false,
+      enablePannsEmbedding: false,
+      enablePanns: false,
+      enableGenreClassifier: false,
       enableAudioAnalysis: false,
     },
   });
@@ -316,6 +414,9 @@ async function extractAudioAnalysisOnly(input, options = {}) {
     config: {
       enableClap: false,
       enableEmbedding: false,
+      enablePannsEmbedding: false,
+      enablePanns: false,
+      enableGenreClassifier: false,
       enableAudioAnalysis: true,
     },
   });
@@ -330,6 +431,8 @@ async function checkEnvironment() {
   const status = {
     clap: { available: false, message: '' },
     audioAnalysis: { available: false, message: '' },
+    panns: { available: false, message: '' },
+    genreClassifier: { available: false, message: '' },
     overall: { available: false, message: '' },
   };
   
@@ -361,9 +464,45 @@ async function checkEnvironment() {
     };
   }
   
+  // Check PANNs
+  try {
+    const pannsStatus = await panns.checkEnvironment();
+    status.panns = {
+      available: !!pannsStatus.available,
+      message: pannsStatus.message || 'PANNs check completed',
+      details: pannsStatus.details,
+    };
+  } catch (error) {
+    status.panns = {
+      available: false,
+      message: `PANNs error: ${error.message}`,
+    };
+  }
+  
+  // Check wav2vec2 genre classifier
+  try {
+    const genreStatus = await genreClassifier.checkEnvironment();
+    status.genreClassifier = {
+      available: !!genreStatus.available,
+      message: genreStatus.message || 'Genre classifier check completed',
+      details: genreStatus.details,
+    };
+  } catch (error) {
+    status.genreClassifier = {
+      available: false,
+      message: `GenreClassifier error: ${error.message}`,
+    };
+  }
+  
   // Overall status
-  const allAvailable = status.clap.available && status.audioAnalysis.available;
-  const partialAvailable = status.clap.available || status.audioAnalysis.available;
+  const availabilityFlags = [
+    status.clap.available,
+    status.audioAnalysis.available,
+    status.panns.available,
+    status.genreClassifier.available,
+  ];
+  const allAvailable = availabilityFlags.every(Boolean);
+  const partialAvailable = availabilityFlags.some(Boolean);
   
   if (allAvailable) {
     status.overall = {
@@ -374,6 +513,8 @@ async function checkEnvironment() {
     const unavailable = [];
     if (!status.clap.available) unavailable.push('CLAP');
     if (!status.audioAnalysis.available) unavailable.push('AudioAnalysis');
+    if (!status.panns.available) unavailable.push('PANNs');
+    if (!status.genreClassifier.available) unavailable.push('GenreClassifier');
     
     status.overall = {
       available: true,
@@ -426,7 +567,68 @@ function formatForDatabase(extractionResult) {
  */
 function formatEmbeddingForDatabase(embedding) {
   if (!embedding) return null;
-  return clap.embeddingToPostgres(embedding);
+  const formatted = Array.from(embedding)
+    .map(v => Number(v).toFixed(8))
+    .join(',');
+  return `[${formatted}]`;
+}
+
+const PANNS_INSTRUMENT_LABELS = new Set([
+  'accordion',
+  'acoustic guitar',
+  'banjo',
+  'bass drum',
+  'bass guitar',
+  'cello',
+  'clarinet',
+  'cymbal',
+  'didgeridoo',
+  'drum',
+  'drum kit',
+  'electric guitar',
+  'flute',
+  'french horn',
+  'glockenspiel',
+  'gong',
+  'guitar',
+  'harmonica',
+  'harp',
+  'harpsichord',
+  'hi-hat',
+  'keyboard (musical)',
+  'mandolin',
+  'maraca',
+  'marimba, xylophone',
+  'musical instrument',
+  'organ',
+  'percussion',
+  'piano',
+  'sampler',
+  'saxophone',
+  'sitar',
+  'snare drum',
+  'steel guitar, slide guitar',
+  'string section',
+  'synthesizer',
+  'tabla',
+  'tambourine',
+  'timpani',
+  'trombone',
+  'trumpet',
+  'ukulele',
+  'violin, fiddle',
+  'vibraphone',
+]);
+
+function filterPannsInstrumentTags(tags) {
+  if (!Array.isArray(tags)) return [];
+  return tags
+    .filter((tag) => PANNS_INSTRUMENT_LABELS.has(String(tag.label || '').toLowerCase()))
+    .map((tag) => ({
+      label: tag.label,
+      confidence: tag.confidence,
+    }))
+    .sort((a, b) => b.confidence - a.confidence);
 }
 
 // Export configuration for testing
@@ -451,6 +653,8 @@ module.exports = {
   // Re-export component modules for direct access if needed
   components: {
     clap,
+    panns,
+    genreClassifier,
     audioAnalysis,
   },
 };
