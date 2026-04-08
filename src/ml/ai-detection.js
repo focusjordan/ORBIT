@@ -27,6 +27,7 @@
 const clap = require('./clap');
 const aiKnn = require('./ai-knn');
 const audioAnalysis = require('./audio-analysis');
+const silentcipher = require('./silentcipher');
 const runtimeConfig = require('../config');
 
 // ============================================================================
@@ -54,6 +55,16 @@ const AI_DETECTION_CONFIG = {
     knn: 0.08,
   },
 
+  // V3 weights (CLAP demoted, watermark detection added)
+  weightsV3: {
+    semantic: 0.08,
+    anomaly: 0.27,
+    metadata: 0.15,
+    catalog: 0.22,
+    watermark: 0.20,
+    knn: 0.08,
+  },
+
   // Thresholds for recommendations
   thresholds: {
     likelyAI: 0.55,
@@ -64,27 +75,38 @@ const AI_DETECTION_CONFIG = {
     likelyAI: 0.58,
     review: 0.34,
   },
+
+  thresholdsV3: {
+    likelyAI: 0.55,
+    review: 0.30,
+  },
   
   // Anomaly detection thresholds
   anomalyThresholds: {
     perfectTempo: 0.98,
     perfectKey: 0.95,
-    lowDynamicRange: 4,
-    lowHarmonicity: 0.25,
-    highLoopRepetition: 0.82,
+    lowDynamicRange: 6,
+    lowHarmonicity: 0.35,
+    highLoopRepetition: 0.65,
     highTempoStability: 0.94,
-    lowCrestFactor: 4.0,
-    lowSpectralCentroidCv: 0.15,
-    lowSpectralBandwidthCv: 0.12,
-    steepSpectralRolloff: 0.08,
-    lowSpectralFluxCv: 0.35,
-    lowZcrCv: 0.25,
-    lowMfccVariance: 15.0,
-    lowChromaEntropy: 0.75,
-    flatEnergyArc: 0.0001,
-    checkerboardPeak: 0.25,
-    lowSubbandEntropy: 0.6,
-    hfHarmonicAnomaly: 0.7,
+    lowCrestFactor: 4.5,
+    lowSpectralCentroidCv: 0.30,
+    lowSpectralBandwidthCv: 0.25,
+    steepSpectralRolloff: 0.15,
+    lowSpectralFluxCv: 0.55,
+    lowZcrCv: 0.45,
+    lowMfccVariance: 700.0,
+    lowChromaEntropy: 0.88,
+    flatEnergyArc: 0.0005,
+    checkerboardPeak: 0.65,
+    lowSubbandEntropy: 0.78,
+    hfHarmonicAnomaly: 0.50,
+    preEchoRatio: 0.15,
+    hfPhaseVariance: 2.5,
+    msCoherenceLow: 0.4,
+    msCoherenceDropRatio: 0.35,
+    pitchJitterClean: 0.5,
+    noiseFloorAutocorr: 0.35,
   },
   
   // Duration patterns (in seconds) typical of AI generators
@@ -102,17 +124,37 @@ const AI_DETECTION_CONFIG = {
 
   // Known AI generator encoder/format fingerprints
   aiEncoderSignatures: [
-    { pattern: /suno/i, generator: 'Suno' },
-    { pattern: /udio/i, generator: 'Udio' },
-    { pattern: /mubert/i, generator: 'Mubert' },
-    { pattern: /soundraw/i, generator: 'SoundRaw' },
-    { pattern: /aiva/i, generator: 'AIVA' },
-    { pattern: /boomy/i, generator: 'Boomy' },
-    { pattern: /beatoven/i, generator: 'Beatoven' },
-    { pattern: /loudly/i, generator: 'Loudly' },
+    { pattern: /\bsuno\b/i, generator: 'Suno' },
+    { pattern: /\budio\b/i, generator: 'Udio' },
+    { pattern: /\bmubert\b/i, generator: 'Mubert' },
+    { pattern: /\bsoundraw\b/i, generator: 'SoundRaw' },
+    { pattern: /\baiva\b/i, generator: 'AIVA' },
+    { pattern: /\bboomy\b/i, generator: 'Boomy' },
+    { pattern: /\bbeatoven\b/i, generator: 'Beatoven' },
+    { pattern: /\bloudly\b/i, generator: 'Loudly' },
   ],
 
-  // Suno: 44100/32-bit float WAV; Udio: 44100/16-bit WAV
+  // Known DAW/production software encoder signatures — evidence of human production
+  knownDawEncoders: [
+    { pattern: /\bFL Studio\b/i, daw: 'FL Studio' },
+    { pattern: /\bLogic Pro\b/i, daw: 'Logic Pro' },
+    { pattern: /\bPro Tools\b/i, daw: 'Pro Tools' },
+    { pattern: /\bAbleton\b/i, daw: 'Ableton Live' },
+    { pattern: /\bCubase\b/i, daw: 'Cubase' },
+    { pattern: /\bReaper\b/i, daw: 'Reaper' },
+    { pattern: /\bStudio One\b/i, daw: 'Studio One' },
+    { pattern: /\bGarageBand\b/i, daw: 'GarageBand' },
+    { pattern: /\bAudacity\b/i, daw: 'Audacity' },
+    { pattern: /\bAdobe Audition\b/i, daw: 'Adobe Audition' },
+    { pattern: /\bBitwig\b/i, daw: 'Bitwig' },
+    { pattern: /\bReason\b/i, daw: 'Reason' },
+    { pattern: /\bLAME\b/i, daw: 'LAME (encoder)' },
+    { pattern: /\bffmpeg\b/i, daw: 'FFmpeg' },
+    { pattern: /\bSoundForge\b/i, daw: 'Sound Forge' },
+  ],
+
+  // Format combos are no longer standalone signals — standard DAW export formats
+  // overlap with AI generators. Only used as corroboration when paired with other evidence.
   aiFormatCombos: [
     { sample_rate: 44100, bits: 32, sample_fmt: 'flt', generator: 'Suno' },
     { sample_rate: 44100, bits: 32, sample_fmt: 'f32le', generator: 'Suno' },
@@ -239,6 +281,7 @@ function resolveFeatureFlags(overrides = {}) {
     promptsV2Enabled: overrides.promptsV2Enabled ?? cfg.promptsV2Enabled ?? false,
     metadataV2Enabled: overrides.metadataV2Enabled ?? cfg.metadataV2Enabled ?? false,
     crossSignalV2Enabled: overrides.crossSignalV2Enabled ?? cfg.crossSignalV2Enabled ?? false,
+    forensicsV3Enabled: overrides.forensicsV3Enabled ?? cfg.forensicsV3Enabled ?? false,
   };
 }
 
@@ -339,7 +382,7 @@ async function probeAIGenerated(input, options = {}) {
  * @returns {{anomalyScore: number, flags: string[], details: Object}}
  */
 function checkAudioAnomalies(analysisResult, options = {}) {
-  const { v2Enabled = false } = options;
+  const { v2Enabled = false, forensicsV3Enabled = false } = options;
   const flags = [];
   const details = {};
   let anomalyScore = 0;
@@ -525,6 +568,37 @@ function checkAudioAnomalies(analysisResult, options = {}) {
         anomalyScore += 0.05;
       }
     }
+
+    if (forensicsV3Enabled) {
+      const preEcho = forensics.pre_echo;
+      if (preEcho && preEcho.available && preEcho.has_pre_echo) {
+        flags.push('PRE_ECHO_DETECTED');
+        details.pre_echo_ratio = preEcho.mean_pre_echo_ratio;
+        anomalyScore += 0.18;
+      }
+
+      const hfPhase = forensics.hf_phase_incoherence;
+      if (hfPhase && hfPhase.available && hfPhase.hf_incoherent) {
+        flags.push('HF_PHASE_INCOHERENCE');
+        details.hf_phase_derivative_variance = hfPhase.hf_mean_bin_variance;
+        anomalyScore += 0.20;
+      }
+
+      const msPhase = forensics.ms_phase_coherence;
+      if (msPhase && msPhase.available && msPhase.ms_anomalous) {
+        flags.push('MS_PHASE_ANOMALY');
+        details.ms_coherence = msPhase.mean_coherence;
+        details.ms_coherence_drop_ratio = msPhase.coherence_drop_ratio;
+        anomalyScore += 0.15;
+      }
+
+      const jitter = forensics.pitch_jitter;
+      if (jitter && jitter.available && jitter.perfect_vibrato) {
+        flags.push('PERFECT_VIBRATO');
+        details.f0_accel_variance = jitter.mean_f0_accel_variance;
+        anomalyScore += 0.12;
+      }
+    }
   }
   
   return {
@@ -630,7 +704,7 @@ function checkMetadataPatterns(metadata, durationSeconds, options = {}) {
   if (metadata) {
     if (!metadata.isrc && !metadata.upc) {
       flags.push('NO_IDENTIFIERS');
-      suspicionScore += 0.05;
+      suspicionScore += 0.02;
     }
   }
 
@@ -645,19 +719,42 @@ function checkMetadataPatterns(metadata, durationSeconds, options = {}) {
     // --- Encoder / software tag scanning ---
     const fileMeta = options.fileMetadata || {};
     const encoderFields = [fileMeta.encoder, fileMeta.encoding_tool, fileMeta.software].filter(Boolean);
+
+    let dawDetected = null;
+    let aiEncoderDetected = null;
+
     for (const field of encoderFields) {
-      for (const sig of AI_DETECTION_CONFIG.aiEncoderSignatures) {
-        if (sig.pattern.test(field)) {
-          flags.push('AI_ENCODER_SIGNATURE');
-          details.encoder_match = { field, generator: sig.generator };
-          suspicionScore += 0.20;
-          break;
+      if (!aiEncoderDetected) {
+        for (const sig of AI_DETECTION_CONFIG.aiEncoderSignatures) {
+          if (sig.pattern.test(field)) {
+            aiEncoderDetected = { field, generator: sig.generator };
+            break;
+          }
         }
       }
-      if (flags.includes('AI_ENCODER_SIGNATURE')) break;
+      if (!dawDetected) {
+        for (const daw of AI_DETECTION_CONFIG.knownDawEncoders) {
+          if (daw.pattern.test(field)) {
+            dawDetected = { field, daw: daw.daw };
+            break;
+          }
+        }
+      }
     }
 
-    // --- Sample rate + bit depth combo matching (Suno/Udio fingerprints) ---
+    if (aiEncoderDetected) {
+      flags.push('AI_ENCODER_SIGNATURE');
+      details.encoder_match = aiEncoderDetected;
+      suspicionScore += 0.20;
+    } else if (dawDetected) {
+      flags.push('DAW_ENCODER_DETECTED');
+      details.daw_match = dawDetected;
+      suspicionScore -= 0.10;
+    }
+
+    // --- Format combo: only informational, not scored independently ---
+    // Standard DAW export formats (44.1kHz/32-bit, 44.1kHz/16-bit) overlap with
+    // AI generators. Record the match for telemetry but don't add to score.
     const sampleRate = Number(fileMeta.sample_rate || metadata.sample_rate || 0);
     const bitDepth = Number(fileMeta.bits_per_raw_sample || fileMeta.bits_per_sample || metadata.bit_depth || 0);
     const sampleFmt = fileMeta.sample_fmt || '';
@@ -667,23 +764,9 @@ function checkMetadataPatterns(metadata, durationSeconds, options = {}) {
         const bitsMatch = combo.bits === bitDepth;
         const fmtMatch = combo.sample_fmt && sampleFmt.includes(combo.sample_fmt);
         if (rateMatch && (bitsMatch || fmtMatch)) {
-          flags.push('AI_FORMAT_COMBO_MATCH');
-          details.format_combo = { sample_rate: sampleRate, bits: bitDepth, sample_fmt: sampleFmt, generator: combo.generator };
-          suspicionScore += 0.10;
+          details.format_combo_note = { sample_rate: sampleRate, bits: bitDepth, sample_fmt: sampleFmt, possible_generator: combo.generator };
           break;
         }
-      }
-    }
-    if (!flags.includes('AI_FORMAT_COMBO_MATCH')) {
-      if (sampleRate > 0 && thresholds.suspiciousSampleRates.includes(sampleRate)) {
-        flags.push('SUSPICIOUS_SAMPLE_RATE_PROFILE');
-        details.sample_rate = sampleRate;
-        suspicionScore += 0.03;
-      }
-      if (bitDepth > 0 && thresholds.suspiciousBitDepths.includes(bitDepth)) {
-        flags.push('SUSPICIOUS_BIT_DEPTH_PROFILE');
-        details.bit_depth = bitDepth;
-        suspicionScore += 0.02;
       }
     }
 
@@ -706,7 +789,7 @@ function checkMetadataPatterns(metadata, durationSeconds, options = {}) {
       }
     } else if (!albumTitle && metadata.album_title === undefined) {
       flags.push('BLANK_ALBUM');
-      suspicionScore += 0.03;
+      suspicionScore += 0.01;
     }
 
     // --- Comment / description tag scanning ---
@@ -716,7 +799,7 @@ function checkMetadataPatterns(metadata, durationSeconds, options = {}) {
       if (commentHit.tier) {
         flags.push('AI_COMMENT_TAG');
         details.comment_match = commentHit.matched;
-        suspicionScore += commentHit.tier === 'strong' ? 0.15 : 0.08;
+        suspicionScore += commentHit.tier === 'strong' ? 0.35 : 0.15;
       }
     }
 
@@ -745,7 +828,7 @@ function checkMetadataPatterns(metadata, durationSeconds, options = {}) {
     details.contributor_count = contributorCount;
     if (contributorCount < thresholds.contributorCountMin) {
       flags.push('LOW_CONTRIBUTOR_DISCLOSURE');
-      suspicionScore += 0.04;
+      suspicionScore += 0.01;
     }
 
     if (metadata.label && metadata.catalog_number) {
@@ -834,6 +917,82 @@ function checkCatalogProvenance(catalogResult) {
 }
 
 // ============================================================================
+// SIGNAL 5: WATERMARK PRESENCE DETECTION
+// ============================================================================
+
+/**
+ * Probe audio for the presence of embedded watermarks (from AI platforms
+ * or ORBIT itself) and structured noise in the residual floor.
+ *
+ * Two sub-signals:
+ * 1. SilentCipher extraction probe -- detects any neural watermark.
+ *    An unknown watermark on a track claiming to be original human music
+ *    is a strong AI indicator.
+ * 2. Noise-floor autocorrelation (computed in Python forensics) -- detects
+ *    spread-spectrum pseudo-random carriers even from watermark schemes
+ *    SilentCipher doesn't know about.
+ *
+ * @param {string|Buffer} audioInput - Audio file path or buffer
+ * @param {Object} options
+ * @param {Object|null} options.forensicsResult - ai_forensics from audio analysis
+ * @param {boolean} options.verbose
+ * @returns {Promise<{watermarkScore: number, flags: string[], details: Object}>}
+ */
+async function checkWatermarkPresence(audioInput, options = {}) {
+  const {
+    forensicsResult = null,
+    verbose = process.env.ORBIT_ML_VERBOSE === 'true',
+  } = options;
+
+  const flags = [];
+  const details = {};
+  let watermarkScore = 0;
+
+  // Sub-signal 1: SilentCipher extraction probe
+  try {
+    const extractResult = await silentcipher.extract(audioInput, { verbose: false });
+    details.silentcipher_available = true;
+    details.silentcipher_detected = extractResult.detected;
+    details.silentcipher_confidence = extractResult.confidence || 0;
+
+    if (extractResult.detected) {
+      flags.push('UNKNOWN_WATERMARK_DETECTED');
+      watermarkScore += 0.70;
+      details.watermark_message = extractResult.message;
+
+      if (verbose) {
+        console.log('   Watermark probe: DETECTED unknown watermark');
+      }
+    }
+  } catch (err) {
+    details.silentcipher_available = false;
+    details.silentcipher_error = err.message;
+    if (verbose) {
+      console.log(`   Watermark probe: SilentCipher unavailable (${err.message})`);
+    }
+  }
+
+  // Sub-signal 2: Noise-floor autocorrelation from Python forensics
+  const noiseFloor = forensicsResult?.noise_floor_structure;
+  if (noiseFloor && noiseFloor.available) {
+    details.noise_floor_autocorr_peak = noiseFloor.residual_autocorr_peak;
+    if (noiseFloor.has_structured_noise) {
+      flags.push('STEGANOGRAPHIC_NOISE_FLOOR');
+      watermarkScore += 0.40;
+      if (verbose) {
+        console.log(`   Noise floor: structured noise detected (peak=${noiseFloor.residual_autocorr_peak})`);
+      }
+    }
+  }
+
+  return {
+    watermarkScore: Math.min(1, Math.round(watermarkScore * 1000) / 1000),
+    flags,
+    details,
+  };
+}
+
+// ============================================================================
 // COMBINED DETECTION
 // ============================================================================
 
@@ -863,7 +1022,6 @@ function checkCatalogProvenance(catalogResult) {
 async function detectAI(audioInput, options = {}) {
   const {
     metadata = {},
-    analysisResult = null,
     catalogResult = null,
     verbose = process.env.ORBIT_ML_VERBOSE === 'true',
     flags: flagOverrides = {},
@@ -871,7 +1029,19 @@ async function detectAI(audioInput, options = {}) {
 
   const featureFlags = resolveFeatureFlags(flagOverrides);
   const shouldComputeV2 = featureFlags.v2Enabled || featureFlags.shadowMode;
+  const shouldComputeV3 = featureFlags.forensicsV3Enabled;
   const startTime = Date.now();
+
+  // Auto-run audio analysis with forensics when v2/v3 is active and no analysis provided
+  let analysisResult = options.analysisResult || null;
+  if (!analysisResult && (shouldComputeV2 || shouldComputeV3)) {
+    try {
+      analysisResult = await audioAnalysis.analyze(audioInput, { aiForensics: true, maxLength: 120 });
+      if (verbose) console.log('   Auto-ran audio analysis with forensics for v2');
+    } catch (analysisErr) {
+      if (verbose) console.log(`   ⚠️ Auto-analysis failed: ${analysisErr.message}`);
+    }
+  }
 
   if (verbose) {
     console.log('🤖 AI Detection: Starting multi-signal analysis...');
@@ -898,23 +1068,27 @@ async function detectAI(audioInput, options = {}) {
     const catalogInformative = signalScores.catalog > 0 ||
       signalScores.catalogFlags?.includes('KNOWN_WORK_METADATA_MISMATCH');
     const knnInformative = typeof signalScores.knn === 'number';
+    const watermarkInformative = typeof signalScores.watermark === 'number';
 
     let wSemantic = weightingConfig.semantic || 0;
     let wAnomaly = weightingConfig.anomaly || 0;
     let wMetadata = weightingConfig.metadata || 0;
     let wCatalog = weightingConfig.catalog || 0;
     let wKnn = weightingConfig.knn || 0;
+    let wWatermark = weightingConfig.watermark || 0;
 
     if (!catalogInformative) wCatalog = 0;
     if (!knnInformative) wKnn = 0;
+    if (!watermarkInformative) wWatermark = 0;
 
-    const sum = wSemantic + wAnomaly + wMetadata + wCatalog + wKnn;
+    const sum = wSemantic + wAnomaly + wMetadata + wCatalog + wKnn + wWatermark;
     if (sum > 0) {
       wSemantic /= sum;
       wAnomaly /= sum;
       wMetadata /= sum;
       wCatalog /= sum;
       wKnn /= sum;
+      wWatermark /= sum;
     }
 
     const weighted =
@@ -922,20 +1096,36 @@ async function detectAI(audioInput, options = {}) {
       (signalScores.anomaly * wAnomaly) +
       (signalScores.metadata * wMetadata) +
       (signalScores.catalog * wCatalog) +
-      ((signalScores.knn || 0) * wKnn);
+      ((signalScores.knn || 0) * wKnn) +
+      ((signalScores.watermark || 0) * wWatermark);
 
     let scoreFloor = 0;
     if (floorInputs) {
       const metaFlags = floorInputs.metaFlags || [];
       const anomalyFlags = floorInputs.anomalyFlags || [];
       const forensicHits = anomalyFlags.filter(f =>
-        ['FREQ_CUTOFF_16K', 'LOW_PHASE_ENTROPY', 'SPECTRAL_SMEARING', 'METRONOMIC_TIMING'].includes(f));
-      if (metaFlags.includes('AI_SELF_DECLARED') && forensicHits.length >= 1) {
-        scoreFloor = 0.75;
-      } else if (metaFlags.includes('AI_SELF_DECLARED')) {
-        scoreFloor = 0.60;
+        ['FREQ_CUTOFF_16K', 'LOW_PHASE_ENTROPY', 'SPECTRAL_SMEARING', 'METRONOMIC_TIMING',
+         'LOW_CREST_FACTOR', 'LOW_SPECTRAL_CENTROID_VARIANCE', 'LOW_SPECTRAL_BANDWIDTH_VARIANCE',
+         'LOW_SPECTRAL_FLUX_VARIANCE', 'LOW_ZCR_VARIANCE', 'LOW_MFCC_VARIANCE',
+         'LOW_CHROMA_ENTROPY', 'FLAT_ENERGY_ARC', 'LOW_SUBBAND_ENTROPY',
+         'HF_HARMONIC_ANOMALY', 'HIGH_TEMPO_STABILITY', 'HIGH_LOOP_REPETITION',
+         'PRE_ECHO_DETECTED', 'HF_PHASE_INCOHERENCE', 'MS_PHASE_ANOMALY', 'PERFECT_VIBRATO'].includes(f));
+
+      const watermarkFlags = floorInputs.watermarkFlags || [];
+
+      // Definitive: file metadata literally declares AI origin
+      if (metaFlags.includes('AI_COMMENT_TAG') || metaFlags.includes('AI_SELF_DECLARED') || metaFlags.includes('AI_ENCODER_SIGNATURE')) {
+        scoreFloor = 0.90;
+      } else if (watermarkFlags.includes('UNKNOWN_WATERMARK_DETECTED')) {
+        scoreFloor = 0.65;
       } else if (metaFlags.includes('AI_TEXT_INDICATOR') && forensicHits.length >= 1) {
+        scoreFloor = 0.65;
+      } else if (watermarkFlags.includes('STEGANOGRAPHIC_NOISE_FLOOR') && forensicHits.length >= 1) {
+        scoreFloor = 0.60;
+      } else if (metaFlags.includes('AI_TEXT_INDICATOR')) {
         scoreFloor = 0.55;
+      } else if (forensicHits.length >= 3) {
+        scoreFloor = 0.50;
       } else if (forensicHits.length >= 2) {
         scoreFloor = 0.45;
       }
@@ -959,6 +1149,7 @@ async function detectAI(audioInput, options = {}) {
         metadata: wMetadata,
         catalog: wCatalog,
         knn: wKnn,
+        watermark: wWatermark,
       },
       score_floor_applied: scoreFloor > weighted ? scoreFloor : null,
     };
@@ -1127,8 +1318,80 @@ async function detectAI(audioInput, options = {}) {
       }
     }
 
-    const activeModel = featureFlags.v2Enabled ? 'v2' : 'legacy';
-    if (featureFlags.v2Enabled && v2Result) {
+    // ----- V3 Forensics Path -----
+    let v3Result = null;
+    if (shouldComputeV3) {
+      const anomalyV3 = analysisResult
+        ? checkAudioAnomalies(analysisResult, { v2Enabled: true, forensicsV3Enabled: true })
+        : { anomalyScore: 0, flags: ['NO_ANALYSIS_PROVIDED'], details: {} };
+
+      const forensicsData = analysisResult?.ai_forensics || null;
+
+      const watermarkSignal = await checkWatermarkPresence(audioInput, {
+        forensicsResult: forensicsData,
+        verbose,
+      });
+
+      const semanticV3 = v2Result
+        ? v2Result.signals.semantic
+        : await probeAIGenerated(audioInput, {
+            verbose: false,
+            useV2Prompts: featureFlags.promptsV2Enabled,
+          }).catch((error) => ({ aiScore: 0, error: error.message, flags: ['SEMANTIC_V3_ERROR'] }));
+
+      const metadataV3 = v2Result
+        ? v2Result.signals.metadata
+        : checkMetadataPatterns(metadata, duration, {
+            metadataV2Enabled: featureFlags.metadataV2Enabled,
+            crossSignalV2Enabled: featureFlags.crossSignalV2Enabled,
+            analysisResult,
+          });
+
+      const knnV3 = v2Result?.signals?.knn || { available: false, status: 'disabled' };
+
+      const v3Aggregate = aggregateScores(
+        {
+          semantic: semanticV3.aiScore || 0,
+          anomaly: anomalyV3.anomalyScore || 0,
+          metadata: metadataV3.suspicionScore || 0,
+          catalog: catalogScore,
+          knn: knnV3.available ? knnV3.aiLikelihood : null,
+          watermark: watermarkSignal.watermarkScore,
+          catalogFlags: catalogSignal.flags || [],
+        },
+        AI_DETECTION_CONFIG.weightsV3,
+        {
+          metaFlags: metadataV3.flags || [],
+          anomalyFlags: anomalyV3.flags || [],
+          watermarkFlags: watermarkSignal.flags || [],
+        },
+        AI_DETECTION_CONFIG.thresholdsV3
+      );
+
+      v3Result = {
+        score: v3Aggregate.score,
+        recommendation: v3Aggregate.recommendation,
+        weights_used: v3Aggregate.weights_used,
+        score_floor_applied: v3Aggregate.score_floor_applied,
+        signals: {
+          semantic: semanticV3,
+          anomalies: anomalyV3,
+          metadata: metadataV3,
+          catalog: catalogSignal,
+          knn: knnV3,
+          watermark: watermarkSignal,
+        },
+      };
+    }
+
+    const activeModel = shouldComputeV3 ? 'v3' : (featureFlags.v2Enabled ? 'v2' : 'legacy');
+    if (shouldComputeV3 && v3Result) {
+      result.score = v3Result.score;
+      result.recommendation = v3Result.recommendation;
+      result.signals = v3Result.signals;
+      result.weights_used = v3Result.weights_used;
+      if (v3Result.score_floor_applied !== null) result.score_floor_applied = v3Result.score_floor_applied;
+    } else if (featureFlags.v2Enabled && v2Result) {
       result.score = v2Result.score;
       result.recommendation = v2Result.recommendation;
       result.signals = v2Result.signals;
@@ -1157,6 +1420,10 @@ async function detectAI(audioInput, options = {}) {
       result.v2 = v2Result;
     }
 
+    if (v3Result) {
+      result.v3 = v3Result;
+    }
+
     result.telemetry = {
       mode: activeModel,
       active_flags: featureFlags,
@@ -1170,6 +1437,13 @@ async function detectAI(audioInput, options = {}) {
           score: v2Result.score,
           recommendation: v2Result.recommendation,
           weights_used: v2Result.weights_used,
+        }
+        : null,
+      v3: v3Result
+        ? {
+          score: v3Result.score,
+          recommendation: v3Result.recommendation,
+          weights_used: v3Result.weights_used,
         }
         : null,
       per_signal_contributions: {
@@ -1186,6 +1460,16 @@ async function detectAI(audioInput, options = {}) {
             metadata: Math.round((v2Result.signals.metadata?.suspicionScore || 0) * v2Result.weights_used.metadata * 1000) / 1000,
             catalog: Math.round((v2Result.signals.catalog?.provenanceScore || 0) * v2Result.weights_used.catalog * 1000) / 1000,
             knn: Math.round(((v2Result.signals.knn?.aiLikelihood || 0) * v2Result.weights_used.knn) * 1000) / 1000,
+          }
+          : null,
+        v3: v3Result
+          ? {
+            semantic: Math.round((v3Result.signals.semantic?.aiScore || 0) * v3Result.weights_used.semantic * 1000) / 1000,
+            anomaly: Math.round((v3Result.signals.anomalies?.anomalyScore || 0) * v3Result.weights_used.anomaly * 1000) / 1000,
+            metadata: Math.round((v3Result.signals.metadata?.suspicionScore || 0) * v3Result.weights_used.metadata * 1000) / 1000,
+            catalog: Math.round((v3Result.signals.catalog?.provenanceScore || 0) * v3Result.weights_used.catalog * 1000) / 1000,
+            knn: Math.round(((v3Result.signals.knn?.aiLikelihood || 0) * (v3Result.weights_used.knn || 0)) * 1000) / 1000,
+            watermark: Math.round(((v3Result.signals.watermark?.watermarkScore || 0) * (v3Result.weights_used.watermark || 0)) * 1000) / 1000,
           }
           : null,
       },
@@ -1293,6 +1577,7 @@ module.exports = {
   checkAudioAnomalies,
   checkMetadataPatterns,
   checkCatalogProvenance,
+  checkWatermarkPresence,
   scanTextForAIIndicators,
   
   // Utility functions

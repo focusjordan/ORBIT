@@ -754,7 +754,7 @@ def measure_checkerboard_artifacts(y, sr, n_fft=2048):
         'available': True,
         'peak_autocorr': round(peak_val, 4),
         'mean_autocorr': round(mean_val, 4),
-        'has_artifacts': peak_val > 0.25,
+        'has_artifacts': peak_val > 0.55,
     }
 
 
@@ -795,6 +795,270 @@ def measure_subband_energy_distribution(y, sr, n_fft=4096):
         'distribution_entropy': round(float(dist_entropy), 4),
         'normalized_entropy': round(float(dist_entropy / max_ent), 4) if max_ent > 0 else 0.0,
         'low_entropy': dist_entropy < (max_ent * 0.6),
+    }
+
+
+def measure_pre_echo(y, sr):
+    """
+    Detect pre-echo / transient smearing from vocoder reconstruction.
+
+    Acoustic instruments create near-instantaneous step-function transients.
+    Latent diffusion vocoders reconstruct waveforms through denoising steps,
+    causing energy to bleed backward in time just before the attack.
+
+    For each percussive onset we measure the ratio of energy in a short window
+    before the onset to the energy after it.  Human audio: ratio near zero.
+    AI audio: anomalously high ratio due to reverse-time smearing.
+    """
+    import librosa
+    import numpy as np
+
+    onset_frames = librosa.onset.onset_detect(y=y, sr=sr, units='samples')
+    if len(onset_frames) < 3:
+        return {'available': False, 'reason': 'too_few_onsets'}
+
+    pre_window = int(0.010 * sr)   # 10 ms before onset
+    post_window = int(0.010 * sr)  # 10 ms after onset
+
+    ratios = []
+    for onset in onset_frames:
+        pre_start = max(0, onset - pre_window)
+        post_end = min(len(y), onset + post_window)
+        if onset - pre_start < pre_window // 2 or post_end - onset < post_window // 2:
+            continue
+        pre_energy = float(np.mean(y[pre_start:onset] ** 2))
+        post_energy = float(np.mean(y[onset:post_end] ** 2))
+        if post_energy > 1e-12:
+            ratios.append(pre_energy / post_energy)
+
+    if len(ratios) < 3:
+        return {'available': False, 'reason': 'insufficient_valid_onsets'}
+
+    mean_ratio = float(np.mean(ratios))
+    median_ratio = float(np.median(ratios))
+    return {
+        'available': True,
+        'mean_pre_echo_ratio': round(mean_ratio, 6),
+        'median_pre_echo_ratio': round(median_ratio, 6),
+        'onset_count': len(ratios),
+        'has_pre_echo': mean_ratio > 0.15,
+    }
+
+
+def measure_hf_phase_incoherence(y, sr, n_fft=4096):
+    """
+    Measure phase derivative variance specifically above 8 kHz.
+
+    AI models synthesise magnitude spectrograms well but approximate
+    the phase.  Above 8 kHz, where phase shifts rapidly, this leads to
+    instantaneous-frequency wrapping errors that manifest as high variance
+    in the temporal phase derivative.
+
+    Human audio shows structured phase correlation from physical resonance;
+    AI audio shows chaotic, high-variance noise in these bins.
+    """
+    import librosa
+    import numpy as np
+
+    nyquist = sr / 2
+    if nyquist < 10000:
+        return {'available': False, 'reason': f'sample_rate {sr} too low for HF analysis'}
+
+    D = librosa.stft(y, n_fft=n_fft)
+    freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+    hf_mask = freqs >= 8000
+
+    phase = np.angle(D[hf_mask, :])
+    if phase.shape[1] < 4:
+        return {'available': False, 'reason': 'insufficient_frames'}
+
+    unwrapped = np.unwrap(phase, axis=1)
+    phase_deriv = np.diff(unwrapped, axis=1)
+    variance = float(np.var(phase_deriv))
+    mean_var_per_bin = float(np.mean(np.var(phase_deriv, axis=1)))
+
+    return {
+        'available': True,
+        'hf_phase_derivative_variance': round(variance, 6),
+        'hf_mean_bin_variance': round(mean_var_per_bin, 6),
+        'hf_incoherent': mean_var_per_bin > 2.5,
+    }
+
+
+def measure_ms_phase_coherence(y_stereo, sr, n_fft=2048):
+    """
+    Mid/Side cross-spectral phase coherence for stereo files.
+
+    In real recordings, L and R channels share correlated reverb tails
+    because they exist in a common acoustic space.  AI generators often
+    produce L/R with mathematically decorrelated phase relationships.
+
+    Expects y_stereo with shape (2, N).  If the file is mono, skip.
+    """
+    import librosa
+    import numpy as np
+
+    if y_stereo is None or y_stereo.ndim != 2 or y_stereo.shape[0] < 2:
+        return {'available': False, 'reason': 'mono_or_invalid'}
+
+    left = y_stereo[0]
+    right = y_stereo[1]
+    mid = (left + right) / 2.0
+    side = (left - right) / 2.0
+
+    side_energy = float(np.mean(side ** 2))
+    if side_energy < 1e-10:
+        return {'available': False, 'reason': 'effectively_mono'}
+
+    D_mid = librosa.stft(mid, n_fft=n_fft)
+    D_side = librosa.stft(side, n_fft=n_fft)
+
+    if D_mid.shape[1] < 4:
+        return {'available': False, 'reason': 'insufficient_frames'}
+
+    csd = D_mid * np.conj(D_side)
+    magnitude = np.abs(csd) + 1e-10
+    coherence = np.abs(np.mean(csd / magnitude, axis=0))
+    mean_coherence = float(np.mean(coherence))
+
+    drops = int(np.sum(coherence < 0.3))
+    drop_ratio = drops / len(coherence)
+
+    return {
+        'available': True,
+        'mean_coherence': round(mean_coherence, 4),
+        'coherence_drop_ratio': round(float(drop_ratio), 4),
+        'coherence_drops': drops,
+        'ms_anomalous': mean_coherence < 0.4 or drop_ratio > 0.35,
+    }
+
+
+def measure_pitch_jitter(y, sr):
+    """
+    Analyse vocal pitch micro-variations (jitter) in sustained notes.
+
+    AI models generate vibrato from smooth latent representations —
+    often a near-perfect LFO.  Human vocal cords are driven by muscles,
+    introducing micro-variations (jitter/shimmer) into the vibrato.
+
+    We extract the f0 contour with pYIN, find sustained pitched segments,
+    and measure the second derivative of f0 (pitch acceleration).  In AI
+    vocals the second derivative is remarkably clean; in human vocals it
+    carries a band of neuromuscular noise.
+    """
+    import librosa
+    import numpy as np
+
+    f0, voiced_flag, _ = librosa.pyin(
+        y, fmin=librosa.note_to_hz('C2'),
+        fmax=librosa.note_to_hz('C7'), sr=sr
+    )
+
+    if f0 is None or len(f0) < 10:
+        return {'available': False, 'reason': 'insufficient_f0'}
+
+    voiced_mask = voiced_flag & ~np.isnan(f0)
+    voiced_indices = np.where(voiced_mask)[0]
+    if len(voiced_indices) < 10:
+        return {'available': False, 'reason': 'insufficient_voiced_frames'}
+
+    segments = []
+    seg_start = voiced_indices[0]
+    for i in range(1, len(voiced_indices)):
+        if voiced_indices[i] != voiced_indices[i - 1] + 1:
+            seg_len = voiced_indices[i - 1] - seg_start + 1
+            if seg_len >= 20:
+                segments.append((seg_start, voiced_indices[i - 1] + 1))
+            seg_start = voiced_indices[i]
+    seg_len = voiced_indices[-1] - seg_start + 1
+    if seg_len >= 20:
+        segments.append((seg_start, voiced_indices[-1] + 1))
+
+    if len(segments) == 0:
+        return {'available': False, 'reason': 'no_sustained_segments'}
+
+    accel_variances = []
+    for start, end in segments:
+        seg_f0 = f0[start:end]
+        if np.any(np.isnan(seg_f0)):
+            continue
+        d2 = np.diff(seg_f0, n=2)
+        if len(d2) >= 4:
+            accel_variances.append(float(np.var(d2)))
+
+    if len(accel_variances) == 0:
+        return {'available': False, 'reason': 'no_valid_segments'}
+
+    mean_accel_var = float(np.mean(accel_variances))
+    has_vibrato = any(v > 0.01 for v in accel_variances)
+
+    return {
+        'available': True,
+        'mean_f0_accel_variance': round(mean_accel_var, 6),
+        'segment_count': len(accel_variances),
+        'vibrato_detected': has_vibrato,
+        'perfect_vibrato': has_vibrato and mean_accel_var < 0.5,
+    }
+
+
+def measure_noise_floor_structure(y, sr, n_fft=4096):
+    """
+    Detect structured pseudo-random noise in the residual noise floor.
+
+    AI platform watermarks (Suno, Udio, etc.) embed spread-spectrum
+    pseudo-random sequences into the audio.  After comb-filtering out
+    musical harmonics, human noise floors are brownian/pink (no repeating
+    structure), while watermarked audio shows autocorrelation peaks from
+    the repeating pseudo-random carrier.
+
+    This does NOT decode the watermark — it only detects its presence.
+    """
+    import librosa
+    import numpy as np
+
+    S = librosa.stft(y, n_fft=n_fft)
+    mag = np.abs(S)
+    phase = np.angle(S)
+
+    median_mag = np.median(mag, axis=1, keepdims=True)
+    harmonic_mask = mag > (median_mag * 3.0)
+    residual_mag = mag.copy()
+    residual_mag[harmonic_mask] = 0.0
+
+    residual = librosa.istft(residual_mag * np.exp(1j * phase), length=len(y))
+
+    frame_len = int(0.025 * sr)
+    hop = frame_len // 2
+    n_frames = max(1, (len(residual) - frame_len) // hop)
+    if n_frames < 16:
+        return {'available': False, 'reason': 'insufficient_residual_frames'}
+
+    frames = np.array([
+        residual[i * hop: i * hop + frame_len]
+        for i in range(n_frames)
+    ])
+
+    frame_power = np.mean(frames ** 2, axis=1)
+    if np.max(frame_power) < 1e-14:
+        return {'available': False, 'reason': 'silent_residual'}
+
+    ac = np.correlate(frame_power - np.mean(frame_power),
+                      frame_power - np.mean(frame_power), mode='full')
+    ac = ac[len(ac) // 2:]
+    ac_norm = ac / (ac[0] + 1e-15)
+
+    peak_region = ac_norm[2:min(len(ac_norm), 128)]
+    if len(peak_region) < 4:
+        return {'available': False, 'reason': 'insufficient_autocorr'}
+
+    peak_val = float(np.max(peak_region))
+    mean_val = float(np.mean(np.abs(peak_region)))
+
+    return {
+        'available': True,
+        'residual_autocorr_peak': round(peak_val, 4),
+        'residual_autocorr_mean': round(mean_val, 4),
+        'has_structured_noise': peak_val > 0.35,
     }
 
 
@@ -865,6 +1129,16 @@ def analyze_audio(audio_path, max_length_seconds=120, ai_forensics=False):
     target_sr = 44100 if ai_forensics else 22050
     y, sr = librosa.load(audio_path, sr=target_sr, mono=True)
     
+    # Load stereo version for M/S coherence analysis (forensics only)
+    y_stereo = None
+    if ai_forensics:
+        try:
+            y_stereo_raw, _ = librosa.load(audio_path, sr=target_sr, mono=False)
+            if y_stereo_raw.ndim == 2 and y_stereo_raw.shape[0] >= 2:
+                y_stereo = y_stereo_raw
+        except Exception:
+            pass  # Fall back to mono-only analysis
+    
     # Calculate duration from the full signal before truncation
     duration = len(y) / sr
     
@@ -872,6 +1146,8 @@ def analyze_audio(audio_path, max_length_seconds=120, ai_forensics=False):
     max_samples = int(max_length_seconds * sr)
     if len(y) > max_samples:
         y = y[:max_samples]
+    if y_stereo is not None and y_stereo.shape[1] > max_samples:
+        y_stereo = y_stereo[:, :max_samples]
     
     # Core analyses
     bpm_result = detect_bpm(y, sr)
@@ -913,6 +1189,11 @@ def analyze_audio(audio_path, max_length_seconds=120, ai_forensics=False):
             'energy_arc': measure_energy_arc(y, sr),
             'checkerboard': measure_checkerboard_artifacts(y, sr),
             'subband_energy': measure_subband_energy_distribution(y, sr),
+            'pre_echo': measure_pre_echo(y, sr),
+            'hf_phase_incoherence': measure_hf_phase_incoherence(y, sr),
+            'ms_phase_coherence': measure_ms_phase_coherence(y_stereo, sr),
+            'pitch_jitter': measure_pitch_jitter(y, sr),
+            'noise_floor_structure': measure_noise_floor_structure(y, sr),
         }
     
     return result

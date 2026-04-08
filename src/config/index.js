@@ -102,6 +102,7 @@ const config = {
     promptsV2Enabled: parseBooleanEnv('ORBIT_AI_PROMPTS_V2_ENABLED', false),
     metadataV2Enabled: parseBooleanEnv('ORBIT_AI_METADATA_V2_ENABLED', false),
     crossSignalV2Enabled: parseBooleanEnv('ORBIT_AI_CROSSSIGNAL_V2_ENABLED', false),
+    forensicsV3Enabled: parseBooleanEnv('ORBIT_AI_FORENSICS_V3_ENABLED', false),
   },
 };
 

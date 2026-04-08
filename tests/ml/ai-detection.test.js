@@ -461,17 +461,25 @@ async function runMetadataPatternTests() {
       fileMetadata: { encoder: 'Suno Audio v3.5', sample_rate: 44100, bits_per_raw_sample: 32, sample_fmt: 'flt' },
     });
     assertIncludes(result.flags, 'AI_ENCODER_SIGNATURE');
-    assertIncludes(result.flags, 'AI_FORMAT_COMBO_MATCH');
-    assertGreaterThan(result.suspicionScore, 0.25);
+    assertGreaterThan(result.suspicionScore, 0.15);
   });
 
-  runner.test('v2: detects Udio format combo', () => {
+  runner.test('v2: format combo recorded as note, not scored', () => {
     const result = aiDetection.checkMetadataPatterns({}, 200, {
       metadataV2Enabled: true,
       fileMetadata: { sample_rate: 44100, bits_per_raw_sample: 16, sample_fmt: 's16' },
     });
-    assertIncludes(result.flags, 'AI_FORMAT_COMBO_MATCH');
-    assertEqual(result.details.format_combo.generator, 'Udio');
+    assertFalse(result.flags.includes('AI_FORMAT_COMBO_MATCH'));
+    assertEqual(result.details.format_combo_note.possible_generator, 'Udio');
+  });
+
+  runner.test('v2: detects known DAW encoder as human evidence', () => {
+    const result = aiDetection.checkMetadataPatterns({}, 200, {
+      metadataV2Enabled: true,
+      fileMetadata: { encoder: 'FL Studio 20' },
+    });
+    assertIncludes(result.flags, 'DAW_ENCODER_DETECTED');
+    assertFalse(result.flags.includes('AI_ENCODER_SIGNATURE'));
   });
 
   runner.test('v2: does NOT flag non-AI encoder', () => {
@@ -531,6 +539,7 @@ async function runMetadataPatternTests() {
       },
     });
     assertFalse(result.flags.includes('AI_ENCODER_SIGNATURE'));
+    assertFalse(result.flags.includes('DAW_ENCODER_DETECTED'));
     assertFalse(result.flags.includes('AI_COMMENT_TAG'));
     assertFalse(result.flags.includes('CREATION_UPLOAD_PROXIMITY'));
   });
@@ -737,6 +746,235 @@ async function runIntegrationTests() {
 }
 
 // ============================================================================
+// V3 FORENSICS TESTS
+// ============================================================================
+
+async function runV3ForensicsTests() {
+  const runner = new TestRunner('V3 Forensics & Watermark Detection');
+
+  // --- Weight / threshold config ---
+
+  runner.test('weightsV3 sums to 1.0', () => {
+    const w = aiDetection.config.weightsV3;
+    const sum = w.semantic + w.anomaly + w.metadata + w.catalog + w.watermark + w.knn;
+    assertApproxEqual(sum, 1.0, 0.001, 'V3 weights should sum to 1.0: ');
+  });
+
+  runner.test('thresholdsV3 has valid likelyAI > review', () => {
+    const t = aiDetection.config.thresholdsV3;
+    assertDefined(t.likelyAI);
+    assertDefined(t.review);
+    assertGreaterThan(t.likelyAI, t.review, 'likelyAI > review: ');
+  });
+
+  runner.test('weightsV3 demotes semantic below 0.10', () => {
+    assertLessOrEqual(aiDetection.config.weightsV3.semantic, 0.10);
+  });
+
+  runner.test('weightsV3 includes watermark weight', () => {
+    assertGreaterThan(aiDetection.config.weightsV3.watermark, 0);
+  });
+
+  // --- Feature flag gating ---
+
+  runner.test('resolveFeatureFlags includes forensicsV3Enabled', () => {
+    const flags = aiDetection.resolveFeatureFlags({});
+    assertDefined(flags.forensicsV3Enabled);
+    assertTypeOf(flags.forensicsV3Enabled, 'boolean');
+  });
+
+  runner.test('forensicsV3Enabled defaults to false', () => {
+    const flags = aiDetection.resolveFeatureFlags({});
+    assertFalse(flags.forensicsV3Enabled);
+  });
+
+  runner.test('forensicsV3Enabled can be overridden to true', () => {
+    const flags = aiDetection.resolveFeatureFlags({ forensicsV3Enabled: true });
+    assertTrue(flags.forensicsV3Enabled);
+  });
+
+  // --- V3 anomaly flags are v3-only ---
+
+  runner.test('V3 forensic flags do NOT fire without forensicsV3Enabled', () => {
+    const analysis = {
+      bpm: { value: 120, confidence: 0.8 },
+      key: { value: 'C major', confidence: 0.8 },
+      energy: 0.7,
+      ai_forensics: {
+        pre_echo: { available: true, mean_pre_echo_ratio: 0.25, has_pre_echo: true },
+        hf_phase_incoherence: { available: true, hf_mean_bin_variance: 3.5, hf_incoherent: true },
+        ms_phase_coherence: { available: true, mean_coherence: 0.3, coherence_drop_ratio: 0.5, ms_anomalous: true },
+        pitch_jitter: { available: true, mean_f0_accel_variance: 0.3, vibrato_detected: true, perfect_vibrato: true },
+      },
+    };
+
+    const legacy = aiDetection.checkAudioAnomalies(analysis, { v2Enabled: false, forensicsV3Enabled: false });
+    const v2Only = aiDetection.checkAudioAnomalies(analysis, { v2Enabled: true, forensicsV3Enabled: false });
+
+    const v3Flags = ['PRE_ECHO_DETECTED', 'HF_PHASE_INCOHERENCE', 'MS_PHASE_ANOMALY', 'PERFECT_VIBRATO'];
+    for (const flag of v3Flags) {
+      assertFalse(legacy.flags.includes(flag), `Legacy should NOT have ${flag}: `);
+      assertFalse(v2Only.flags.includes(flag), `V2-only should NOT have ${flag}: `);
+    }
+  });
+
+  runner.test('V3 forensic flags fire WITH forensicsV3Enabled', () => {
+    const analysis = {
+      bpm: { value: 120, confidence: 0.8 },
+      key: { value: 'C major', confidence: 0.8 },
+      energy: 0.7,
+      ai_forensics: {
+        pre_echo: { available: true, mean_pre_echo_ratio: 0.25, has_pre_echo: true },
+        hf_phase_incoherence: { available: true, hf_mean_bin_variance: 3.5, hf_incoherent: true },
+        ms_phase_coherence: { available: true, mean_coherence: 0.3, coherence_drop_ratio: 0.5, ms_anomalous: true },
+        pitch_jitter: { available: true, mean_f0_accel_variance: 0.3, vibrato_detected: true, perfect_vibrato: true },
+      },
+    };
+
+    const v3 = aiDetection.checkAudioAnomalies(analysis, { v2Enabled: true, forensicsV3Enabled: true });
+
+    const v3Flags = ['PRE_ECHO_DETECTED', 'HF_PHASE_INCOHERENCE', 'MS_PHASE_ANOMALY', 'PERFECT_VIBRATO'];
+    for (const flag of v3Flags) {
+      assertIncludes(v3.flags, flag);
+    }
+    assertGreaterThan(v3.anomalyScore, 0.5, 'V3 anomaly score should be substantial: ');
+  });
+
+  runner.test('V3 anomaly score stays bounded <= 1.0 with all signals firing', () => {
+    const analysis = {
+      bpm: { value: 120, confidence: 0.99 },
+      key: { value: 'C major', confidence: 0.99 },
+      energy: 0.5,
+      ai_forensics: {
+        pre_echo: { available: true, mean_pre_echo_ratio: 0.4, has_pre_echo: true },
+        hf_phase_incoherence: { available: true, hf_mean_bin_variance: 5.0, hf_incoherent: true },
+        ms_phase_coherence: { available: true, mean_coherence: 0.2, coherence_drop_ratio: 0.6, ms_anomalous: true },
+        pitch_jitter: { available: true, mean_f0_accel_variance: 0.2, vibrato_detected: true, perfect_vibrato: true },
+        spectral_cutoff: { available: true, cutoff_freq: 16000, has_cutoff: true },
+        phase_entropy: { available: true, mean_entropy: 1.5, low_entropy: true },
+        spectral_contrast: { available: true, mean_contrast: 8.0, low_contrast: true },
+        onset_regularity: { available: true, cv: 0.08, highly_regular: true },
+        crest_factor: { available: true, crest_factor: 2.0, low_crest: true },
+        checkerboard: { available: true, peak_autocorr: 0.7, has_artifacts: true },
+      },
+    };
+    const v3 = aiDetection.checkAudioAnomalies(analysis, { v2Enabled: true, forensicsV3Enabled: true });
+    assertLessOrEqual(v3.anomalyScore, 1.0);
+  });
+
+  // --- V3 signals are unavailable gracefully ---
+
+  runner.test('V3 handles unavailable forensic signals gracefully', () => {
+    const analysis = {
+      bpm: { value: 120, confidence: 0.8 },
+      key: { value: 'C major', confidence: 0.8 },
+      energy: 0.7,
+      ai_forensics: {
+        pre_echo: { available: false, reason: 'too_few_onsets' },
+        hf_phase_incoherence: { available: false, reason: 'sample_rate 22050 too low for HF analysis' },
+        ms_phase_coherence: { available: false, reason: 'mono_or_invalid' },
+        pitch_jitter: { available: false, reason: 'insufficient_f0' },
+      },
+    };
+    const v3 = aiDetection.checkAudioAnomalies(analysis, { v2Enabled: true, forensicsV3Enabled: true });
+    const v3Flags = ['PRE_ECHO_DETECTED', 'HF_PHASE_INCOHERENCE', 'MS_PHASE_ANOMALY', 'PERFECT_VIBRATO'];
+    for (const flag of v3Flags) {
+      assertFalse(v3.flags.includes(flag), `Unavailable signal should not produce ${flag}: `);
+    }
+  });
+
+  // --- Recalibrated CHECKERBOARD threshold ---
+
+  runner.test('recalibrated CHECKERBOARD does not fire on moderate peaks', () => {
+    const analysis = {
+      bpm: { value: 120, confidence: 0.8 },
+      key: { value: 'C major', confidence: 0.8 },
+      energy: 0.7,
+      ai_forensics: {
+        checkerboard: { available: true, peak_autocorr: 0.45, has_artifacts: false },
+      },
+    };
+    const result = aiDetection.checkAudioAnomalies(analysis, { v2Enabled: true });
+    assertFalse(result.flags.includes('CHECKERBOARD_ARTIFACTS'),
+      'peak_autocorr 0.45 should NOT trigger CHECKERBOARD_ARTIFACTS: ');
+  });
+
+  runner.test('CHECKERBOARD fires on high peaks', () => {
+    const analysis = {
+      bpm: { value: 120, confidence: 0.8 },
+      key: { value: 'C major', confidence: 0.8 },
+      energy: 0.7,
+      ai_forensics: {
+        checkerboard: { available: true, peak_autocorr: 0.75, has_artifacts: true },
+      },
+    };
+    const result = aiDetection.checkAudioAnomalies(analysis, { v2Enabled: true });
+    assertIncludes(result.flags, 'CHECKERBOARD_ARTIFACTS');
+  });
+
+  // --- checkWatermarkPresence structure ---
+
+  runner.test('checkWatermarkPresence is exported', () => {
+    assertTypeOf(aiDetection.checkWatermarkPresence, 'function');
+  });
+
+  runner.test('checkWatermarkPresence returns expected structure with no forensics', async () => {
+    const fakeBuffer = Buffer.from([0, 0, 0, 0]);
+    const result = await aiDetection.checkWatermarkPresence(fakeBuffer, {
+      forensicsResult: null,
+    });
+    assertDefined(result.watermarkScore);
+    assertTypeOf(result.watermarkScore, 'number');
+    assertTrue(Array.isArray(result.flags));
+    assertDefined(result.details);
+    assertGreaterOrEqual(result.watermarkScore, 0);
+    assertLessOrEqual(result.watermarkScore, 1);
+  });
+
+  runner.test('checkWatermarkPresence flags STEGANOGRAPHIC_NOISE_FLOOR from forensics', async () => {
+    const fakeBuffer = Buffer.from([0, 0, 0, 0]);
+    const result = await aiDetection.checkWatermarkPresence(fakeBuffer, {
+      forensicsResult: {
+        noise_floor_structure: {
+          available: true,
+          residual_autocorr_peak: 0.60,
+          has_structured_noise: true,
+        },
+      },
+    });
+    assertIncludes(result.flags, 'STEGANOGRAPHIC_NOISE_FLOOR');
+    assertGreaterThan(result.watermarkScore, 0);
+  });
+
+  runner.test('checkWatermarkPresence does NOT flag clean noise floor', async () => {
+    const fakeBuffer = Buffer.from([0, 0, 0, 0]);
+    const result = await aiDetection.checkWatermarkPresence(fakeBuffer, {
+      forensicsResult: {
+        noise_floor_structure: {
+          available: true,
+          residual_autocorr_peak: 0.15,
+          has_structured_noise: false,
+        },
+      },
+    });
+    assertFalse(result.flags.includes('STEGANOGRAPHIC_NOISE_FLOOR'));
+  });
+
+  // --- V3 anomaly thresholds exist ---
+
+  runner.test('anomalyThresholds has V3 entries', () => {
+    const at = aiDetection.config.anomalyThresholds;
+    assertDefined(at.preEchoRatio);
+    assertDefined(at.hfPhaseVariance);
+    assertDefined(at.msCoherenceLow);
+    assertDefined(at.pitchJitterClean);
+    assertDefined(at.noiseFloorAutocorr);
+  });
+
+  return runner.run();
+}
+
+// ============================================================================
 // MAIN TEST RUNNER
 // ============================================================================
 
@@ -754,6 +992,7 @@ async function main() {
   results.push(await runMetadataPatternTests());
   results.push(await runFlagResolutionTests());
   results.push(await runUtilityFunctionTests());
+  results.push(await runV3ForensicsTests());
   results.push(await runIntegrationTests());
   
   // Summary
@@ -769,6 +1008,7 @@ async function main() {
     console.log('   - Anomaly detection logic works ✓');
     console.log('   - Metadata pattern detection works ✓');
     console.log('   - Utility functions work correctly ✓');
+    console.log('   - V3 forensics & watermark detection ✓');
     console.log('   - Integration with CLAP verified ✓');
   }
   
