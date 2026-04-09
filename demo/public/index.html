@@ -1193,10 +1193,73 @@ body {
         if (!res.ok || data.error) throw new Error(data.error || 'Parse failed');
         state.ddexParsed = data;
         var html = '';
-        (data.tracks || []).forEach(function(t) {
-          html += '<div class="card" style="padding:14px"><div style="display:flex;justify-content:space-between;gap:8px"><strong>' + esc(t.title || 'Untitled') + '</strong>' + (t.isrc ? tag(t.isrc, true) : '') + '</div><div style="font-size:0.78rem;color:var(--text-dim)">' + esc(t.artist || 'N/A') + '</div></div>';
+
+        if (data.release) {
+          var r = data.release;
+          html += '<div class="card" style="padding:14px;border-color:var(--accent);margin-bottom:12px">'
+            + '<div class="card-title">Release</div>'
+            + '<div class="result-grid">'
+            + row('Title', '<strong>' + esc(r.title || 'N/A') + '</strong>')
+            + (r.artist ? row('Artist', esc(r.artist)) : '')
+            + (r.label ? row('Label', esc(r.label)) : '')
+            + (r.upc ? row('UPC', tag(r.upc, true)) : '')
+            + (r.type ? row('Type', esc(r.type)) : '')
+            + (r.release_date ? row('Release Date', esc(r.release_date)) : '')
+            + (r.parental_advisory ? row('Advisory', esc(r.parental_advisory)) : '')
+            + row('Territories', esc((data.territories || []).join(', ') || 'N/A'))
+            + row('Tracks', '<strong>' + (data.tracks || []).length + '</strong>')
+            + '</div>';
+          if (r.deal) {
+            html += '<div style="margin-top:8px;padding:8px;background:var(--surface-2);border-radius:var(--radius);font-size:0.72rem">'
+              + '<span style="font-weight:600">Deal: </span>'
+              + (r.deal.commercial_model ? esc(r.deal.commercial_model) + ' ' : '')
+              + (r.deal.usage_type ? '(' + esc(r.deal.usage_type) + ')' : '')
+              + (r.deal.start_date ? ' from ' + esc(r.deal.start_date) : '')
+              + '</div>';
+          }
+          html += '</div>';
+        }
+
+        html += '<div style="font-size:0.78rem;font-weight:600;margin:10px 0 8px">Tracks (' + (data.tracks || []).length + ')</div>';
+        (data.tracks || []).forEach(function(t, idx) {
+          var metaItems = [];
+          if (t.primary_genre) metaItems.push(tag(t.primary_genre, false));
+          if (t.duration_display) metaItems.push('<span style="font-size:0.72rem;color:var(--text-dim)">' + esc(t.duration_display) + '</span>');
+          if (t.language) metaItems.push('<span style="font-size:0.72rem;color:var(--text-dim)">' + esc(t.language) + '</span>');
+
+          var detailRows = '';
+          if (t.p_line) detailRows += '<div style="font-size:0.68rem;color:var(--text-dim)">\u2117 ' + esc(t.p_line) + '</div>';
+          if (t.c_line) detailRows += '<div style="font-size:0.68rem;color:var(--text-dim)">\u00A9 ' + esc(t.c_line) + '</div>';
+
+          var people = [];
+          if (t.composers && t.composers.length) people.push('Composed: ' + t.composers.map(esc).join(', '));
+          if (t.lyricists && t.lyricists.length) people.push('Lyrics: ' + t.lyricists.map(esc).join(', '));
+          if (t.producers && t.producers.length) people.push('Produced: ' + t.producers.map(esc).join(', '));
+          if (t.writers && t.writers.length) people.push('Written: ' + t.writers.map(esc).join(', '));
+
+          var techParts = [];
+          if (t.audio_codec) techParts.push(t.audio_codec);
+          if (t.sample_rate) techParts.push(t.sample_rate + ' Hz');
+          if (t.bits_per_sample) techParts.push(t.bits_per_sample + '-bit');
+          if (t.channels) techParts.push(t.channels === 2 ? 'Stereo' : t.channels === 1 ? 'Mono' : t.channels + 'ch');
+
+          html += '<div class="card" style="padding:14px">'
+            + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
+            + '<div><strong>' + esc(t.title || 'Untitled') + '</strong>'
+            + '<div style="font-size:0.78rem;color:var(--text-dim)">' + esc(t.artist || 'N/A') + '</div></div>'
+            + '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0">'
+            + (t.isrc ? tag(t.isrc, true) : '')
+            + (t.track_number ? '<span style="font-size:0.68rem;color:var(--text-dim)">#' + t.track_number + '</span>' : '')
+            + '</div></div>';
+
+          if (metaItems.length) html += '<div style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap">' + metaItems.join('') + '</div>';
+          if (detailRows) html += '<div style="margin-top:6px">' + detailRows + '</div>';
+          if (people.length) html += '<div style="margin-top:4px;font-size:0.68rem;color:var(--text-dim)">' + people.map(esc).join(' &middot; ') + '</div>';
+          if (techParts.length) html += '<div style="margin-top:4px;font-size:0.68rem;color:var(--border)">' + esc(techParts.join(' / ')) + '</div>';
+
+          html += '</div>';
         });
-        if (data.release) html += '<div class="card" style="padding:14px;border-color:var(--accent)"><div class="card-title">Release</div><strong>' + esc(data.release.title || 'N/A') + '</strong><div style="font-size:0.78rem;color:var(--text-dim)">Territories: ' + esc((data.territories || []).join(', ') || 'N/A') + '</div></div>';
+
         $('#ddex-results').innerHTML = html;
       } catch (err) {
         $('#ddex-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
