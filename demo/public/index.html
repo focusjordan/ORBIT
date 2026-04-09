@@ -400,7 +400,7 @@ body {
     for (var j = 0; j < items.length; j++) {
       var angle = (Math.PI * 2 * j / items.length) - (Math.PI / 2);
       var raw = Math.max(0, Math.min(1, Number(items[j].confidence) || 0));
-      var value = Math.sqrt(raw);
+      var value = Math.min(1, 0.3 + raw * 7);
       var px = cx + Math.cos(angle) * radius * value;
       var py = cy + Math.sin(angle) * radius * value;
       points.push(px.toFixed(1) + ',' + py.toFixed(1));
@@ -822,13 +822,6 @@ body {
           + '</div>';
       });
     }
-    if (w2vGenres.length && pannsGenres.length) {
-      html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:8px">wav2vec2 classification</div><div class="tags">';
-      w2vGenres.forEach(function(g) {
-        html += tag(g.label + ' ' + scorePct(g.confidence) + '%', false);
-      });
-      html += '</div>';
-    }
     html += '</div>';
 
     html += '<div class="card"><div class="card-title">Mood Profile</div><div class="mood-profile">' + moodProfileHtml(a.mood) + '</div></div>';
@@ -839,8 +832,8 @@ body {
       keyBadge = ' <span style="font-size:0.7rem;padding:2px 8px;border:1px solid var(--border);border-radius:10px;color:var(--text-dim)">' + srcLabel + '</span>';
     }
     html += '<div class="compare-cols">';
-    html += '<div class="card"><div class="card-title">BPM</div><div style="font-size:1.9rem;font-weight:800;color:var(--accent)">' + (a.bpm && a.bpm.value != null ? esc(a.bpm.value) : 'N/A') + '</div><div style="font-size:0.75rem;color:var(--text-dim)">Confidence: ' + (a.bpm && a.bpm.confidence != null ? scorePct(a.bpm.confidence) + '%' : 'N/A') + '</div></div>';
-    html += '<div class="card"><div class="card-title">Key' + keyBadge + '</div><div style="font-size:1.9rem;font-weight:800;color:var(--accent)">' + esc((a.key && (a.key.value || a.key.label)) || 'N/A') + '</div><div style="font-size:0.75rem;color:var(--text-dim)">Confidence: ' + (a.key && a.key.confidence != null ? scorePct(a.key.confidence) + '%' : 'N/A') + '</div></div>';
+    html += '<div class="card"><div class="card-title">BPM</div><div style="font-size:1.9rem;font-weight:800;color:var(--accent)">' + (a.bpm && a.bpm.value != null ? esc(a.bpm.value) : 'N/A') + '</div></div>';
+    html += '<div class="card"><div class="card-title">Key' + keyBadge + '</div><div style="font-size:1.9rem;font-weight:800;color:var(--accent)">' + esc((a.key && (a.key.value || a.key.label)) || 'N/A') + '</div></div>';
     html += '</div>';
 
     html += '<div class="card"><div class="card-title">Instruments (PANNs)</div>';
@@ -859,16 +852,29 @@ body {
       + row('Gender', esc(vocals.gender || 'N/A'))
       + '</div></div>';
 
+    var rawLoud = a.loudness != null ? a.loudness : (a.loudness_db != null ? a.loudness_db : (a.metrics && a.metrics.loudness));
+    var rawDR = a.dynamic_range != null ? a.dynamic_range : (a.dynamic_range_db != null ? a.dynamic_range_db : (a.metrics && a.metrics.dynamic_range));
+    var rawEnergy = a.energy != null ? a.energy : (a.metrics && a.metrics.energy);
+    var rawDance = a.danceability != null ? a.danceability : (a.metrics && a.metrics.danceability);
+    var rawDur = a.duration;
+
+    function fmtDuration(s) {
+      if (s == null) return 'N/A';
+      var m = Math.floor(s / 60);
+      var sec = Math.round(s % 60);
+      return m + ':' + (sec < 10 ? '0' : '') + sec;
+    }
+
     var metrics = [
-      { k: 'Loudness', v: a.loudness != null ? a.loudness : (a.loudness_db != null ? a.loudness_db : (a.metrics && a.metrics.loudness)) },
-      { k: 'Dynamic Range', v: a.dynamic_range != null ? a.dynamic_range : (a.dynamic_range_db != null ? a.dynamic_range_db : (a.metrics && a.metrics.dynamic_range)) },
-      { k: 'Energy', v: a.energy != null ? a.energy : (a.metrics && a.metrics.energy) },
-      { k: 'Danceability', v: a.danceability != null ? a.danceability : (a.metrics && a.metrics.danceability) },
-      { k: 'Duration', v: a.duration },
+      { k: 'Loudness', v: rawLoud != null ? Number(rawLoud).toFixed(1) + ' LUFS' : 'N/A' },
+      { k: 'Dynamic Range', v: rawDR != null ? Number(rawDR).toFixed(1) + ' dB' : 'N/A' },
+      { k: 'Energy', v: rawEnergy != null ? Math.round(Number(rawEnergy) * 100) + '%' : 'N/A' },
+      { k: 'Danceability', v: rawDance != null ? Math.round(Number(rawDance) * 100) + '%' : 'N/A' },
+      { k: 'Duration', v: fmtDuration(rawDur) },
     ];
     html += '<div class="slide-two-col" style="max-width:none">';
     metrics.forEach(function(m) {
-      html += '<div class="slide-col-card"><h3>' + m.k + '</h3><p style="font-size:1.2rem;color:var(--text)">' + (m.v != null ? esc(Number(m.v).toFixed ? Number(m.v).toFixed(2) : m.v) : 'N/A') + '</p></div>';
+      html += '<div class="slide-col-card"><h3>' + m.k + '</h3><p style="font-size:1.2rem;color:var(--text)">' + esc(m.v) + '</p></div>';
     });
     html += '</div>';
     return html;
@@ -1427,69 +1433,32 @@ body {
 
   // ========== Competitive Comparison ==========
   function renderCompetitive() {
-    var dot = function(color) { return '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + color + ';margin-right:6px;vertical-align:middle"></span>'; };
-    var gd = dot('var(--green)'), rd = dot('var(--red)'), yd = dot('var(--yellow)');
+    var gd = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:middle"></span>';
 
-    return '<div class="slide-section" style="text-align:left;max-width:1140px">'
-      + '<div style="text-align:center"><h1 class="slide-headline" style="font-size:1.6rem">Competitive Landscape</h1></div>'
+    function vendorRow(capability, vendors, fundingNote) {
+      return '<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">'
+        + '<div style="min-width:180px"><div style="font-size:0.82rem;font-weight:600;color:var(--text)">' + capability + '</div></div>'
+        + '<div style="flex:1"><div style="font-size:0.78rem;color:var(--text-dim)">' + vendors + '</div>'
+        + (fundingNote ? '<div style="font-size:0.70rem;color:var(--accent);margin-top:2px">' + fundingNote + '</div>' : '')
+        + '</div>'
+        + '<div style="min-width:70px;text-align:right">' + gd + '<span style="font-size:0.75rem;font-weight:600;color:var(--green)">ORBIT</span></div>'
+        + '</div>';
+    }
 
-      + '<div class="slide-three-col" style="max-width:1140px">'
+    return '<div class="slide-section" style="text-align:left;max-width:900px">'
+      + '<div style="text-align:center"><h1 class="slide-headline" style="font-size:1.6rem">Vendor Categories Replaced</h1>'
+      + '<p style="font-size:0.82rem;color:var(--text-dim);margin-top:4px">One integration replaces five vendor categories and manual processes.</p></div>'
 
-      // Sureel vs ORBIT
-      + '<div class="comp-card" style="padding:14px">'
-      + '<div class="comp-header"><strong>Sureel</strong><span class="comp-vs">vs ORBIT</span></div>'
-      + '<div style="font-size:0.74rem;line-height:1.7">'
-      + '<div>' + yd + '<strong>Core:</strong> Attribution-as-a-Service, opt-in/out registry, dynamic licensing. 11 patents.</div>'
-      + '<div>' + yd + '<strong>Strengths:</strong> Creator control rules, AI monetization framework, BeatStars partnership.</div>'
-      + '<div>' + rd + '<strong>AI Detection:</strong> Not offered</div>'
-      + '<div>' + yd + '<strong>Enforcement:</strong> Voluntary — no US legal mandate</div>'
-      + '<div>' + rd + '<strong>Watermark:</strong> Not offered</div>'
-      + '<div>' + rd + '<strong>Catalog Ops:</strong> No fingerprint, metadata, DDEX, or transfers</div>'
-      + '</div>'
-      + '<div style="margin-top:8px;padding:8px;background:rgba(45,212,168,0.06);border:1px solid rgba(45,212,168,0.15);border-radius:6px;font-size:0.72rem;color:var(--text-dim)">' + gd + '<strong style="color:var(--text)">ORBIT:</strong> Different scope. Sureel manages rights <em>within</em> AI systems. ORBIT screens and protects assets <em>before/after</em> distribution. Complementary.</div>'
-      + '</div>'
-
-      // MusicStory vs ORBIT
-      + '<div class="comp-card" style="padding:14px">'
-      + '<div class="comp-header"><strong>Music Story</strong><span class="comp-vs">vs ORBIT</span></div>'
-      + '<div style="font-size:0.74rem;line-height:1.7">'
-      + '<div>' + yd + '<strong>Core:</strong> Editorial metadata API — bios, charts, lyrics, art</div>'
-      + '<div>' + rd + '<strong>Audio Analysis:</strong> None — editorial only, not audio-derived</div>'
-      + '<div>' + rd + '<strong>AI Detection:</strong> Not offered</div>'
-      + '<div>' + rd + '<strong>Watermark:</strong> Not offered</div>'
-      + '<div>' + rd + '<strong>Provenance:</strong> Not offered</div>'
-      + '<div>' + yd + '<strong>Best for:</strong> DSP editorial pages and recommendation UIs</div>'
-      + '</div>'
-      + '<div style="margin-top:8px;padding:8px;background:rgba(45,212,168,0.06);border:1px solid rgba(45,212,168,0.15);border-radius:6px;font-size:0.72rem;color:var(--text-dim)">' + gd + '<strong style="color:var(--text)">ORBIT:</strong> ML-derived metadata from audio + AI detection + watermarking + provenance.</div>'
+      + '<div class="card" style="margin-top:16px;padding:4px 16px">'
+      + vendorRow('AI Content Detection', 'Illuminarty, Boomy AI Detector, manual listening teams', 'No incumbent combines detection + enrichment')
+      + vendorRow('Audio Metadata & Enrichment', 'Cyanite (\u20ac2.2M), Musiio (acq. SoundCloud ~$5\u201310M)', 'Genre, mood, BPM, key, instruments from audio')
+      + vendorRow('Catalog Fingerprinting', 'AcoustID (open), ACRCloud, Pex ($57M)', 'ORBIT unifies AcoustID + ACRCloud + MusicBrainz')
+      + vendorRow('Neural Watermarking', 'Digimarc (public), Irdeto/Civolution', 'Provenance identity embedded in the waveform')
+      + vendorRow('Provenance & Chain of Title', 'Manual spreadsheets, Audius ($11M), Royal ($75M)', 'Cryptographic Ed25519 signatures, platform-to-platform')
+      + vendorRow('Catalog Ingest (DDEX)', 'FUGA, Labelcamp, custom parsers', 'ERN 3.x/4.x parsed automatically')
       + '</div>'
 
-      // Harmix + Cyanite vs ORBIT
-      + '<div class="comp-card" style="padding:14px">'
-      + '<div class="comp-header"><strong>Harmix + Cyanite</strong><span class="comp-vs">vs ORBIT</span></div>'
-      + '<div style="font-size:0.74rem;line-height:1.7">'
-      + '<div>' + yd + '<strong>Harmix:</strong> Music search, prompt matching, sync licensing</div>'
-      + '<div>' + yd + '<strong>Cyanite:</strong> Genre, mood, BPM, key analysis (\u20ac2.2M raised)</div>'
-      + '<div>' + rd + '<strong>AI Detection:</strong> Neither offers this</div>'
-      + '<div>' + rd + '<strong>Watermark:</strong> Neither offers this</div>'
-      + '<div>' + rd + '<strong>Provenance:</strong> Neither offers this</div>'
-      + '<div>' + rd + '<strong>DDEX / Transfers:</strong> Neither offers this</div>'
-      + '</div>'
-      + '<div style="margin-top:8px;padding:8px;background:rgba(45,212,168,0.06);border:1px solid rgba(45,212,168,0.15);border-radius:6px;font-size:0.72rem;color:var(--text-dim)">' + gd + '<strong style="color:var(--text)">ORBIT:</strong> All of Cyanite\'s analysis + 4 capabilities neither provides.</div>'
-      + '</div>'
-
-      + '</div>'
-
-      + '<div class="nowhere-banner" style="margin-top:16px">No company at any funding level combines AI detection + metadata + watermarking + provenance + transfers.</div>'
-
-      + '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:12px;font-size:0.72rem">'
-      + '<span style="padding:4px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border)">Pex <strong>$57M</strong></span>'
-      + '<span style="padding:4px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border)">Cyanite <strong>\u20ac2.2M</strong></span>'
-      + '<span style="padding:4px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border)">Musiio <strong>~$5\u201310M acq</strong></span>'
-      + '<span style="padding:4px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border)">Royal <strong>$75M</strong></span>'
-      + '<span style="padding:4px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border)">Audius <strong>$11M</strong></span>'
-      + '<span style="padding:4px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border)">Digimarc <strong>Public</strong></span>'
-      + '</div>'
-      + '<div style="text-align:center;font-size:0.72rem;color:var(--text-dim);margin-top:6px">Each raised millions to do <strong>one</strong> thing ORBIT does.</div>'
+      + '<div class="nowhere-banner" style="margin-top:16px">No company at any funding level combines all six capabilities. Each raised millions to do one thing ORBIT does.</div>'
 
       + '<div style="text-align:center;margin-top:14px"><button class="btn btn-outline" id="comp-hub">Back to Overview</button></div>'
       + '</div>';
