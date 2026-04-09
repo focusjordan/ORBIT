@@ -479,7 +479,7 @@ async function analyzeHandler(req, res) {
           flags: {
             v2Enabled: true,
             shadowMode: false,
-            knnEnabled: true,
+            knnEnabled: false,
             promptsV2Enabled: true,
             metadataV2Enabled: true,
             crossSignalV2Enabled: true,

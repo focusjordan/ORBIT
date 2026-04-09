@@ -47,25 +47,27 @@ const AI_DETECTION_CONFIG = {
     catalog: 0.35,
   },
 
-  // V2 weights (includes KNN as additive signal)
+  // V2 weights — SONICS primary, KNN excluded (no reference catalog)
   weightsV2: {
-    semantic: 0.14,
-    anomaly: 0.23,
-    metadata: 0.17,
-    catalog: 0.23,
-    sonics: 0.15,
-    knn: 0.08,
+    semantic: 0.10,
+    anomaly: 0.20,
+    metadata: 0.10,
+    catalog: 0.10,
+    sonics: 0.50,
+    knn: 0.00,
   },
 
-  // V3 weights (CLAP demoted, watermark detection added)
+  // V3 weights — SONICS is primary (purpose-built AI music detector).
+  // Watermark (SilentCipher) and KNN are separate ORBIT capabilities,
+  // not part of the AI-detection scoring pipeline.
   weightsV3: {
-    semantic: 0.064,
-    anomaly: 0.216,
-    metadata: 0.120,
-    catalog: 0.176,
-    watermark: 0.160,
-    sonics: 0.200,
-    knn: 0.064,
+    semantic: 0.10,
+    anomaly: 0.20,
+    metadata: 0.10,
+    catalog: 0.10,
+    watermark: 0.00,
+    sonics: 0.50,
+    knn: 0.00,
   },
 
   // Thresholds for recommendations
@@ -1429,12 +1431,7 @@ async function detectAI(audioInput, options = {}) {
         ? checkAudioAnomalies(analysisResult, { v2Enabled: true, forensicsV3Enabled: true })
         : { anomalyScore: 0, flags: ['NO_ANALYSIS_PROVIDED'], details: {} };
 
-      const forensicsData = analysisResult?.ai_forensics || null;
-
-      const watermarkSignal = await checkWatermarkPresence(audioInput, {
-        forensicsResult: forensicsData,
-        verbose,
-      });
+      const watermarkSignal = { watermarkScore: 0, flags: [], details: { skipped: 'not_in_ai_detection_pipeline' } };
 
       const sonicsV3 = v2Result?.signals?.sonics || await checkSonicsDetection(audioInput, { verbose: false });
 
