@@ -847,7 +847,7 @@ body {
     html += '<div class="card"><div class="card-title">Vocals</div><div class="result-grid">'
       + row('Present', vocals.present ? 'Yes' : 'No')
       + row('Confidence', vocals.confidence != null ? scorePct(vocals.confidence) + '%' : 'N/A')
-      + row('Source', esc(vocals.source || 'clap'))
+      + row('Source', esc((vocals.source || 'clap').toUpperCase()))
       + row('PANNs Tag', esc(vocals.panns_tag || 'N/A'))
       + row('Gender', esc(vocals.gender || 'N/A'))
       + '</div></div>';
