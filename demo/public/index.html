@@ -600,51 +600,92 @@ body {
   }
 
   // ========== Module 1: AI Detection ==========
+  function signalExplain(name, pct, explain, color) {
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+      + '<div style="width:8px;height:8px;border-radius:50%;background:' + color + ';flex-shrink:0"></div>'
+      + '<span style="font-size:0.82rem;font-weight:600;min-width:60px">' + pct + '%</span>'
+      + '<span style="font-size:0.78rem;color:var(--text-dim)">' + esc(name) + ' — ' + esc(explain) + '</span>'
+      + '</div>';
+  }
+
   function renderM1Result(data) {
     var ai = data.ai_detection || {};
     var rec = ai.recommendation || 'UNAVAILABLE';
     var type = rec === 'LIKELY_HUMAN' ? 'success' : rec === 'REVIEW' ? 'warning' : 'error';
-    var html = '<div style="text-align:center;margin:12px 0">' + badge(rec.replace(/_/g, ' '), type) + '</div>';
-    html += confBar('Overall Score', scorePct(ai.score), type === 'success' ? 'var(--green)' : (type === 'error' ? 'var(--red)' : 'var(--yellow)'));
-    var sonics = readSignalScore(ai, ['sonics.sonicsScore', 'sonics.aiScore', 'sonics.score', 'sonics.confidence']);
-    var semantic = readSignalScore(ai, ['semantic.aiScore', 'semantic.score']);
-    var anomaly = readSignalScore(ai, ['anomalies.anomalyScore', 'anomalies.score']);
-    var metadata = readSignalScore(ai, ['metadata.suspicionScore', 'metadata.metadataScore', 'metadata.score']);
-    var provenance = readSignalScore(ai, ['catalog.provenanceScore', 'catalog.score']);
-    var watermark = readSignalScore(ai, ['watermark.watermarkScore', 'watermark.score']);
-    var knn = readSignalScore(ai, ['knn.aiLikelihood', 'knn.score']);
-    if (sonics != null) html += confBar('SONICS SpecTTTra', sonics, 'var(--accent)');
-    if (semantic != null) html += confBar('Semantic Probe', semantic, 'var(--accent-2)');
-    if (anomaly != null) html += confBar('Forensic Anomaly', anomaly, 'var(--yellow)');
-    if (metadata != null) html += confBar('Metadata Intelligence', metadata, '#8f95b2');
-    if (watermark != null) html += confBar('Watermark Detection', watermark, '#c084fc');
-    if (knn != null) html += confBar('KNN Reference', knn, '#60a5fa');
-    if (provenance != null) html += confBar('Catalog Provenance', provenance, 'var(--red)');
+    var overall = scorePct(ai.score);
+    var verdictLabel = rec === 'LIKELY_AI' ? 'AI-Generated' : rec === 'LIKELY_HUMAN' ? 'Human-Made' : 'Needs Review';
+    var floorApplied = ai.score_floor_applied;
 
-    var anomalySignal = ai.signals && ai.signals.anomalies ? ai.signals.anomalies : null;
-    var stemForensicsIncluded = !!(
-      anomalySignal
-      && anomalySignal.details
-      && anomalySignal.details.stem_forensics
-    );
-    if (stemForensicsIncluded) {
-      html += '<div style="margin-top:8px">' + badge('Stem-Forensics', 'success') + '</div>';
+    var html = '<div style="text-align:center;margin:14px 0 8px">'
+      + '<div style="font-size:2rem;font-weight:800;color:' + (type === 'success' ? 'var(--green)' : type === 'error' ? 'var(--red)' : 'var(--yellow)') + '">' + overall + '%</div>'
+      + '<div style="margin-top:4px">' + badge(verdictLabel, type) + '</div>'
+      + '</div>';
+
+    if (floorApplied) {
+      html += '<div style="font-size:0.72rem;color:var(--text-dim);text-align:center;margin-bottom:10px">Score floor applied — metadata contains definitive AI indicators</div>';
     }
-    if (anomaly != null && anomaly > 0 && anomalySignal && Array.isArray(anomalySignal.flags) && anomalySignal.flags.length) {
+
+    var signals = ai.signals || {};
+    var semantic = signals.semantic ? scorePct(signals.semantic.aiScore) : null;
+    var anomaly = signals.anomalies ? scorePct(signals.anomalies.anomalyScore) : null;
+    var metadata = signals.metadata ? scorePct(signals.metadata.suspicionScore) : null;
+    var sonics = signals.sonics && typeof signals.sonics.sonicsScore === 'number' ? scorePct(signals.sonics.sonicsScore) : null;
+    var catalogScore = signals.catalog ? scorePct(signals.catalog.provenanceScore) : null;
+    var catalogFlags = signals.catalog && signals.catalog.flags ? signals.catalog.flags : [];
+    var noMatch = catalogScore != null && catalogScore === 0 && !catalogFlags.length;
+
+    var agreeing = [];
+    var low = [];
+    var thresh = 15;
+
+    if (semantic != null && semantic >= thresh) agreeing.push({ name: 'Semantic Probe', pct: semantic, explain: 'CLAP zero-shot classifier detects synthetic audio artifacts in the waveform', color: 'var(--accent-2)' });
+    else if (semantic != null) low.push({ name: 'Semantic Probe', pct: semantic, explain: 'CLAP zero-shot classifier — low synthetic signal detected', color: 'var(--accent-2)' });
+
+    if (metadata != null && metadata >= thresh) agreeing.push({ name: 'Metadata Intelligence', pct: metadata, explain: 'File tags, encoder signatures, and behavioral patterns match known AI generators', color: '#8f95b2' });
+    else if (metadata != null) low.push({ name: 'Metadata Intelligence', pct: metadata, explain: 'No strong AI indicators found in file metadata', color: '#8f95b2' });
+
+    if (anomaly != null && anomaly >= thresh) agreeing.push({ name: 'Forensic Anomaly', pct: anomaly, explain: 'Librosa spectral analysis found anomalies consistent with AI synthesis', color: 'var(--yellow)' });
+    else if (anomaly != null && anomaly > 0) low.push({ name: 'Forensic Anomaly', pct: anomaly, explain: 'Minor spectral anomalies — not conclusive alone', color: 'var(--yellow)' });
+
+    if (sonics != null && sonics >= thresh) agreeing.push({ name: 'SONICS SpecTTTra', pct: sonics, explain: 'Neural classifier trained on synthetic vs. real audio', color: 'var(--accent)' });
+    else if (sonics != null && sonics >= 5) low.push({ name: 'SONICS SpecTTTra', pct: sonics, explain: 'Neural classifier returned low synthetic probability for this track', color: 'var(--accent)' });
+
+    if (noMatch) {
+      agreeing.push({ name: 'Catalog Provenance', pct: 0, explain: 'No matching registration found in AcoustID or MusicBrainz — consistent with unregistered AI-generated content', color: 'var(--red)' });
+    } else if (catalogScore != null && catalogScore > 0) {
+      low.push({ name: 'Catalog Provenance', pct: catalogScore, explain: 'Partial catalog match found — metadata inconsistency with known work', color: 'var(--red)' });
+    }
+
+    if (agreeing.length) {
+      var agreeCount = agreeing.length;
+      html += '<div style="margin-top:12px;margin-bottom:6px;font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em">'
+        + agreeCount + ' signal' + (agreeCount > 1 ? 's' : '') + ' supporting verdict</div>';
+      agreeing.forEach(function(s) { html += signalExplain(s.name, s.pct, s.explain, s.color); });
+    }
+
+    if (low.length) {
+      html += '<div style="margin-top:10px;margin-bottom:6px;font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em">Other signals</div>';
+      low.forEach(function(s) { html += signalExplain(s.name, s.pct, s.explain, s.color); });
+    }
+
+    var anomalySignal = signals.anomalies || null;
+    if (anomalySignal && Array.isArray(anomalySignal.flags) && anomalySignal.flags.length) {
       var forensicFlags = anomalySignal.flags.filter(function(f) {
-        return /FREQ_CUTOFF|PHASE|SPECTRAL|METRONOMIC|CREST|ZCR|MFCC|CHROMA|ENERGY_ARC|CHECKERBOARD|PRE_ECHO|NOISE_FLOOR|STEM_/i.test(f);
+        return /FREQ_CUTOFF|PHASE|SPECTRAL|METRONOMIC|CREST|ZCR|MFCC|CHROMA|ENERGY_ARC|CHECKERBOARD|PRE_ECHO|NOISE_FLOOR|STEM_|TEMPO_STABILITY|LOOP_REPETITION|HARMONIC/i.test(f);
       });
       if (forensicFlags.length) {
-        html += '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--text-dim)">Forensic flags fired (' + forensicFlags.length + ')</summary><div class="tags" style="margin-top:8px">';
+        html += '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:0.75rem;color:var(--text-dim)">' + forensicFlags.length + ' forensic check' + (forensicFlags.length > 1 ? 's' : '') + ' fired</summary><div class="tags" style="margin-top:6px">';
         forensicFlags.forEach(function(f) { html += tag(f, false); });
         html += '</div></details>';
       }
     }
+
     if (ai.flags && ai.flags.length) {
-      html += '<div class="tags" style="margin-top:8px">';
+      html += '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:0.75rem;color:var(--text-dim)">All detection flags (' + ai.flags.length + ')</summary><div class="tags" style="margin-top:6px">';
       ai.flags.forEach(function(f) { html += tag(f, true); });
-      html += '</div>';
+      html += '</div></details>';
     }
+
     return html;
   }
 
@@ -664,18 +705,16 @@ body {
     var body = '<div class="compare-cols">'
       + '<div class="card"><div class="card-title">AI-Generated Track</div>'
       + trackSelectHtml('m1-ai-track', function(t) { return t.genre === 'Jazz' || t.genre === 'AI' || String(t.title).toLowerCase().includes('ai'); })
-      + '<div class="dropzone" id="m1-ai-drop"><div class="dropzone-label"><strong>Drop AI track here</strong>or select from library</div><input type="file" id="m1-ai-file" accept="audio/*"><div class="file-name" id="m1-ai-filename"></div></div>'
       + '<button class="btn btn-full" id="m1-ai-btn" disabled>Analyze AI Track</button><div id="m1-ai-results"></div></div>'
       + '<div class="card"><div class="card-title">Human Track</div>'
       + trackSelectHtml('m1-human-track', function(t) { return t.artist === 'Fleetwood Mac' || t.genre === 'Rock' || t.artist === 'Jordan Kugler'; })
-      + '<div class="dropzone" id="m1-human-drop"><div class="dropzone-label"><strong>Drop human track here</strong>or select from library</div><input type="file" id="m1-human-file" accept="audio/*"><div class="file-name" id="m1-human-filename"></div></div>'
       + '<button class="btn btn-full" id="m1-human-btn" disabled>Analyze Human Track</button><div id="m1-human-results"></div></div>'
       + '</div><div id="m1-verdict">' + renderM1Verdict() + '</div>';
     return moduleScaffold(
       'AI Music Detection',
-      'Five independent signal families screen every track before it enters your catalog.',
+      'Multi-signal detection pipeline screens every track before it enters your catalog.',
       'Illuminarty, Boomy AI Detector, manual listening teams',
-      '5-signal ensemble (SONICS + CLAP semantic + 13 librosa forensics + metadata intelligence + catalog corroboration). 95.2% corpus accuracy.',
+      'CLAP semantic probe, 13 librosa spectral forensics, metadata intelligence, catalog provenance, and SONICS neural classifier. Each signal runs independently — the verdict shows which ones agree.',
       body
     );
   }
@@ -683,7 +722,7 @@ body {
   function bindM1() {
     bindBackToHub();
     var aiBlob = null, humanBlob = null;
-    function wireSelect(selId, msgId, fileNameId, setBlob, btnId) {
+    function wireSelect(selId, msgId, setBlob, btnId) {
       var sel = $('#' + selId);
       if (!sel) return;
       sel.addEventListener('change', async function() {
@@ -693,18 +732,13 @@ body {
         try {
           var blob = await loadTrackBlob(this.value);
           setBlob(blob);
-          $('#' + fileNameId).textContent = this.value;
           $('#' + btnId).disabled = false;
           msg.textContent = '';
         } catch (e) { msg.textContent = 'Failed to load'; }
       });
     }
-    wireSelect('m1-ai-track', 'm1-ai-track-msg', 'm1-ai-filename', function(b) { aiBlob = b; }, 'm1-ai-btn');
-    wireSelect('m1-human-track', 'm1-human-track-msg', 'm1-human-filename', function(b) { humanBlob = b; }, 'm1-human-btn');
-    bindFileInput('m1-ai', function(b) { aiBlob = b; }, function() {});
-    bindFileInput('m1-human', function(b) { humanBlob = b; }, function() {});
-    $('#m1-ai-file').addEventListener('change', function() { $('#m1-ai-btn').disabled = !this.files.length; });
-    $('#m1-human-file').addEventListener('change', function() { $('#m1-human-btn').disabled = !this.files.length; });
+    wireSelect('m1-ai-track', 'm1-ai-track-msg', function(b) { aiBlob = b; }, 'm1-ai-btn');
+    wireSelect('m1-human-track', 'm1-human-track-msg', function(b) { humanBlob = b; }, 'm1-human-btn');
 
     function selectedMeta(selId) {
       var s = $('#' + selId);
