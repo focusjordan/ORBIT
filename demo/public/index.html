@@ -41,14 +41,25 @@ body {
 .status-dot.err { background: var(--red); box-shadow: 0 0 6px var(--red); }
 .status-line { font-size: 0.7rem; color: var(--text-dim); margin-top: 8px; }
 
-.progress-bar { display: flex; justify-content: center; gap: 6px; padding: 0 24px 14px; max-width: 1200px; margin: 0 auto; flex-wrap: wrap; }
-.step-circle {
-  padding: 7px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface);
-  color: var(--text-dim); font-size: 0.68rem; letter-spacing: 0.04em; text-transform: uppercase;
-  cursor: pointer; transition: var(--transition);
+.progress-bar { display: flex; align-items: center; justify-content: center; gap: 0; padding: 0 24px 14px; max-width: 900px; margin: 0 auto; }
+.step-node {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; position: relative; z-index: 1; flex-shrink: 0; padding: 0 2px;
 }
-.step-circle:hover { border-color: var(--accent); color: var(--text); }
-.step-circle.active { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); box-shadow: 0 0 8px var(--accent-glow); }
+.step-dot {
+  width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--border); background: var(--bg);
+  transition: var(--transition);
+}
+.step-node:hover .step-dot { border-color: var(--accent); }
+.step-node.active .step-dot { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+.step-node.visited .step-dot { border-color: var(--accent); background: var(--accent); }
+.step-label {
+  font-size: 0.6rem; letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-dim);
+  white-space: nowrap; transition: var(--transition);
+}
+.step-node:hover .step-label { color: var(--text); }
+.step-node.active .step-label { color: var(--accent); font-weight: 600; }
+.step-connector { flex: 1; height: 2px; background: var(--border); min-width: 16px; margin-top: -12px; }
+.step-connector.done { background: var(--accent); }
 
 .main { display: flex; max-width: 1280px; margin: 0 auto; padding: 0 16px 60px; gap: 16px; min-height: 70vh; }
 .content-panel { flex: 1; min-width: 0; }
@@ -60,7 +71,7 @@ body {
 .log-header { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; display: flex; justify-content: space-between; }
 .log-body { padding: 10px 14px; }
 .log-entry { color: var(--text-dim); white-space: pre-wrap; word-break: break-all; }
-.log-entry .log-time { color: var(--accent-2); margin-right: 8px; }
+.log-entry .log-time { display: none; }
 .log-entry .log-msg { color: var(--text); }
 
 .section { display: none; animation: fadeIn 0.3s ease; }
@@ -308,11 +319,15 @@ body {
 
   var VIEWS = [
     { id: 'hub', label: 'Overview', type: 'hub' },
+    // Phase 1 — Pre-Acquisition Audit
     { id: 'mod-ai-detect', label: 'AI Detection', type: 'demo' },
-    { id: 'mod-analysis', label: 'Audio Analysis', type: 'demo' },
     { id: 'mod-fingerprint', label: 'Catalog Intelligence', type: 'demo' },
-    { id: 'mod-watermark', label: 'Watermarking', type: 'demo' },
+    // Phase 2 — Catalog Ingest & Enrichment
     { id: 'mod-ddex', label: 'Catalog Ingest', type: 'demo' },
+    { id: 'mod-analysis', label: 'Audio Analysis', type: 'demo' },
+    // Phase 3 — Register & Protect
+    { id: 'mod-watermark', label: 'Watermarking', type: 'demo' },
+    // Phase 4 — Custody Transfer
     { id: 'mod-provenance', label: 'Catalog Transfer', type: 'demo' },
     { id: 'pipeline', label: 'Acquisition Pipeline', type: 'slide' },
     { id: 'technical', label: 'Technical', type: 'slide' },
@@ -459,14 +474,38 @@ body {
   }
 
   // ========== Module Indicator ==========
+  var PIPELINE_STEPS = VIEWS.filter(function(v) { return v.type === 'demo'; });
+  var visitedViews = {};
+
   function renderIndicator() {
-    var html = '';
-    VIEWS.forEach(function(v) {
-      var active = v.id === currentView ? ' active' : '';
-      html += '<button class="step-circle' + active + '" data-view="' + v.id + '" title="' + esc(v.label) + '">' + esc(v.label) + '</button>';
+    visitedViews[currentView] = true;
+    var activeIdx = -1;
+    PIPELINE_STEPS.forEach(function(s, i) { if (s.id === currentView) activeIdx = i; });
+    var isHub = currentView === 'hub';
+    var hubCls = 'step-node hub-home' + (isHub ? ' active' : '');
+    var html = '<div class="' + hubCls + '" data-view="hub" title="Overview">'
+      + '<div class="step-dot" style="width:12px;height:12px"></div>'
+      + '<span class="step-label">Home</span></div>'
+      + '<div class="step-connector"></div>';
+    PIPELINE_STEPS.forEach(function(s, i) {
+      var cls = 'step-node';
+      if (s.id === currentView) cls += ' active';
+      else if (visitedViews[s.id]) cls += ' visited';
+      html += '<div class="' + cls + '" data-view="' + s.id + '" title="' + esc(s.label) + '">'
+        + '<div class="step-dot"></div>'
+        + '<span class="step-label">' + esc(s.label) + '</span></div>';
+      if (i < PIPELINE_STEPS.length - 1) {
+        var connDone = (activeIdx > -1 && i < activeIdx) || (visitedViews[s.id] && visitedViews[PIPELINE_STEPS[i + 1].id]);
+        html += '<div class="step-connector' + (connDone ? ' done' : '') + '"></div>';
+      }
     });
     $('#progressBar').innerHTML = html;
-    document.querySelectorAll('.step-circle').forEach(function(el) {
+    if (isHub || currentView === 'pipeline' || currentView === 'technical' || currentView === 'competitive' || currentView === 'closing') {
+      $('#progressBar').style.opacity = '0.4';
+    } else {
+      $('#progressBar').style.opacity = '1';
+    }
+    document.querySelectorAll('.step-node').forEach(function(el) {
       el.addEventListener('click', function() { goToView(this.dataset.view); });
     });
   }
@@ -563,10 +602,10 @@ body {
     var cards = [
       { id: 'mod-ai-detect', icon: '&#128737;', name: 'AI Music Detection', desc: 'Screen every track for synthetic content.' },
       { id: 'mod-fingerprint', icon: '&#128376;', name: 'Catalog Intelligence', desc: 'Unified verification via AcoustID + ACRCloud.' },
-      { id: 'mod-analysis', icon: '&#127911;', name: 'Audio Analysis & Metadata', desc: 'Genre, mood, BPM, key, instruments — automated.' },
       { id: 'mod-ddex', icon: '&#128196;', name: 'Catalog Ingest', desc: 'DDEX ERN parsing into usable structures.' },
+      { id: 'mod-analysis', icon: '&#127911;', name: 'Audio Analysis & Metadata', desc: 'Genre, mood, BPM, key, instruments — automated.' },
+      { id: 'mod-watermark', icon: '&#128274;', name: 'Neural Watermarking', desc: 'Register & embed provenance in the waveform.' },
       { id: 'mod-provenance', icon: '&#128279;', name: 'Catalog Transfer', desc: 'Cryptographic custody transfer across platforms.' },
-      { id: 'mod-watermark', icon: '&#128274;', name: 'Neural Watermarking', desc: 'Provenance identity embedded in the waveform.' },
     ];
     var html = '<div class="slide-section">'
       + '<h1 class="slide-headline">Catalog Acquisition &amp; Distribution Intelligence</h1>'
@@ -1053,7 +1092,7 @@ body {
     return moduleScaffold(
       'Neural Watermarking',
       'Embed your ownership identity directly into the audio. Survives transcoding, re-upload, and format conversion.',
-      'Digimarc, Intrinsic.ai, Irdeto/Civolution',
+      'Legacy broadcast watermarking (Digimarc, Irdeto) — no one embeds provenance identity for catalog transfer',
       'Dual-mode: Sony SilentCipher neural watermark (primary) + spread-spectrum fallback. Identity embedded in the waveform itself — extractable from any copy.',
       body
     );
@@ -1177,106 +1216,150 @@ body {
     return html;
   }
 
-  function renderM6Results() {
-    var html = '';
-    if (state.module6.result) {
-      html += '<div class="card"><div class="card-title">Registration Complete (Seller Side)</div><div class="result-grid">'
-        + row('Registration ID', '<strong>' + state.module6.result.registration_id + '</strong>')
-        + row('Fingerprint', truncHash(state.module6.result.fingerprint_hash, 24))
-        + '</div></div>';
-    }
-    if (state.module6.transfer) {
-      html += '<div class="card"><div class="card-title">Custody Transfer Initiated</div><div class="result-grid">'
-        + row('Transfer ID', '<strong>' + state.module6.transfer.transfer_id + '</strong>')
-        + row('From', esc(state.module6.transfer.from_platform || 'Platform A (Seller)'))
-        + row('To', esc(state.module6.transfer.to_platform || 'Platform B (Acquirer)'))
-        + row('Status', esc(state.module6.transfer.status || 'pending'))
-        + '</div></div>';
-    }
-    if (state.module6.accept) {
-      html += '<div class="card"><div class="card-title">Acquisition Accepted — Custody Transferred</div><div class="result-grid">'
-        + row('New Registration ID', '<strong>' + state.module6.accept.new_registration_id + '</strong>')
-        + '</div></div>';
-      if (state.module6.accept.full_chain && state.module6.accept.full_chain.length) {
-        html += '<div class="card"><div class="card-title">Provenance Chain (Chain of Title)</div>' + renderChain(state.module6.accept.full_chain) + '</div>';
-      }
-    }
-    if (state.module6.chain && state.module6.chain.registrations) {
-      html += '<div class="card"><div class="card-title">Verified Chain of Title</div>' + renderChain(state.module6.chain.registrations) + '</div>';
-    }
-    return html;
-  }
-
   function renderM6() {
     var hasReg = !!(state.regResult && state.regResult.registration_id);
-    var regInfo = '';
-    if (hasReg) {
-      var meta = state.regResult.metadata || {};
-      regInfo = '<div style="padding:10px 12px;background:rgba(0,255,170,0.06);border:1px solid rgba(0,255,170,0.18);border-radius:var(--radius);margin-bottom:12px">'
-        + '<div style="font-size:0.82rem;font-weight:600;color:var(--green);margin-bottom:4px">Registered Track Available</div>'
-        + '<div style="font-size:0.78rem;color:var(--text-dim)"><strong style="color:var(--text)">' + esc(meta.title || 'Untitled') + '</strong> by <strong style="color:var(--text)">' + esc(meta.artist || 'Unknown') + '</strong> — Registration #' + state.regResult.registration_id + '</div>'
-        + '</div>';
-    } else {
-      regInfo = '<div style="padding:10px 12px;background:var(--surface-2);border-radius:var(--radius);margin-bottom:12px;font-size:0.78rem;color:var(--text-dim)">'
-        + 'Register a track in <strong>Neural Watermarking</strong> first, or enter a registration ID below.'
+    var regId = hasReg ? state.regResult.registration_id : '';
+    var meta = hasReg ? (state.regResult.metadata || {}) : {};
+    var trackLabel = hasReg
+      ? '<strong>' + esc(meta.title || 'Untitled') + '</strong> by ' + esc(meta.artist || 'Unknown') + ' &nbsp;(Reg #' + regId + ')'
+      : '';
+
+    var stepDot = function(n, done, active) {
+      var cls = 'step-dot' + (done ? ' visited' : '') + (active ? ' active' : '');
+      return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px">'
+        + '<div class="' + cls + '" style="width:10px;height:10px"></div>'
+        + '<span style="font-size:0.6rem;text-transform:uppercase;color:' + (active ? 'var(--accent)' : done ? 'var(--accent)' : 'var(--text-dim)') + '">' + n + '</span></div>';
+    };
+    var conn = function(done) { return '<div style="flex:1;height:2px;background:' + (done ? 'var(--accent)' : 'var(--border)') + ';margin-top:-10px;min-width:20px"></div>'; };
+
+    var transferDone = !!state.module6.transfer;
+    var acceptDone = !!state.module6.accept;
+
+    var body = '<div class="card">'
+      + '<div style="text-align:center;margin-bottom:16px">'
+      + '<div style="font-size:0.88rem;font-weight:700;margin-bottom:4px">Catalog Migration</div>'
+      + '<div style="font-size:0.78rem;color:var(--text-dim)">You acquired a catalog. ORBIT migrates every track from the seller\u2019s platform to yours with Ed25519 cryptographic proof at each step.</div>'
+      + '</div>'
+
+      // Track selector
+      + trackSelectHtml('m6-track')
+
+      // Visual: Platform A → Platform B
+      + '<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin:16px 0 20px;padding:14px;background:var(--surface-2);border-radius:var(--radius)">'
+      + '<div style="text-align:center"><div style="font-size:0.68rem;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px">Seller</div><div style="padding:8px 16px;border:1px solid var(--border);border-radius:var(--radius);font-weight:600;font-size:0.82rem">Platform A</div></div>'
+      + '<div style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:0 8px">'
+      + '<div style="font-size:1.2rem;color:var(--accent)">&rarr;</div>'
+      + '<div style="font-size:0.6rem;text-transform:uppercase;color:var(--accent);font-weight:600">Transfer</div>'
+      + '</div>'
+      + '<div style="text-align:center"><div style="font-size:0.68rem;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px">Acquirer</div><div style="padding:8px 16px;border:1px solid var(--accent);border-radius:var(--radius);font-weight:600;font-size:0.82rem;color:var(--accent)">Platform B</div></div>'
+      + '</div>'
+
+      // Registration status
+      + '<div id="m6-reg-status">' + (hasReg
+        ? '<div style="padding:10px 12px;background:rgba(0,255,170,0.06);border:1px solid rgba(0,255,170,0.18);border-radius:var(--radius);margin-bottom:14px;font-size:0.78rem">'
+          + '<span style="color:var(--green);font-weight:600">Registered: </span>' + trackLabel + '</div>'
+        : '<div style="padding:10px 12px;background:var(--surface-2);border-radius:var(--radius);margin-bottom:14px;font-size:0.78rem;color:var(--text-dim)">'
+          + 'Select a track, then register it in <strong style="color:var(--text)">Neural Watermarking</strong> to enable transfer.</div>')
+      + '</div>'
+
+      // Mini progress: Initiate → Accept
+      + '<div style="display:flex;align-items:flex-start;justify-content:center;gap:0;margin:10px 0 16px">'
+      + stepDot('Initiate', transferDone, false) + conn(transferDone) + stepDot('Accept', acceptDone, transferDone && !acceptDone) + conn(acceptDone) + stepDot('Complete', false, acceptDone)
+      + '</div>'
+
+      // Action buttons
+      + '<div style="display:flex;gap:10px;justify-content:center">'
+      + '<button class="btn" id="m6-transfer-btn"' + (hasReg && !transferDone ? '' : ' disabled') + '>Initiate Transfer</button>'
+      + '<button class="btn btn-outline" id="m6-accept-btn"' + (transferDone && !acceptDone ? '' : ' disabled') + '>Accept Transfer</button>'
+      + '</div>'
+
+      + '<div id="m6-results"></div>'
+      + '</div>';
+
+    return moduleScaffold(
+      'Catalog Transfer',
+      'Seamlessly migrate an acquired catalog between platforms with cryptographic chain of title.',
+      'Manual rights management, chain-of-title spreadsheets, blockchain provenance startups',
+      'Ed25519 signatures. Immutable provenance chain. Platform-to-platform custody transfer.',
+      body
+    );
+  }
+
+  function renderM6StepResults() {
+    var html = '';
+    var t = state.module6.transfer;
+    var a = state.module6.accept;
+    var reg = state.regResult || {};
+
+    if (t) {
+      html += '<div style="margin-top:14px;padding:14px;background:var(--surface-2);border-radius:var(--radius);border-left:3px solid var(--accent)">'
+        + '<div style="font-size:0.82rem;font-weight:700;color:var(--accent);margin-bottom:8px">Step 1 — Transfer Initiated</div>'
+        + '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:10px">Platform A (seller) signed a transfer request with their Ed25519 private key. ORBIT verified ownership and created a pending transfer record.</div>'
+        + '<div class="result-grid">'
+        + row('Transfer ID', '<strong>' + t.transfer_id + '</strong>')
+        + row('From', '<span style="color:var(--text)">' + esc(t.from_platform || 'Platform A') + '</span> <span style="font-size:0.68rem;color:var(--text-dim)">(seller)</span>')
+        + row('To', '<span style="color:var(--accent)">' + esc(t.to_platform || 'Platform B') + '</span> <span style="font-size:0.68rem;color:var(--text-dim)">(acquirer)</span>')
+        + row('Source Registration', '#' + (reg.registration_id || t.transfer_id))
+        + row('Seller Signature', badge('Ed25519 Verified', 'success'))
+        + row('Status', badge(esc(t.status || 'pending'), 'warning'))
+        + '</div></div>';
+    }
+
+    if (a) {
+      html += '<div style="margin-top:10px;padding:14px;background:rgba(0,255,170,0.06);border-radius:var(--radius);border-left:3px solid var(--green)">'
+        + '<div style="font-size:0.82rem;font-weight:700;color:var(--green);margin-bottom:8px">Step 2 — Custody Accepted</div>'
+        + '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:10px">Platform B (acquirer) signed the acceptance with their own Ed25519 key. A new registration was created under their identity, chained to the original via cryptographic hash.</div>'
+        + '<div class="result-grid">'
+        + row('New Registration', '<strong>#' + a.new_registration_id + '</strong> <span style="font-size:0.68rem;color:var(--text-dim)">(acquirer\u2019s ledger)</span>')
+        + row('Acquirer Signature', badge('Ed25519 Verified', 'success'))
+        + (a.entry_hash ? row('Entry Hash', '<code style="font-size:0.68rem;color:var(--accent)">' + truncHash(a.entry_hash, 32) + '</code>') : '')
+        + (reg.fingerprint_hash ? row('Fingerprint', '<code style="font-size:0.68rem">' + truncHash(reg.fingerprint_hash, 32) + '</code>') : '')
+        + '</div></div>';
+
+      // Chain of title
+      if (a.full_chain && a.full_chain.length) {
+        html += '<div style="margin-top:12px;padding:14px;background:var(--surface-2);border-radius:var(--radius)">'
+          + '<div style="font-size:0.82rem;font-weight:700;margin-bottom:4px">Chain of Title</div>'
+          + '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:10px">Immutable provenance record. Each entry is linked by cryptographic hash — tamper-proof and auditable by either party.</div>'
+          + renderChain(a.full_chain)
+          + '</div>';
+      }
+
+      // Summary callout
+      html += '<div style="margin-top:10px;padding:10px 14px;background:rgba(0,255,170,0.06);border:1px solid rgba(0,255,170,0.18);border-radius:var(--radius);text-align:center">'
+        + '<div style="font-size:0.78rem;font-weight:600;color:var(--green)">Catalog migration complete</div>'
+        + '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:2px">Both signatures verified. Provenance chain intact. Track is now under the acquirer\u2019s custody.</div>'
         + '</div>';
     }
 
-    var body = '<div class="card">'
-      + '<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:12px;padding:10px;background:var(--surface-2);border-radius:var(--radius)">Demonstrates custody transfer between platforms. The <strong>seller</strong> (Platform A) initiates transfer to the <strong>acquirer</strong> (Platform B), who accepts with cryptographic proof.</div>'
-      + regInfo
-      + '<div class="field" id="m6-regid-field" style="' + (hasReg ? 'display:none' : '') + '"><label>Registration ID</label><input id="m6-regid" type="number" placeholder="Enter registration ID from a previous registration"></div>'
-      + '<div class="row">'
-      + '<button class="btn" id="m6-transfer-btn"' + (hasReg ? '' : ' disabled') + '>1) Initiate Transfer</button>'
-      + '<button class="btn btn-outline" id="m6-accept-btn" disabled>2) Acquirer Accepts</button>'
-      + '</div>'
-      + '<div class="row">'
-      + '<button class="btn btn-outline" id="m6-chain-btn"' + (hasReg ? '' : ' disabled') + '>3) Verify Chain of Title</button>'
-      + '</div>'
-      + '<div id="m6-results">' + renderM6Results() + '</div>'
-      + '</div>';
-    return moduleScaffold(
-      'Catalog Transfer & Provenance',
-      'Transfer \u2192 Accept \u2192 Chain of Title. Cryptographic proof at every step.',
-      'Manual rights management, chain-of-title spreadsheets, blockchain provenance startups',
-      'Ed25519 cryptographic signatures. Immutable provenance chain. Platform-to-platform custody transfer. Forward-deployable to sellers pre-acquisition.',
-      body
-    );
+    return html;
   }
 
   function bindM6() {
     bindBackToHub();
     var transferBtn = $('#m6-transfer-btn');
     var acceptBtn = $('#m6-accept-btn');
-    var chainBtn = $('#m6-chain-btn');
-    var regIdInput = $('#m6-regid');
+    var sel = $('#m6-track');
 
-    if (regIdInput) {
-      regIdInput.addEventListener('input', function() {
-        var val = this.value.trim();
-        transferBtn.disabled = !val;
-        chainBtn.disabled = !val;
-      });
+    if (sel && state.regResult && state.regResult.metadata) {
+      var regFilename = state.regResult.metadata.filename || '';
+      var opts = sel.options;
+      for (var i = 0; i < opts.length; i++) {
+        if (opts[i].value && regFilename && opts[i].value === regFilename) { sel.selectedIndex = i; break; }
+      }
     }
 
     function getRegId() {
       if (state.regResult && state.regResult.registration_id) return state.regResult.registration_id;
-      var input = $('#m6-regid');
-      return input ? Number(input.value.trim()) : null;
-    }
-
-    function getFpHash() {
-      if (state.regResult && state.regResult.fingerprint_hash) return state.regResult.fingerprint_hash;
-      if (state.module6.result && state.module6.result.fingerprint_hash) return state.module6.result.fingerprint_hash;
       return null;
     }
 
     transferBtn.addEventListener('click', async function() {
       var regId = getRegId();
-      if (!regId) { $('#m6-results').innerHTML = '<div class="error-msg">No registration ID available.</div>'; return; }
+      if (!regId) { $('#m6-results').innerHTML = '<div class="error-msg">No registration available. Register a track in Neural Watermarking first.</div>'; return; }
       this.disabled = true;
       clearLog();
-      addLogMsg('--- Custody Transfer: Platform A \u2192 Platform B ---');
+      addLogMsg('--- Seller initiates custody transfer ---');
       try {
         var res = await fetch('/api/transfer', {
           method: 'POST',
@@ -1285,11 +1368,11 @@ body {
         });
         var data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || 'Transfer failed');
-        addLogMsg('Transfer ID: ' + data.transfer_id + ' — Status: ' + data.status);
-        if (!state.module6.result) state.module6.result = state.regResult || { registration_id: regId };
+        addLogMsg('Transfer initiated — ID: ' + data.transfer_id);
         state.module6.transfer = data;
         acceptBtn.disabled = false;
-        $('#m6-results').innerHTML = renderM6Results();
+        $('#m6-results').innerHTML = renderM6StepResults();
+        renderView();
       } catch (err) {
         $('#m6-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
       }
@@ -1298,7 +1381,7 @@ body {
     acceptBtn.addEventListener('click', async function() {
       if (!state.module6.transfer) return;
       this.disabled = true;
-      addLogMsg('--- Acquirer Accepts Custody ---');
+      addLogMsg('--- Acquirer accepts custody ---');
       try {
         var res = await fetch('/api/accept-transfer', {
           method: 'POST',
@@ -1307,30 +1390,13 @@ body {
         });
         var data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || 'Accept failed');
-        addLogMsg('Accepted. New registration ID: ' + data.new_registration_id);
+        addLogMsg('Custody transferred — new registration #' + data.new_registration_id);
         state.module6.accept = data;
-        $('#m6-results').innerHTML = renderM6Results();
+        $('#m6-results').innerHTML = renderM6StepResults();
+        renderView();
       } catch (err) {
         $('#m6-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
       }
-    });
-
-    chainBtn.addEventListener('click', async function() {
-      var fp = getFpHash();
-      if (!fp) { $('#m6-results').innerHTML = '<div class="error-msg">No fingerprint hash available for chain lookup.</div>'; return; }
-      this.disabled = true;
-      addLogMsg('--- Chain of Title Lookup ---');
-      try {
-        var res = await fetch('/api/chain/' + encodeURIComponent(fp));
-        var data = await res.json();
-        if (!res.ok || data.error) throw new Error(data.error || 'Chain lookup failed');
-        var c = data.data || data;
-        state.module6.chain = c;
-        $('#m6-results').innerHTML = renderM6Results();
-      } catch (err) {
-        $('#m6-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
-      }
-      this.disabled = false;
     });
   }
 
@@ -1345,7 +1411,7 @@ body {
       + '<div class="funnel-content"><div class="funnel-label">Phase 1 — Pre-Acquisition Audit</div>'
       + '<div class="funnel-title">Screen &amp; Verify Before You Pay</div>'
       + '<div class="funnel-desc">AI detection flags synthetic content. Fingerprinting verifies against 130M+ references. Metadata audit catches gaps.</div>'
-      + '<div class="funnel-modules"><span class="funnel-mod active">AI Detection</span><span class="funnel-mod active">Catalog Intelligence</span><span class="funnel-mod active">Audio Analysis</span></div>'
+      + '<div class="funnel-modules"><span class="funnel-mod active">AI Detection</span><span class="funnel-mod active">Catalog Intelligence</span></div>'
       + '</div></div>'
 
       + '<div class="funnel-step"><div class="funnel-line"><div class="funnel-dot active"></div><div class="funnel-connector"></div></div>'
@@ -1356,22 +1422,22 @@ body {
       + '</div></div>'
 
       + '<div class="funnel-step"><div class="funnel-line"><div class="funnel-dot active"></div><div class="funnel-connector"></div></div>'
-      + '<div class="funnel-content"><div class="funnel-label">Phase 3 — Custody Transfer</div>'
-      + '<div class="funnel-title">Cryptographic Chain of Title</div>'
-      + '<div class="funnel-desc">Seller registers under their identity. Ed25519 signatures transfer custody to acquirer. Verifiable by both parties.</div>'
-      + '<div class="funnel-modules"><span class="funnel-mod active">Catalog Transfer</span><span class="funnel-mod active">Provenance Chain</span></div>'
+      + '<div class="funnel-content"><div class="funnel-label">Phase 3 — Register &amp; Protect</div>'
+      + '<div class="funnel-title">Watermark &amp; Fingerprint</div>'
+      + '<div class="funnel-desc">Sony SilentCipher neural watermark embeds provenance identity. Fingerprint and Ed25519 signature registered on the ledger.</div>'
+      + '<div class="funnel-modules"><span class="funnel-mod active">Neural Watermark</span><span class="funnel-mod active">Fingerprint</span></div>'
       + '</div></div>'
 
       + '<div class="funnel-step"><div class="funnel-line"><div class="funnel-dot"></div></div>'
-      + '<div class="funnel-content"><div class="funnel-label">Phase 4 — Post-Migration Protection</div>'
-      + '<div class="funnel-title">Watermark &amp; Defend</div>'
-      + '<div class="funnel-desc">Sony SilentCipher neural watermark embeds provenance identity. Survives transcoding. Extractable from any copy.</div>'
-      + '<div class="funnel-modules"><span class="funnel-mod active">Neural Watermark</span><span class="funnel-mod active">Fingerprint</span></div>'
+      + '<div class="funnel-content"><div class="funnel-label">Phase 4 — Custody Transfer</div>'
+      + '<div class="funnel-title">Cryptographic Chain of Title</div>'
+      + '<div class="funnel-desc">Registered catalog transfers from seller to acquirer. Ed25519 signatures at every step. Verifiable by both parties.</div>'
+      + '<div class="funnel-modules"><span class="funnel-mod active">Catalog Transfer</span><span class="funnel-mod active">Provenance Chain</span></div>'
       + '</div></div>'
 
       + '</div>'
       + '<div style="max-width:1060px;margin:14px auto 0;padding:10px 14px;background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius);text-align:center;font-size:0.82rem;color:var(--accent);font-weight:600">'
-      + 'Result: Every acquired catalog is verified, enriched, cryptographically transferred, and watermarked.'
+      + 'Result: Every acquired catalog is verified, enriched, registered, watermarked, and cryptographically transferred.'
       + '</div>'
       + '<div style="margin-top:16px"><button class="btn btn-outline" id="pipeline-hub">Back to Overview</button></div>'
       + '</div>';
@@ -1455,7 +1521,7 @@ body {
       + vendorRow('AI Content Detection', 'Illuminarty, Boomy AI Detector, manual listening teams', 'No incumbent combines detection + enrichment')
       + vendorRow('Audio Metadata & Enrichment', 'Cyanite (\u20ac2.2M), Musiio (acq. SoundCloud ~$5\u201310M)', 'Genre, mood, BPM, key, instruments from audio')
       + vendorRow('Catalog Fingerprinting', 'AcoustID (open), ACRCloud, Pex ($57M)', 'ORBIT unifies AcoustID + ACRCloud + MusicBrainz')
-      + vendorRow('Neural Watermarking', 'Digimarc (public), Irdeto/Civolution', 'Provenance identity embedded in the waveform')
+      + vendorRow('Neural Watermarking', 'Digimarc (public), Irdeto — broadcast monitoring only', 'Provenance identity embedded in the waveform for catalog transfer')
       + vendorRow('Provenance & Chain of Title', 'Manual spreadsheets, Audius ($11M), Royal ($75M)', 'Cryptographic Ed25519 signatures, platform-to-platform')
       + vendorRow('Catalog Ingest (DDEX)', 'FUGA, Labelcamp, custom parsers', 'ERN 3.x/4.x parsed automatically')
       + '</div>'
@@ -1473,6 +1539,15 @@ body {
 
   // ========== Closing / Value ==========
   function renderClosing() {
+    var integrationStep = function(num, title, detail, time) {
+      return '<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:12px">'
+        + '<div style="width:28px;height:28px;border-radius:50%;background:var(--accent);color:var(--bg);font-weight:700;font-size:0.78rem;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + num + '</div>'
+        + '<div style="flex:1"><div style="font-weight:600;font-size:0.82rem">' + title + '</div>'
+        + '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:2px">' + detail + '</div></div>'
+        + '<div style="font-size:0.68rem;color:var(--accent);font-weight:600;white-space:nowrap;margin-top:2px">' + time + '</div>'
+        + '</div>';
+    };
+
     return '<div class="slide-section">'
       + '<h1 class="slide-headline">What You Get</h1>'
       + '<p class="slide-subline">Five vendor categories. One integration.</p>'
@@ -1493,6 +1568,34 @@ body {
       + '<div class="slide-col-card" style="text-align:center;padding:14px"><h3 style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em">Platform</h3><div style="font-size:1.8rem;font-weight:800;color:var(--accent);margin:6px 0">$8,000<span style="font-size:0.7rem;font-weight:400;color:var(--text-dim)">/mo</span></div><div style="font-size:0.72rem;color:var(--text-dim)">All six modules</div></div>'
       + '</div>'
       + '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:8px">Pilot: $4,000/mo first month. Replaces $20K+/mo in vendors + headcount.</div>'
+
+      // ---- Integration Roadmap ----
+      + '<div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--border)">'
+      + '<h2 style="font-size:1.1rem;font-weight:700;margin-bottom:4px">Integration Roadmap</h2>'
+      + '<p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:16px">From zero to automated pipeline — what it actually takes.</p>'
+
+      + '<div style="max-width:700px;margin:0 auto">'
+      + integrationStep('1', 'Platform Credentials', 'We generate your Ed25519 keypair and platform ID. One-time onboarding call.', '5 min')
+      + integrationStep('2', 'Install', '<code style="font-size:0.72rem;background:var(--surface-2);padding:2px 6px;border-radius:4px">npm install @ohnrshyp/orbit-cli -g</code> for command-line automation. <code style="font-size:0.72rem;background:var(--surface-2);padding:2px 6px;border-radius:4px">npm install @ohnrshyp/orbit-sdk</code> to integrate into your own code. Node 18+.', '1 min')
+      + integrationStep('3', 'Configure', '<code style="font-size:0.72rem;background:var(--surface-2);padding:2px 6px;border-radius:4px">orbit init --api-url &lt;url&gt; --platform-id &lt;id&gt; --private-key &lt;key&gt;</code>', '2 min')
+      + integrationStep('4', 'Point at Intake Folder', '<code style="font-size:0.72rem;background:var(--surface-2);padding:2px 6px;border-radius:4px">orbit watch /intake --command register</code> &nbsp; Polls for new audio, auto-registers, watermarks, and fingerprints every file. Runs as a daemon.', 'Instant')
+      + integrationStep('5', 'Batch Process Existing Catalog', '<code style="font-size:0.72rem;background:var(--surface-2);padding:2px 6px;border-radius:4px">orbit batch /catalog --command register --recursive</code> &nbsp; One-shot scan of entire catalog directory tree.', 'Instant')
+      + integrationStep('6', 'DDEX Ingest (if applicable)', '<code style="font-size:0.72rem;background:var(--surface-2);padding:2px 6px;border-radius:4px">orbit ingest /deliveries/ern.xml --audio-dir /audio</code> &nbsp; Parses ERN 3.x/4.x, extracts metadata, registers tracks automatically.', 'Instant')
+      + '</div>'
+
+      + '<div style="margin-top:16px;padding:12px;background:var(--surface-2);border-radius:var(--radius);max-width:700px;margin-left:auto;margin-right:auto">'
+      + '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px">Dashboard Integration</div>'
+      + '<div style="font-size:0.72rem;color:var(--text-dim);line-height:1.5">'
+      + 'The ORBIT SDK (<code>@ohnrshyp/orbit-sdk</code>) exposes 9 methods: <code>register</code>, <code>verify</code>, <code>transfer</code>, <code>acceptTransfer</code>, <code>getChain</code>, <code>analyze</code>, <code>similar</code>, <code>listRegistrations</code>, <code>listPendingTransfers</code>. '
+      + 'Every method returns structured JSON. We provide an agent-ready integration spec — your engineering team (or a coding agent like Cursor) can wire ORBIT into your existing dashboards in hours, not weeks.'
+      + '</div>'
+      + '</div>'
+
+      + '<div style="margin-top:12px;padding:12px;background:rgba(0,255,170,0.06);border:1px solid rgba(0,255,170,0.18);border-radius:var(--radius);max-width:700px;margin-left:auto;margin-right:auto">'
+      + '<div style="font-size:0.82rem;font-weight:600;color:var(--green);margin-bottom:4px">Total time to live pipeline</div>'
+      + '<div style="font-size:0.72rem;color:var(--text-dim)">CLI install + configure + point at folder: <strong style="color:var(--accent)">under 10 minutes</strong>. Dashboard integration via SDK: <strong style="color:var(--accent)">1\u20132 hours</strong> with an engineer or coding agent. No infrastructure to provision — ORBIT is a hosted API.</div>'
+      + '</div>'
+      + '</div>'
 
       + '<div style="margin-top:14px"><button class="btn btn-outline" id="closing-hub">Back to Overview</button></div>'
       + '</div>';
