@@ -33,6 +33,7 @@ coverage/
 *.tmp
 *.temp
 .cache/
+demo/cache/
 
 # Model cache (can be large)
 models/

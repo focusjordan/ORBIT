@@ -44,6 +44,36 @@ const TRACK_META = {
   'Ripped-Up Cheeseburger.mp3':            { title: 'Ripped-Up Cheeseburger', artist: 'Suno', genre: 'AI' },
 };
 
+// ---------------------------------------------------------------------------
+// Result Cache — real pipeline results saved to disk on first analysis,
+// served instantly on subsequent requests.  Delete demo/cache/ to recompute.
+// ---------------------------------------------------------------------------
+
+const CACHE_DIR = path.resolve(__dirname, 'cache');
+if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
+
+function cacheKey(filename) {
+  return path.join(CACHE_DIR, filename.replace(/[^a-zA-Z0-9._-]/g, '_') + '.json');
+}
+
+function getCachedResult(filename) {
+  const p = cacheKey(filename);
+  if (!fs.existsSync(p)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch (_) { return null; }
+}
+
+function saveCachedResult(filename, result) {
+  try {
+    fs.writeFileSync(cacheKey(filename), JSON.stringify(result, null, 2));
+  } catch (err) {
+    console.warn('  [cache] Failed to save:', err.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+
 function resolvePrecomputedStemsDir(filename) {
   if (!filename) return null;
   const safeName = path.basename(filename);
@@ -211,11 +241,7 @@ app.post('/api/analyze', upload.single('audio'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
 
     const apiUrl = process.env.ORBIT_API_URL;
-    const audio64 = req.file.buffer.toString('base64');
 
-    // Send JSON directly to ORBIT API (bypasses SDK's CBOR encoding which
-    // breaks on large files). The analyze endpoint uses optionalAuth so no
-    // signature is required.
     const trackMeta = {};
     if (req.body.title) trackMeta.title = req.body.title;
     if (req.body.artist) trackMeta.artist = req.body.artist;
@@ -225,6 +251,17 @@ app.post('/api/analyze', upload.single('audio'), async (req, res) => {
       safeFilename
       && (TRACK_META[safeFilename] || fs.existsSync(path.join(DEMO_AUDIO_DIR, safeFilename)))
     );
+    const forceLive = req.query.live === 'true';
+
+    if (isKnownDemoTrack && !forceLive) {
+      const cached = getCachedResult(safeFilename);
+      if (cached) {
+        console.log(`  [analyze] Serving cached result for ${safeFilename}`);
+        return res.json(cached);
+      }
+    }
+
+    const audio64 = req.file.buffer.toString('base64');
     const stemsDir = isKnownDemoTrack ? resolvePrecomputedStemsDir(safeFilename) : null;
 
     const orbitRes = await fetch(`${apiUrl}/orbit/v2/analyze`, {
@@ -253,16 +290,38 @@ app.post('/api/analyze', upload.single('audio'), async (req, res) => {
           `${k}: ${v == null ? 'NULL' : typeof v === 'object' ? (v.sonicsScore ?? v.aiScore ?? v.anomalyScore ?? v.suspicionScore ?? v.provenanceScore ?? v.watermarkScore ?? v.aiLikelihood ?? 'obj') : v}`
         ).join(', '));
     }
-    res.json({
+    const result = {
       analysis: d.analysis || d,
       ai_detection: d.ai_detection || null,
       catalog_check: d.catalog_check || null,
       fingerprint: d.fingerprint || null,
       processing_time_ms: d.processing_time_ms,
       processing_log: d.processing_log || [],
-    });
+    };
+
+    if (isKnownDemoTrack) {
+      saveCachedResult(safeFilename, result);
+      console.log(`  [analyze] Cached result for ${safeFilename}`);
+    }
+
+    res.json(result);
   } catch (err) {
     console.error('  [analyze] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/cache  — clear all cached results (forces live re-analysis)
+// ---------------------------------------------------------------------------
+
+app.delete('/api/cache', (_req, res) => {
+  try {
+    const files = fs.readdirSync(CACHE_DIR).filter(f => f.endsWith('.json'));
+    files.forEach(f => fs.unlinkSync(path.join(CACHE_DIR, f)));
+    console.log(`  [cache] Cleared ${files.length} cached results`);
+    res.json({ cleared: files.length });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

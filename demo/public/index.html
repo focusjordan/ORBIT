@@ -299,7 +299,7 @@ body {
     transferResult: null,
     acceptResult: null,
     chainResult: null,
-    module1: { ai: null, human: null },
+    module1: { ai: null },
     module2: { result: null },
     module3: { result: null },
     module4: { result: null, filename: null },
@@ -416,7 +416,7 @@ body {
       text += '<text x="' + lbl.x + '" y="' + lbl.y + '" text-anchor="middle" font-size="10" fill="var(--text-dim)">' + esc(lbl.text) + '</text>';
     });
 
-    return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="100%" style="max-width:420px;display:block;margin:0 auto">'
+    return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="100%" style="max-width:240px;display:block;margin:0 auto">'
       + grid
       + '<polygon points="' + points.join(' ') + '" fill="rgba(45,212,168,0.22)" stroke="var(--accent)" stroke-width="2"></polygon>'
       + text
@@ -610,6 +610,7 @@ body {
 
   function renderM1Result(data) {
     var ai = data.ai_detection || {};
+    var cc = data.catalog_check || null;
     var rec = ai.recommendation || 'UNAVAILABLE';
     var type = rec === 'LIKELY_HUMAN' ? 'success' : rec === 'REVIEW' ? 'warning' : 'error';
     var overall = scorePct(ai.score);
@@ -625,6 +626,59 @@ body {
       html += '<div style="font-size:0.72rem;color:var(--text-dim);text-align:center;margin-bottom:10px">Score floor applied — metadata contains definitive AI indicators</div>';
     }
 
+    if (rec === 'LIKELY_HUMAN') {
+      return html + renderHumanVerdict(ai, cc);
+    }
+    return html + renderAIVerdict(ai);
+  }
+
+  function renderHumanVerdict(ai, cc) {
+    var html = '';
+    var knownTitle = null;
+    var knownArtist = null;
+
+    if (cc && cc.musicbrainz) {
+      knownTitle = cc.musicbrainz.title;
+      knownArtist = cc.musicbrainz.artist;
+    }
+    if (!knownTitle && ai.signals && ai.signals.catalog && ai.signals.catalog.details) {
+      knownTitle = ai.signals.catalog.details.known_title;
+      knownArtist = ai.signals.catalog.details.known_artist;
+    }
+
+    if (knownTitle) {
+      html += '<div style="margin:10px 0;padding:10px 12px;background:rgba(0,255,170,0.06);border:1px solid rgba(0,255,170,0.18);border-radius:var(--radius)">'
+        + '<div style="font-size:0.82rem;font-weight:600;color:var(--green);margin-bottom:4px">Catalog Match Found</div>'
+        + '<div style="font-size:0.78rem;color:var(--text-dim)">AcoustID fingerprint identified this track as '
+        + '<strong style="color:var(--text)">' + esc(knownTitle) + '</strong> by <strong style="color:var(--text)">' + esc(knownArtist || 'Unknown') + '</strong></div>'
+        + '</div>';
+    }
+
+    var reasons = [];
+    if (knownTitle) reasons.push('fingerprint matched a registered human work');
+    var signals = ai.signals || {};
+    if (signals.sonics && typeof signals.sonics.sonicsScore === 'number' && signals.sonics.sonicsScore < 0.15) {
+      reasons.push('SONICS neural classifier returned low synthetic probability');
+    }
+    if (signals.metadata && signals.metadata.suspicionScore < 0.25) {
+      reasons.push('no strong AI metadata indicators');
+    }
+    if (reasons.length) {
+      html += '<div style="font-size:0.75rem;color:var(--text-dim);margin:8px 0;line-height:1.5">'
+        + 'Verdict based on: ' + reasons.join(', ') + '.'
+        + '</div>';
+    }
+
+    if (ai.flags && ai.flags.length) {
+      html += '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:0.75rem;color:var(--text-dim)">All detection flags (' + ai.flags.length + ')</summary><div class="tags" style="margin-top:6px">';
+      ai.flags.forEach(function(f) { html += tag(f, true); });
+      html += '</div></details>';
+    }
+    return html;
+  }
+
+  function renderAIVerdict(ai) {
+    var html = '';
     var signals = ai.signals || {};
     var semantic = signals.semantic ? scorePct(signals.semantic.aiScore) : null;
     var anomaly = signals.anomalies ? scorePct(signals.anomalies.anomalyScore) : null;
@@ -635,37 +689,36 @@ body {
     var noMatch = catalogScore != null && catalogScore === 0 && !catalogFlags.length;
 
     var agreeing = [];
-    var low = [];
+    var other = [];
     var thresh = 15;
 
-    if (semantic != null && semantic >= thresh) agreeing.push({ name: 'Semantic Probe', pct: semantic, explain: 'CLAP zero-shot classifier detects synthetic audio artifacts in the waveform', color: 'var(--accent-2)' });
-    else if (semantic != null) low.push({ name: 'Semantic Probe', pct: semantic, explain: 'CLAP zero-shot classifier — low synthetic signal detected', color: 'var(--accent-2)' });
+    if (semantic != null && semantic >= thresh) agreeing.push({ name: 'Semantic Probe', pct: semantic, explain: 'CLAP zero-shot classifier detects synthetic audio artifacts', color: 'var(--accent-2)' });
+    else if (semantic != null) other.push({ name: 'Semantic Probe', pct: semantic, explain: 'Low synthetic signal detected', color: 'var(--accent-2)' });
 
     if (metadata != null && metadata >= thresh) agreeing.push({ name: 'Metadata Intelligence', pct: metadata, explain: 'File tags, encoder signatures, and behavioral patterns match known AI generators', color: '#8f95b2' });
-    else if (metadata != null) low.push({ name: 'Metadata Intelligence', pct: metadata, explain: 'No strong AI indicators found in file metadata', color: '#8f95b2' });
+    else if (metadata != null) other.push({ name: 'Metadata Intelligence', pct: metadata, explain: 'No strong AI indicators in file metadata', color: '#8f95b2' });
 
     if (anomaly != null && anomaly >= thresh) agreeing.push({ name: 'Forensic Anomaly', pct: anomaly, explain: 'Librosa spectral analysis found anomalies consistent with AI synthesis', color: 'var(--yellow)' });
-    else if (anomaly != null && anomaly > 0) low.push({ name: 'Forensic Anomaly', pct: anomaly, explain: 'Minor spectral anomalies — not conclusive alone', color: 'var(--yellow)' });
+    else if (anomaly != null && anomaly > 0) other.push({ name: 'Forensic Anomaly', pct: anomaly, explain: 'Minor spectral anomalies — not conclusive alone', color: 'var(--yellow)' });
 
     if (sonics != null && sonics >= thresh) agreeing.push({ name: 'SONICS SpecTTTra', pct: sonics, explain: 'Neural classifier trained on synthetic vs. real audio', color: 'var(--accent)' });
-    else if (sonics != null && sonics >= 5) low.push({ name: 'SONICS SpecTTTra', pct: sonics, explain: 'Neural classifier returned low synthetic probability for this track', color: 'var(--accent)' });
+    else if (sonics != null && sonics >= 3) other.push({ name: 'SONICS SpecTTTra', pct: sonics, explain: 'Neural classifier returned low synthetic probability', color: 'var(--accent)' });
 
     if (noMatch) {
-      agreeing.push({ name: 'Catalog Provenance', pct: 0, explain: 'No matching registration found in AcoustID or MusicBrainz — consistent with unregistered AI-generated content', color: 'var(--red)' });
+      agreeing.push({ name: 'Catalog Provenance', pct: 0, explain: 'No registration found in AcoustID or MusicBrainz — consistent with AI-generated content', color: 'var(--red)' });
     } else if (catalogScore != null && catalogScore > 0) {
-      low.push({ name: 'Catalog Provenance', pct: catalogScore, explain: 'Partial catalog match found — metadata inconsistency with known work', color: 'var(--red)' });
+      other.push({ name: 'Catalog Provenance', pct: catalogScore, explain: 'Partial catalog match found — metadata inconsistency with known work', color: 'var(--red)' });
     }
 
     if (agreeing.length) {
-      var agreeCount = agreeing.length;
       html += '<div style="margin-top:12px;margin-bottom:6px;font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em">'
-        + agreeCount + ' signal' + (agreeCount > 1 ? 's' : '') + ' supporting verdict</div>';
+        + agreeing.length + ' signal' + (agreeing.length > 1 ? 's' : '') + ' supporting AI verdict</div>';
       agreeing.forEach(function(s) { html += signalExplain(s.name, s.pct, s.explain, s.color); });
     }
 
-    if (low.length) {
+    if (other.length) {
       html += '<div style="margin-top:10px;margin-bottom:6px;font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em">Other signals</div>';
-      low.forEach(function(s) { html += signalExplain(s.name, s.pct, s.explain, s.color); });
+      other.forEach(function(s) { html += signalExplain(s.name, s.pct, s.explain, s.color); });
     }
 
     var anomalySignal = signals.anomalies || null;
@@ -685,31 +738,15 @@ body {
       ai.flags.forEach(function(f) { html += tag(f, true); });
       html += '</div></details>';
     }
-
     return html;
   }
 
-  function renderM1Verdict() {
-    if (!state.module1.ai || !state.module1.human) return '';
-    var left = (state.module1.ai.ai_detection && state.module1.ai.ai_detection.recommendation) || 'N/A';
-    var right = (state.module1.human.ai_detection && state.module1.human.ai_detection.recommendation) || 'N/A';
-    return '<div class="card" style="margin-top:12px;border-color:var(--accent)">'
-      + '<div class="card-title">Verdict Comparison</div>'
-      + '<div class="result-grid">'
-      + row('AI-Generated Track', left.replace(/_/g, ' '))
-      + row('Human Track', right.replace(/_/g, ' '))
-      + '</div></div>';
-  }
-
   function renderM1() {
-    var body = '<div class="compare-cols">'
-      + '<div class="card"><div class="card-title">AI-Generated Track</div>'
-      + trackSelectHtml('m1-ai-track', function(t) { return t.genre === 'Jazz' || t.genre === 'AI' || String(t.title).toLowerCase().includes('ai'); })
-      + '<button class="btn btn-full" id="m1-ai-btn" disabled>Analyze AI Track</button><div id="m1-ai-results"></div></div>'
-      + '<div class="card"><div class="card-title">Human Track</div>'
-      + trackSelectHtml('m1-human-track', function(t) { return t.artist === 'Fleetwood Mac' || t.genre === 'Rock' || t.artist === 'Jordan Kugler'; })
-      + '<button class="btn btn-full" id="m1-human-btn" disabled>Analyze Human Track</button><div id="m1-human-results"></div></div>'
-      + '</div><div id="m1-verdict">' + renderM1Verdict() + '</div>';
+    var body = '<div class="card">'
+      + trackSelectHtml('m1-track')
+      + '<button class="btn btn-full" id="m1-btn" disabled>Analyze Track</button>'
+      + '<div id="m1-results">' + (state.module1.ai ? renderM1Result(state.module1.ai) : '') + '</div>'
+      + '</div>';
     return moduleScaffold(
       'AI Music Detection',
       'Multi-signal detection pipeline screens every track before it enters your catalog.',
@@ -721,57 +758,39 @@ body {
 
   function bindM1() {
     bindBackToHub();
-    var aiBlob = null, humanBlob = null;
-    function wireSelect(selId, msgId, setBlob, btnId) {
-      var sel = $('#' + selId);
-      if (!sel) return;
+    var blob = null;
+    var sel = $('#m1-track');
+    if (sel) {
       sel.addEventListener('change', async function() {
         if (!this.value) return;
-        var msg = $('#' + msgId);
-        msg.textContent = 'Loading...';
+        $('#m1-track-msg').textContent = 'Loading...';
         try {
-          var blob = await loadTrackBlob(this.value);
-          setBlob(blob);
-          $('#' + btnId).disabled = false;
-          msg.textContent = '';
-        } catch (e) { msg.textContent = 'Failed to load'; }
+          blob = await loadTrackBlob(this.value);
+          $('#m1-btn').disabled = false;
+          $('#m1-track-msg').textContent = '';
+        } catch (e) { $('#m1-track-msg').textContent = 'Failed to load'; }
       });
     }
-    wireSelect('m1-ai-track', 'm1-ai-track-msg', function(b) { aiBlob = b; }, 'm1-ai-btn');
-    wireSelect('m1-human-track', 'm1-human-track-msg', function(b) { humanBlob = b; }, 'm1-human-btn');
 
-    function selectedMeta(selId) {
-      var s = $('#' + selId);
+    function selectedMeta() {
+      var s = $('#m1-track');
       var t = s && s.value ? getTrackMeta(s.value) : null;
       return t ? { title: t.title, artist: t.artist, filename: t.filename } : {};
     }
 
-    $('#m1-ai-btn').addEventListener('click', async function() {
-      if (!aiBlob) return;
+    $('#m1-btn').addEventListener('click', async function() {
+      if (!blob) return;
       this.disabled = true;
-      $('#m1-ai-results').innerHTML = '<div class="loading-inline"><span class="spinner"></span>Analyzing...</div>';
+      clearLog();
+      addLogMsg('--- AI Music Detection ---');
+      $('#m1-results').innerHTML = '<div class="loading-inline"><span class="spinner"></span>Analyzing...</div>';
       try {
-        var d = await analyzeBlob(aiBlob, selectedMeta('m1-ai-track'));
+        var d = await analyzeBlob(blob, selectedMeta());
         state.module1.ai = d;
-        $('#m1-ai-results').innerHTML = renderM1Result(d);
-        $('#m1-verdict').innerHTML = renderM1Verdict();
+        addLog(d.processing_log || []);
+        $('#m1-results').innerHTML = renderM1Result(d);
       } catch (err) {
-        $('#m1-ai-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
-      }
-      this.disabled = false;
-    });
-
-    $('#m1-human-btn').addEventListener('click', async function() {
-      if (!humanBlob) return;
-      this.disabled = true;
-      $('#m1-human-results').innerHTML = '<div class="loading-inline"><span class="spinner"></span>Analyzing...</div>';
-      try {
-        var d = await analyzeBlob(humanBlob, selectedMeta('m1-human-track'));
-        state.module1.human = d;
-        $('#m1-human-results').innerHTML = renderM1Result(d);
-        $('#m1-verdict').innerHTML = renderM1Verdict();
-      } catch (err) {
-        $('#m1-human-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
+        $('#m1-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
       }
       this.disabled = false;
     });
@@ -785,13 +804,25 @@ body {
   function renderM2Result(data) {
     var a = data.analysis || {};
     var html = '';
-    html += '<div class="card" style="margin-top:12px"><div class="card-title">Genre (wav2vec2)</div>';
-    var genres = normalizeList(a.genre, 'Genre').slice(0, 6);
-    if (!genres.length) html += '<div style="font-size:0.78rem;color:var(--text-dim)">Genre data unavailable.</div>';
-    genres.forEach(function(g) { html += confBar(g.label, scorePct(g.confidence), 'var(--accent)'); });
+    html += '<div class="card" style="margin-top:12px"><div class="card-title">Genre Classification</div>';
+    var genres = normalizeList(a.genre, 'Genre').slice(0, 5);
+    if (!genres.length) {
+      html += '<div style="font-size:0.78rem;color:var(--text-dim)">Genre data unavailable.</div>';
+    } else {
+      var topConf = genres[0] ? (Number(genres[0].confidence) || 0) : 1;
+      genres.forEach(function(g, i) {
+        var conf = Number(g.confidence) || 0;
+        var relWidth = topConf > 0 ? Math.round((conf / topConf) * 100) : 0;
+        var opacity = i === 0 ? '1' : (0.7 - i * 0.1).toFixed(2);
+        html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+          + '<span style="font-size:0.82rem;font-weight:600;min-width:90px;color:var(--text);opacity:' + opacity + '">' + esc(g.label) + '</span>'
+          + '<div style="flex:1;height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden"><div style="width:' + relWidth + '%;height:100%;background:var(--accent);border-radius:3px"></div></div>'
+          + '</div>';
+      });
+    }
     if (Array.isArray(a.genre_corroboration) && a.genre_corroboration.length) {
-      html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-top:8px">PANNs genre corroboration</div><div class="tags">';
-      a.genre_corroboration.slice(0, 8).forEach(function(g) {
+      html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:8px">PANNs corroboration</div><div class="tags">';
+      a.genre_corroboration.slice(0, 6).forEach(function(g) {
         html += tag(g.label + ' ' + scorePct(g.confidence) + '%', false);
       });
       html += '</div>';
@@ -1167,27 +1198,37 @@ body {
   }
 
   function renderM6() {
+    var hasReg = !!(state.regResult && state.regResult.registration_id);
+    var regInfo = '';
+    if (hasReg) {
+      var meta = state.regResult.metadata || {};
+      regInfo = '<div style="padding:10px 12px;background:rgba(0,255,170,0.06);border:1px solid rgba(0,255,170,0.18);border-radius:var(--radius);margin-bottom:12px">'
+        + '<div style="font-size:0.82rem;font-weight:600;color:var(--green);margin-bottom:4px">Registered Track Available</div>'
+        + '<div style="font-size:0.78rem;color:var(--text-dim)"><strong style="color:var(--text)">' + esc(meta.title || 'Untitled') + '</strong> by <strong style="color:var(--text)">' + esc(meta.artist || 'Unknown') + '</strong> — Registration #' + state.regResult.registration_id + '</div>'
+        + '</div>';
+    } else {
+      regInfo = '<div style="padding:10px 12px;background:var(--surface-2);border-radius:var(--radius);margin-bottom:12px;font-size:0.78rem;color:var(--text-dim)">'
+        + 'Register a track in <strong>Neural Watermarking</strong> first, or enter a registration ID below.'
+        + '</div>';
+    }
+
     var body = '<div class="card">'
-      + '<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:12px;padding:10px;background:var(--surface-2);border-radius:var(--radius)">This demonstrates the full catalog transfer lifecycle: the <strong>seller</strong> registers their catalog on Platform A, initiates a <strong>custody transfer</strong> to the acquirer on Platform B, who <strong>accepts</strong> with cryptographic proof, creating a verifiable <strong>chain of title</strong>.</div>'
-      + trackSelectHtml('m6-track')
-      + '<div class="dropzone" id="m6-drop"><div class="dropzone-label"><strong>Select a catalog track for custody transfer</strong></div><input type="file" id="m6-file" accept="audio/*"><div class="file-name" id="m6-filename"></div></div>'
-      + '<div class="field"><label>Title *</label><input id="m6-title" type="text" placeholder="Track title"></div>'
-      + '<div class="field"><label>Artist *</label><input id="m6-artist" type="text" placeholder="Artist name"></div>'
-      + '<div class="row"><div class="field"><label>ISRC</label><input id="m6-isrc" type="text" placeholder="USRC12400001"></div><div class="field"><label>Genre</label><input id="m6-genre" type="text" placeholder="Electronic"></div></div>'
+      + '<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:12px;padding:10px;background:var(--surface-2);border-radius:var(--radius)">Demonstrates custody transfer between platforms. The <strong>seller</strong> (Platform A) initiates transfer to the <strong>acquirer</strong> (Platform B), who accepts with cryptographic proof.</div>'
+      + regInfo
+      + '<div class="field" id="m6-regid-field" style="' + (hasReg ? 'display:none' : '') + '"><label>Registration ID</label><input id="m6-regid" type="number" placeholder="Enter registration ID from a previous registration"></div>'
       + '<div class="row">'
-      + '<button class="btn" id="m6-reg-btn" disabled>1) Seller Registers</button>'
-      + '<button class="btn btn-outline" id="m6-transfer-btn" disabled>2) Initiate Transfer</button>'
+      + '<button class="btn" id="m6-transfer-btn"' + (hasReg ? '' : ' disabled') + '>1) Initiate Transfer</button>'
+      + '<button class="btn btn-outline" id="m6-accept-btn" disabled>2) Acquirer Accepts</button>'
       + '</div>'
       + '<div class="row">'
-      + '<button class="btn btn-outline" id="m6-accept-btn" disabled>3) Acquirer Accepts</button>'
-      + '<button class="btn btn-outline" id="m6-chain-btn" disabled>4) Verify Chain of Title</button>'
+      + '<button class="btn btn-outline" id="m6-chain-btn"' + (hasReg ? '' : ' disabled') + '>3) Verify Chain of Title</button>'
       + '</div>'
       + '<div id="m6-results">' + renderM6Results() + '</div>'
       + '</div>';
     return moduleScaffold(
       'Catalog Transfer & Provenance',
-      'Full acquisition lifecycle: Register \u2192 Transfer \u2192 Accept \u2192 Chain of Title. Cryptographic proof at every step.',
-      'Manual rights management, chain-of-title spreadsheets, blockchain provenance startups (Audius $11M, Royal $75M)',
+      'Transfer \u2192 Accept \u2192 Chain of Title. Cryptographic proof at every step.',
+      'Manual rights management, chain-of-title spreadsheets, blockchain provenance startups',
       'Ed25519 cryptographic signatures. Immutable provenance chain. Platform-to-platform custody transfer. Forward-deployable to sellers pre-acquisition.',
       body
     );
@@ -1195,76 +1236,47 @@ body {
 
   function bindM6() {
     bindBackToHub();
-    var blob = null;
-    var fileName = null;
-    var regBtn = $('#m6-reg-btn');
     var transferBtn = $('#m6-transfer-btn');
     var acceptBtn = $('#m6-accept-btn');
     var chainBtn = $('#m6-chain-btn');
+    var regIdInput = $('#m6-regid');
 
-    $('#m6-track').addEventListener('change', async function() {
-      if (!this.value) return;
-      $('#m6-track-msg').textContent = 'Loading...';
-      try {
-        blob = await loadTrackBlob(this.value);
-        fileName = this.value;
-        $('#m6-filename').textContent = this.value;
-        regBtn.disabled = false;
-        $('#m6-track-msg').textContent = '';
-        var m = getTrackMeta(this.value);
-        if (m) {
-          $('#m6-title').value = m.title || '';
-          $('#m6-artist').value = m.artist || '';
-          $('#m6-genre').value = m.genre || '';
-        }
-      } catch (e) {
-        $('#m6-track-msg').textContent = 'Failed to load';
-      }
-    });
-    bindFileInput('m6', function(b) { blob = b; }, function(n) { fileName = n; });
-    $('#m6-file').addEventListener('change', function() { regBtn.disabled = !this.files.length; });
+    if (regIdInput) {
+      regIdInput.addEventListener('input', function() {
+        var val = this.value.trim();
+        transferBtn.disabled = !val;
+        chainBtn.disabled = !val;
+      });
+    }
 
-    regBtn.addEventListener('click', async function() {
-      if (!blob) return;
-      var title = $('#m6-title').value.trim();
-      var artist = $('#m6-artist').value.trim();
-      if (!title || !artist) { $('#m6-results').innerHTML = '<div class="error-msg">Title and artist are required.</div>'; return; }
-      this.disabled = true;
-      clearLog();
-      addLogMsg('--- Seller Registration ---');
-      var fd = new FormData();
-      fd.append('audio', blob, fileName || 'track');
-      fd.append('title', title);
-      fd.append('artist', artist);
-      if ($('#m6-isrc').value.trim()) fd.append('isrc', $('#m6-isrc').value.trim());
-      if ($('#m6-genre').value.trim()) fd.append('genre', $('#m6-genre').value.trim());
-      try {
-        var res = await fetch('/api/register', { method: 'POST', body: fd });
-        var data = await res.json();
-        if (!res.ok || data.error) throw new Error(data.error || 'Registration failed');
-        addLog(data.processing_log || []);
-        state.module6.result = data;
-        state.regResult = data;
-        transferBtn.disabled = false;
-        chainBtn.disabled = false;
-        $('#m6-results').innerHTML = renderM6Results();
-      } catch (err) {
-        $('#m6-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
-      }
-    });
+    function getRegId() {
+      if (state.regResult && state.regResult.registration_id) return state.regResult.registration_id;
+      var input = $('#m6-regid');
+      return input ? Number(input.value.trim()) : null;
+    }
+
+    function getFpHash() {
+      if (state.regResult && state.regResult.fingerprint_hash) return state.regResult.fingerprint_hash;
+      if (state.module6.result && state.module6.result.fingerprint_hash) return state.module6.result.fingerprint_hash;
+      return null;
+    }
 
     transferBtn.addEventListener('click', async function() {
-      if (!state.module6.result) return;
+      var regId = getRegId();
+      if (!regId) { $('#m6-results').innerHTML = '<div class="error-msg">No registration ID available.</div>'; return; }
       this.disabled = true;
-      addLogMsg('--- Custody Transfer Initiated ---');
+      clearLog();
+      addLogMsg('--- Custody Transfer: Platform A \u2192 Platform B ---');
       try {
         var res = await fetch('/api/transfer', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ registration_id: state.module6.result.registration_id }),
+          body: JSON.stringify({ registration_id: regId }),
         });
         var data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || 'Transfer failed');
+        addLogMsg('Transfer ID: ' + data.transfer_id + ' — Status: ' + data.status);
+        if (!state.module6.result) state.module6.result = state.regResult || { registration_id: regId };
         state.module6.transfer = data;
         acceptBtn.disabled = false;
         $('#m6-results').innerHTML = renderM6Results();
@@ -1285,6 +1297,7 @@ body {
         });
         var data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || 'Accept failed');
+        addLogMsg('Accepted. New registration ID: ' + data.new_registration_id);
         state.module6.accept = data;
         $('#m6-results').innerHTML = renderM6Results();
       } catch (err) {
@@ -1293,8 +1306,8 @@ body {
     });
 
     chainBtn.addEventListener('click', async function() {
-      var fp = state.module6.result && state.module6.result.fingerprint_hash;
-      if (!fp) return;
+      var fp = getFpHash();
+      if (!fp) { $('#m6-results').innerHTML = '<div class="error-msg">No fingerprint hash available for chain lookup.</div>'; return; }
       this.disabled = true;
       addLogMsg('--- Chain of Title Lookup ---');
       try {
