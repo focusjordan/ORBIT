@@ -82,9 +82,10 @@ def resolve_model_variant(requested, torch_module):
             )
         return requested
 
-    # Auto default: production on CUDA gets alpha-120s, local dev gets gamma-5s.
+    # Auto default: gamma-120s is the most accurate variant (99%+ on Suno v3).
+    # Local dev without GPU gets the lightweight gamma-5s.
     if torch_module.cuda.is_available():
-        return "alpha-120s"
+        return "gamma-120s"
     return "gamma-5s"
 
 

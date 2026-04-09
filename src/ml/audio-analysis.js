@@ -218,7 +218,7 @@ async function analyze(input, options = {}) {
       if (aiForensics) args.push('--ai-forensics');
 
       const proc = spawn(ANALYSIS_CONFIG.pythonCommand, args, {
-        timeout: ANALYSIS_CONFIG.timeout,
+        timeout: aiForensics ? 180000 : ANALYSIS_CONFIG.timeout,
         env: ANALYSIS_CONFIG.env,
       });
       
