@@ -611,7 +611,7 @@ body {
       + '<h1 class="slide-headline">Catalog Acquisition &amp; Distribution Intelligence</h1>'
       + '<p class="slide-subline">One integration. Five vendor categories replaced.</p>'
       + '<div style="margin-bottom:14px"><button class="btn" id="open-pipeline">Acquisition Pipeline</button> '
-      + '<button class="btn btn-outline" id="open-technical">Technical</button> '
+      + '<button class="btn btn-outline" id="open-technical">Tech FAQ</button> '
       + '<button class="btn btn-outline" id="open-competitive">Competitive</button> '
       + '<button class="btn btn-outline" id="open-closing">Value</button></div>'
       + '<div class="slide-two-col" style="max-width:1060px">';
@@ -732,20 +732,20 @@ body {
     var other = [];
     var thresh = 15;
 
-    if (semantic != null && semantic >= thresh) agreeing.push({ name: 'Semantic Probe', pct: semantic, explain: 'CLAP zero-shot classifier detects synthetic audio artifacts', color: 'var(--accent-2)' });
+    if (semantic != null && semantic >= thresh) agreeing.push({ name: 'Semantic Probe', pct: semantic, explain: 'Semantic analysis detected audio characteristics consistent with AI synthesis', color: 'var(--accent-2)' });
     else if (semantic != null) other.push({ name: 'Semantic Probe', pct: semantic, explain: 'Low synthetic signal detected', color: 'var(--accent-2)' });
 
     if (metadata != null && metadata >= thresh) agreeing.push({ name: 'Metadata Intelligence', pct: metadata, explain: 'File tags, encoder signatures, and behavioral patterns match known AI generators', color: '#8f95b2' });
     else if (metadata != null) other.push({ name: 'Metadata Intelligence', pct: metadata, explain: 'No strong AI indicators in file metadata', color: '#8f95b2' });
 
-    if (anomaly != null && anomaly >= thresh) agreeing.push({ name: 'Forensic Anomaly', pct: anomaly, explain: 'Librosa spectral analysis found anomalies consistent with AI synthesis', color: 'var(--yellow)' });
-    else if (anomaly != null && anomaly > 0) other.push({ name: 'Forensic Anomaly', pct: anomaly, explain: 'Minor spectral anomalies — not conclusive alone', color: 'var(--yellow)' });
+    if (anomaly != null && anomaly >= thresh) agreeing.push({ name: 'Spectral Forensics', pct: anomaly, explain: 'Spectral analysis found anomalies consistent with AI synthesis', color: 'var(--yellow)' });
+    else if (anomaly != null && anomaly > 0) other.push({ name: 'Spectral Forensics', pct: anomaly, explain: 'Minor spectral anomalies — not conclusive alone', color: 'var(--yellow)' });
 
-    if (sonics != null && sonics >= thresh) agreeing.push({ name: 'SONICS SpecTTTra', pct: sonics, explain: 'Neural classifier trained on synthetic vs. real audio', color: 'var(--accent)' });
-    else if (sonics != null && sonics >= 3) other.push({ name: 'SONICS SpecTTTra', pct: sonics, explain: 'Neural classifier returned low synthetic probability', color: 'var(--accent)' });
+    if (sonics != null && sonics >= thresh) agreeing.push({ name: 'Neural Classifier', pct: sonics, explain: 'Neural classification returned high synthetic probability', color: 'var(--accent)' });
+    else if (sonics != null && sonics >= 3) other.push({ name: 'Neural Classifier', pct: sonics, explain: 'Neural classifier returned low synthetic probability', color: 'var(--accent)' });
 
     if (noMatch) {
-      agreeing.push({ name: 'Catalog Provenance', pct: 0, explain: 'No exact or fuzzy match found in ACRCloud, AcoustID, or MusicBrainz', color: 'var(--red)' });
+      agreeing.push({ name: 'Catalog Provenance', pct: 0, explain: 'No match found across 130M+ registered works — consistent with AI-generated content', color: 'var(--red)' });
     } else if (catalogScore != null && catalogScore > 0) {
       other.push({ name: 'Catalog Provenance', pct: catalogScore, explain: 'Partial catalog match found — metadata inconsistency with known work', color: 'var(--red)' });
     }
@@ -791,7 +791,7 @@ body {
       'AI Music Detection',
       'Multi-signal detection pipeline screens every track before it enters your catalog.',
       'Illuminarty, Boomy AI Detector, manual listening teams',
-      'CLAP semantic probe, 13 librosa spectral forensics, metadata intelligence, catalog provenance, and SONICS neural classifier. Each signal runs independently — the verdict shows which ones agree.',
+      '5-signal ensemble: semantic analysis, spectral forensics, metadata intelligence, catalog provenance, and neural classification. Each signal runs independently — the verdict shows which ones agree.',
       body
     );
   }
@@ -1093,7 +1093,7 @@ body {
       'Neural Watermarking',
       'Embed your ownership identity directly into the audio. Survives transcoding, re-upload, and format conversion.',
       'Legacy broadcast watermarking (Digimarc, Irdeto) — no one embeds provenance identity for catalog transfer',
-      'Dual-mode: Sony SilentCipher neural watermark (primary) + spread-spectrum fallback. Identity embedded in the waveform itself — extractable from any copy.',
+      'Dual-mode: neural watermark (primary) + spread-spectrum fallback. Provenance identity embedded in the waveform itself — extractable from any copy, in any format.',
       body
     );
   }
@@ -1487,7 +1487,7 @@ body {
       + '<div class="funnel-step"><div class="funnel-line"><div class="funnel-dot active"></div><div class="funnel-connector"></div></div>'
       + '<div class="funnel-content"><div class="funnel-label">Phase 3 — Register &amp; Protect</div>'
       + '<div class="funnel-title">Watermark &amp; Fingerprint</div>'
-      + '<div class="funnel-desc">Sony SilentCipher neural watermark embeds provenance identity. Fingerprint and Ed25519 signature registered on the ledger.</div>'
+      + '<div class="funnel-desc">Neural watermark embeds provenance identity. Fingerprint and cryptographic signature registered on the ledger.</div>'
       + '<div class="funnel-modules"><span class="funnel-mod active">Neural Watermark</span><span class="funnel-mod active">Fingerprint</span></div>'
       + '</div></div>'
 
@@ -1511,48 +1511,35 @@ body {
     if (b) b.addEventListener('click', function() { goToView('hub'); });
   }
 
-  // ========== Technical Deep Dive ==========
+  // ========== Technical FAQ ==========
+  function faqItem(q, a) {
+    return '<div style="padding:14px 0;border-bottom:1px solid var(--border)">'
+      + '<div style="font-size:0.88rem;font-weight:700;color:var(--text);margin-bottom:6px">' + q + '</div>'
+      + '<div style="font-size:0.8rem;color:var(--text-dim);line-height:1.65">' + a + '</div>'
+      + '</div>';
+  }
+
   function renderTechnical() {
-    return '<div class="slide-section" style="text-align:left;max-width:1140px">'
-      + '<div style="text-align:center"><h1 class="slide-headline" style="font-size:1.6rem">Technical Architecture</h1></div>'
+    return '<div class="slide-section" style="text-align:left;max-width:900px">'
+      + '<div style="text-align:center"><h1 class="slide-headline" style="font-size:1.6rem">Technical FAQ</h1>'
+      + '<p style="font-size:0.82rem;color:var(--text-dim);margin-top:4px">Common questions from engineering teams.</p></div>'
 
-      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px">'
 
-      + '<div class="card" style="padding:14px;overflow-x:auto"><div class="card-title">Model Stack</div>'
-      + '<table class="tech-table"><thead><tr><th>Model</th><th>Capability</th><th>Used In</th><th>Output</th></tr></thead><tbody>'
-      + '<tr><td class="model-name">SONICS SpecTTTra</td><td>Synthetic vs. real classifier</td><td>AI Detection</td><td>Probability</td></tr>'
-      + '<tr><td class="model-name">CLAP HTSAT</td><td>Zero-shot classification + embeddings</td><td>AI probe, mood, vocals</td><td>512-dim vector</td></tr>'
-      + '<tr><td class="model-name">wav2vec2-GTZAN</td><td>Supervised genre classification</td><td>Metadata enrichment</td><td>Genre probs</td></tr>'
-      + '<tr><td class="model-name">PANNs Cnn14</td><td>Audio tagging + embeddings</td><td>Instruments, catalog</td><td>2048-dim vector</td></tr>'
-      + '<tr><td class="model-name">Demucs htdemucs</td><td>4-stem source separation</td><td>Key detection</td><td>Stem WAVs</td></tr>'
-      + '<tr><td class="model-name">SilentCipher</td><td>Neural audio watermarking</td><td>Provenance, AI probe</td><td>Marked audio</td></tr>'
-      + '<tr><td class="model-name">librosa + scipy</td><td>13 spectral forensic signals</td><td>AI forensic layer</td><td>Signal scores</td></tr>'
-      + '<tr><td class="model-name">Chromaprint</td><td>Audio fingerprinting</td><td>Identification</td><td>FP hash</td></tr>'
-      + '<tr><td class="model-name">Ed25519 + CBOR</td><td>Cryptographic signing</td><td>Provenance chain</td><td>Signed payloads</td></tr>'
-      + '</tbody></table></div>'
+      + '<div class="card" style="padding:16px 18px">'
+      + faqItem('What does our team actually need to run this?', 'Very little. ORBIT is a hosted API — no database, no ML infrastructure, no GPU on your side. Install the CLI or SDK via npm, set three environment variables (API URL, platform ID, private key), and you\'re done. Node 18+ is the only runtime requirement.')
+      + faqItem('How accurate is the AI detection?', 'The detection system runs a multi-signal ensemble — several independent methods that each evaluate the audio from a different angle. Signals that agree reinforce each other; disagreement is weighted accordingly. Ensemble accuracy: <strong style="color:var(--accent)">95.2%</strong> across test datasets. The system favors specificity — it would rather flag for human review than silently pass an AI track.')
+      + faqItem('Is the watermark audible? What does it survive?', 'Inaudible — embedded at ~48 dB SDR, well below human perception. It survives lossy compression (MP3, AAC, OGG), format conversion, re-upload, re-encoding, and transcoding between sample rates. Any copy of the file — in any format — can be verified.')
+      + '</div>'
 
-      + '<div><div class="card" style="padding:14px"><div class="card-title">AI Detection — 5 Signal Ensemble</div>'
-      + '<div class="result-grid" style="margin-top:6px">'
-      + row('SONICS SpecTTTra', 'Neural synthetic classifier')
-      + row('CLAP Semantic Probe', 'Zero-shot AI detection prompts')
-      + row('Spectral Forensics', '13 librosa signals (crest, MFCC, phase, jitter...)')
-      + row('Metadata Intelligence', 'Encoder tags, Suno/Udio format signatures')
-      + row('Catalog Corroboration', 'AcoustID/ACRCloud match + consistency')
-      + row('Watermark Probe', 'SilentCipher residual check')
-      + row('Corpus Accuracy', '<strong style="color:var(--accent)">95.2%</strong>')
-      + '</div></div>'
-
-      + '<div class="card" style="padding:14px;margin-top:14px"><div class="card-title">Patentable IP (6 areas)</div>'
-      + '<div style="font-size:0.76rem;line-height:1.8;margin-top:6px">'
-      + '<div><span style="color:var(--accent);font-weight:700">1.</span> Multi-Signal AI Detection Ensemble</div>'
-      + '<div><span style="color:var(--accent);font-weight:700">2.</span> Forward-Deploy Catalog Acquisition Pipeline</div>'
-      + '<div><span style="color:var(--accent);font-weight:700">3.</span> Watermark-Linked Provenance Identity</div>'
-      + '<div><span style="color:var(--accent);font-weight:700">4.</span> Stem-Aware Musical Key Detection</div>'
-      + '<div><span style="color:var(--accent);font-weight:700">5.</span> Cross-Platform Custody Transfer Protocol</div>'
-      + '<div><span style="color:var(--accent);font-weight:700">6.</span> AI Forensic Signal Architecture</div>'
-      + '</div></div></div>'
+      + '<div class="card" style="padding:16px 18px">'
+      + faqItem('What data does ORBIT store? Do you hold our audio?', 'ORBIT does <strong>not</strong> store original audio files. The ledger holds fingerprint hashes, watermark identifiers, metadata, cryptographic signatures, and transfer records. Watermarked audio is returned to you during registration and transfer — storage is your responsibility.')
+      + faqItem('How is the chain of title secured?', 'Private keys never leave the client. Every operation requires a valid cryptographic signature from the platform that owns the asset — nothing is trusted implicitly. The ledger is tamper-proof by construction: altering any registration breaks the chain and is immediately detectable.')
+      + faqItem('What if we want to check a track we didn\'t register?', 'ORBIT checks any audio file against 130M+ registered works across multiple commercial identification services — regardless of whether it was registered through ORBIT. If it was registered on the ORBIT network by anyone, you also get the full chain of title.')
+      + '</div>'
 
       + '</div>'
+
       + '<div style="text-align:center;margin-top:14px"><button class="btn btn-outline" id="tech-hub">Back to Overview</button></div>'
       + '</div>';
   }
@@ -1619,7 +1606,7 @@ body {
       + '<div class="value-item"><h4>AI Detection</h4><div class="vi-stat" style="font-size:1.4rem">5 Signals</div><p>95.2% corpus accuracy</p></div>'
       + '<div class="value-item"><h4>Audio Analysis</h4><div class="vi-stat" style="font-size:1.4rem">7 Dimensions</div><p>Genre, mood, BPM, key, instruments</p></div>'
       + '<div class="value-item"><h4>Catalog Intelligence</h4><div class="vi-stat" style="font-size:1.4rem">130M+ Refs</div><p>AcoustID + ACRCloud + MusicBrainz</p></div>'
-      + '<div class="value-item"><h4>Watermarking</h4><div class="vi-stat" style="font-size:1.4rem">Dual-Mode</div><p>SilentCipher neural + spread-spectrum</p></div>'
+      + '<div class="value-item"><h4>Watermarking</h4><div class="vi-stat" style="font-size:1.4rem">Dual-Mode</div><p>Neural watermark + spread-spectrum fallback</p></div>'
       + '<div class="value-item"><h4>Catalog Ingest</h4><div class="vi-stat" style="font-size:1.4rem">ERN 3.x/4.x</div><p>Tracks, deals, territories, contributors</p></div>'
       + '<div class="value-item"><h4>Provenance</h4><div class="vi-stat" style="font-size:1.4rem">Ed25519</div><p>Cryptographic custody transfer</p></div>'
       + '</div>'
