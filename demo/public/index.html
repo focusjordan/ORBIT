@@ -399,7 +399,8 @@ body {
 
     for (var j = 0; j < items.length; j++) {
       var angle = (Math.PI * 2 * j / items.length) - (Math.PI / 2);
-      var value = Math.max(0, Math.min(1, Number(items[j].confidence) || 0));
+      var raw = Math.max(0, Math.min(1, Number(items[j].confidence) || 0));
+      var value = Math.sqrt(raw);
       var px = cx + Math.cos(angle) * radius * value;
       var py = cy + Math.sin(angle) * radius * value;
       points.push(px.toFixed(1) + ',' + py.toFixed(1));
@@ -561,11 +562,11 @@ body {
   function renderHub() {
     var cards = [
       { id: 'mod-ai-detect', icon: '&#128737;', name: 'AI Music Detection', desc: 'Screen every track for synthetic content.' },
-      { id: 'mod-analysis', icon: '&#127911;', name: 'Audio Analysis & Metadata', desc: 'Genre, mood, BPM, key, instruments — automated.' },
       { id: 'mod-fingerprint', icon: '&#128376;', name: 'Catalog Intelligence', desc: 'Unified verification via AcoustID + ACRCloud.' },
-      { id: 'mod-watermark', icon: '&#128274;', name: 'Neural Watermarking', desc: 'Provenance identity embedded in the waveform.' },
+      { id: 'mod-analysis', icon: '&#127911;', name: 'Audio Analysis & Metadata', desc: 'Genre, mood, BPM, key, instruments — automated.' },
       { id: 'mod-ddex', icon: '&#128196;', name: 'Catalog Ingest', desc: 'DDEX ERN parsing into usable structures.' },
       { id: 'mod-provenance', icon: '&#128279;', name: 'Catalog Transfer', desc: 'Cryptographic custody transfer across platforms.' },
+      { id: 'mod-watermark', icon: '&#128274;', name: 'Neural Watermarking', desc: 'Provenance identity embedded in the waveform.' },
     ];
     var html = '<div class="slide-section">'
       + '<h1 class="slide-headline">Catalog Acquisition &amp; Distribution Intelligence</h1>'
