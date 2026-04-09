@@ -44,6 +44,17 @@ const TRACK_META = {
   'Ripped-Up Cheeseburger.mp3':            { title: 'Ripped-Up Cheeseburger', artist: 'Suno', genre: 'AI' },
 };
 
+function resolvePrecomputedStemsDir(filename) {
+  if (!filename) return null;
+  const safeName = path.basename(filename);
+  const stemsRoot = path.join(DEMO_AUDIO_DIR, 'stems');
+  const stemDir = path.join(stemsRoot, path.parse(safeName).name);
+  if (fs.existsSync(stemDir)) {
+    return stemDir;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // DDEX Parser (imported directly -- pure transform, no heavy deps)
 // ---------------------------------------------------------------------------
@@ -209,6 +220,12 @@ app.post('/api/analyze', upload.single('audio'), async (req, res) => {
     if (req.body.title) trackMeta.title = req.body.title;
     if (req.body.artist) trackMeta.artist = req.body.artist;
     if (req.body.filename) trackMeta.filename = req.body.filename;
+    const safeFilename = req.body.filename ? path.basename(req.body.filename) : null;
+    const isKnownDemoTrack = !!(
+      safeFilename
+      && (TRACK_META[safeFilename] || fs.existsSync(path.join(DEMO_AUDIO_DIR, safeFilename)))
+    );
+    const stemsDir = isKnownDemoTrack ? resolvePrecomputedStemsDir(safeFilename) : null;
 
     const orbitRes = await fetch(`${apiUrl}/orbit/v2/analyze`, {
       method: 'POST',
@@ -217,6 +234,7 @@ app.post('/api/analyze', upload.single('audio'), async (req, res) => {
         audio: audio64,
         include: ['genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 'fingerprint', 'ai_detection', 'catalog_check'],
         metadata: trackMeta,
+        stemsDir: stemsDir || null,
       }),
     });
 

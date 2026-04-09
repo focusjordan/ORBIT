@@ -29,6 +29,7 @@ const genreClassifier = require('./genre-classifier');
 // MERT DISABLED - CC BY-NC 4.0 license incompatible with commercial use
 // const mert = require('./mert');
 const audioAnalysis = require('./audio-analysis');
+const demucs = require('./demucs');
 
 /**
  * Metadata Extractor Configuration
@@ -41,6 +42,8 @@ const EXTRACTOR_CONFIG = {
   enablePannsEmbedding: true, // PANNs 2048-dim embeddings
   enableEmbedding: true, // Backward-compatible alias (mapped to enablePannsEmbedding)
   enableAudioAnalysis: true,
+  enableDemucs: false,
+  stemsDir: null,
   
   // CLAP configuration
   clapGenreTopK: 3,
@@ -117,6 +120,7 @@ async function extractMetadata(input, options = {}) {
   const extractionStatus = {
     clap: 'pending',
     audioAnalysis: 'pending',
+    demucs: 'pending',
     panns: 'pending',
     genreClassifier: 'pending',
     embedding: 'pending',
@@ -135,12 +139,20 @@ async function extractMetadata(input, options = {}) {
     dynamic_range_db: null,
     danceability: null,
     duration: null,
+    sample_rate: null,
+    key_detection_source: null,
+    panns_tags: null,
+    genre_corroboration: null,
   };
   
   // Optional embedding storage (PANNs - 2048 dim)
   let audioEmbedding = null;
   let shouldUseClapGenreFallback = true;
   let shouldUseClapInstrumentFallback = true;
+  let pannsVocalTags = [];
+  let stemsDir = cfg.stemsDir || null;
+  let demucsResult = null;
+  let shouldCleanupDemucs = false;
   
   // ==========================================
   // Genre Classifier Extraction (wav2vec2)
@@ -183,11 +195,23 @@ async function extractMetadata(input, options = {}) {
         topK: cfg.pannsTopK,
         verbose: false,
       });
-      
-      const instrumentTags = filterPannsInstrumentTags(tags);
+
+      const fullPannsTags = tags.map((tag) => ({
+        label: tag.label,
+        confidence: tag.confidence,
+      }));
+      result.panns_tags = fullPannsTags;
+
+      const instrumentTags = filterPannsInstrumentTags(fullPannsTags);
       if (instrumentTags.length > 0) {
         result.instruments = instrumentTags;
         shouldUseClapInstrumentFallback = false;
+      }
+
+      pannsVocalTags = filterPannsVocalTags(fullPannsTags);
+      const genreTags = filterPannsGenreTags(fullPannsTags);
+      if (genreTags.length > 0) {
+        result.genre_corroboration = genreTags.slice(0, 5);
       }
       
       extractionStatus.panns = 'success';
@@ -224,6 +248,16 @@ async function extractMetadata(input, options = {}) {
       result.vocals = await clap.detectVocals(input, {
         verbose: false,
       });
+
+      if (result.vocals && !result.vocals.present && pannsVocalTags.length > 0) {
+        const topVocal = pannsVocalTags[0];
+        if (topVocal.confidence >= 0.25) {
+          result.vocals.present = true;
+          result.vocals.confidence = topVocal.confidence;
+          result.vocals.source = 'panns_boost';
+          result.vocals.panns_tag = topVocal.label;
+        }
+      }
       
       if (shouldUseClapGenreFallback) {
         result.genre = await clap.classifyGenre(input, {
@@ -265,6 +299,39 @@ async function extractMetadata(input, options = {}) {
   }
   
   // ==========================================
+  // Demucs Separation (optional, for stem-aware analysis)
+  // ==========================================
+  if (cfg.enableAudioAnalysis) {
+    if (stemsDir) {
+      extractionStatus.demucs = fs.existsSync(stemsDir)
+        ? 'success'
+        : `error: stemsDir not found (${stemsDir})`;
+      if (!fs.existsSync(stemsDir)) {
+        stemsDir = null;
+      }
+    } else if (cfg.enableDemucs) {
+      try {
+        if (verbose) {
+          console.log('   → Demucs: Separating stems for stem-aware analysis...');
+        }
+        demucsResult = await demucs.separate(input, { verbose: false });
+        stemsDir = demucsResult.outputDir;
+        shouldCleanupDemucs = true;
+        extractionStatus.demucs = 'success';
+      } catch (error) {
+        extractionStatus.demucs = `error: ${error.message}`;
+        if (verbose) {
+          console.log(`   ✗ Demucs: Failed - ${error.message}`);
+        }
+      }
+    } else {
+      extractionStatus.demucs = 'disabled';
+    }
+  } else {
+    extractionStatus.demucs = 'disabled';
+  }
+
+  // ==========================================
   // Audio Analysis (BPM, key, energy, loudness)
   // ==========================================
   if (cfg.enableAudioAnalysis) {
@@ -275,6 +342,7 @@ async function extractMetadata(input, options = {}) {
       
       const analysisResult = await audioAnalysis.analyze(input, {
         maxLength: cfg.audioAnalysisMaxLength,
+        stemsDir,
         aiForensics: cfg.aiForensics,
         verbose: false,
       });
@@ -285,6 +353,8 @@ async function extractMetadata(input, options = {}) {
       result.loudness_db = analysisResult.loudness_db;
       result.dynamic_range_db = analysisResult.dynamic_range_db;
       result.duration = analysisResult.duration;
+      result.sample_rate = analysisResult.sample_rate;
+      result.key_detection_source = analysisResult.key_detection_source;
       
       // Propagate AI forensic data if available
       if (analysisResult.ai_forensics) {
@@ -309,6 +379,10 @@ async function extractMetadata(input, options = {}) {
       
       if (cfg.failOnError) {
         throw error;
+      }
+    } finally {
+      if (shouldCleanupDemucs && demucsResult && demucsResult.outputDir) {
+        demucs.cleanup(demucsResult.outputDir);
       }
     }
   } else {
@@ -372,6 +446,7 @@ async function extractMetadata(input, options = {}) {
     console.log(
       `   Status: CLAP=${extractionStatus.clap}, PANNs=${extractionStatus.panns}, `
       + `GenreClassifier=${extractionStatus.genreClassifier}, `
+      + `Demucs=${extractionStatus.demucs}, `
       + `AudioAnalysis=${extractionStatus.audioAnalysis}, Embedding=${extractionStatus.embedding}`
     );
   }
@@ -555,6 +630,11 @@ function formatForDatabase(extractionResult) {
     energy: extractionResult.energy,
     loudness_db: extractionResult.loudness_db,
     dynamic_range_db: extractionResult.dynamic_range_db,
+    duration: extractionResult.duration,
+    sample_rate: extractionResult.sample_rate,
+    key_detection_source: extractionResult.key_detection_source,
+    panns_tags: extractionResult.panns_tags,
+    genre_corroboration: extractionResult.genre_corroboration,
     danceability: extractionResult.danceability,
     extracted_at: new Date().toISOString(),
     processing_time_ms: extractionResult.processingTimeMs,
@@ -634,6 +714,59 @@ function filterPannsInstrumentTags(tags) {
   if (!Array.isArray(tags)) return [];
   return tags
     .filter((tag) => PANNS_INSTRUMENT_LABELS.has(String(tag.label || '').toLowerCase()))
+    .map((tag) => ({
+      label: tag.label,
+      confidence: tag.confidence,
+    }))
+    .sort((a, b) => b.confidence - a.confidence);
+}
+
+const PANNS_VOCAL_LABELS = new Set([
+  'singing',
+  'vocal music',
+  'choir',
+  'rapping',
+  'song',
+  'opera',
+]);
+
+function filterPannsVocalTags(tags) {
+  if (!Array.isArray(tags)) return [];
+  return tags
+    .filter((tag) => PANNS_VOCAL_LABELS.has(String(tag.label || '').toLowerCase()))
+    .map((tag) => ({
+      label: tag.label,
+      confidence: tag.confidence,
+    }))
+    .sort((a, b) => b.confidence - a.confidence);
+}
+
+const PANNS_GENRE_LABELS = new Set([
+  'classical music',
+  'electronic music',
+  'folk music',
+  'funk',
+  'gospel music',
+  'heavy metal',
+  'hip hop music',
+  'jazz',
+  'new-age music',
+  'opera',
+  'pop music',
+  'progressive rock',
+  'punk rock',
+  'reggae',
+  'rhythm and blues',
+  'rock and roll',
+  'salsa music',
+  'soul music',
+  'techno',
+]);
+
+function filterPannsGenreTags(tags) {
+  if (!Array.isArray(tags)) return [];
+  return tags
+    .filter((tag) => PANNS_GENRE_LABELS.has(String(tag.label || '').toLowerCase()))
     .map((tag) => ({
       label: tag.label,
       confidence: tag.confidence,

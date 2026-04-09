@@ -433,6 +433,29 @@ function checkAudioAnomalies(analysisResult, options = {}) {
   
   const forensics = analysisResult.ai_forensics;
   if (forensics) {
+    if (forensics.stem_forensics && typeof forensics.stem_forensics === 'object') {
+      details.stem_forensics = forensics.stem_forensics;
+
+      const stemForensics = forensics.stem_forensics;
+      const stemCutoff = stemForensics.vocal_spectral_cutoff;
+      if (stemCutoff && stemCutoff.available && stemCutoff.has_16k_cutoff) {
+        flags.push('STEM_VOCAL_FREQ_CUTOFF_16K');
+        anomalyScore += 0.08;
+      }
+
+      const stemPhase = stemForensics.vocal_phase_entropy;
+      if (stemPhase && stemPhase.low_entropy) {
+        flags.push('STEM_LOW_VOCAL_PHASE_ENTROPY');
+        anomalyScore += 0.08;
+      }
+
+      const stemDrums = stemForensics.drum_onset_regularity;
+      if (stemDrums && stemDrums.available && stemDrums.metronomic) {
+        flags.push('STEM_METRONOMIC_DRUM_TIMING');
+        anomalyScore += 0.06;
+      }
+    }
+
     // 16kHz cutoff: AI models trained on MP3 datasets reproduce MP3's rolloff
     const cutoff = forensics.spectral_cutoff;
     if (cutoff && cutoff.available && cutoff.has_16k_cutoff) {

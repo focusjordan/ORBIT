@@ -374,6 +374,69 @@ body {
     return [];
   }
 
+  function moodRadarSvg(mood) {
+    var items = normalizeList(mood, 'Mood').slice(0, 8);
+    if (!items.length) return '<div style="font-size:0.78rem;color:var(--text-dim)">Mood profile unavailable.</div>';
+
+    var size = 220;
+    var cx = 110;
+    var cy = 110;
+    var radius = 72;
+    var levels = 4;
+    var points = [];
+    var labels = [];
+    var grid = '';
+
+    for (var l = 1; l <= levels; l++) {
+      var r = radius * (l / levels);
+      var levelPts = [];
+      for (var i = 0; i < items.length; i++) {
+        var a = (Math.PI * 2 * i / items.length) - (Math.PI / 2);
+        levelPts.push((cx + Math.cos(a) * r).toFixed(1) + ',' + (cy + Math.sin(a) * r).toFixed(1));
+      }
+      grid += '<polygon points="' + levelPts.join(' ') + '" fill="none" stroke="rgba(143,149,178,0.18)" stroke-width="1"></polygon>';
+    }
+
+    for (var j = 0; j < items.length; j++) {
+      var angle = (Math.PI * 2 * j / items.length) - (Math.PI / 2);
+      var value = Math.max(0, Math.min(1, Number(items[j].confidence) || 0));
+      var px = cx + Math.cos(angle) * radius * value;
+      var py = cy + Math.sin(angle) * radius * value;
+      points.push(px.toFixed(1) + ',' + py.toFixed(1));
+      labels.push({
+        x: (cx + Math.cos(angle) * (radius + 18)).toFixed(1),
+        y: (cy + Math.sin(angle) * (radius + 18)).toFixed(1),
+        text: items[j].label,
+      });
+      grid += '<line x1="' + cx + '" y1="' + cy + '" x2="' + (cx + Math.cos(angle) * radius).toFixed(1) + '" y2="' + (cy + Math.sin(angle) * radius).toFixed(1) + '" stroke="rgba(143,149,178,0.25)" stroke-width="1"></line>';
+    }
+
+    var text = '';
+    labels.forEach(function(lbl) {
+      text += '<text x="' + lbl.x + '" y="' + lbl.y + '" text-anchor="middle" font-size="10" fill="var(--text-dim)">' + esc(lbl.text) + '</text>';
+    });
+
+    return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="100%" style="max-width:420px;display:block;margin:0 auto">'
+      + grid
+      + '<polygon points="' + points.join(' ') + '" fill="rgba(45,212,168,0.22)" stroke="var(--accent)" stroke-width="2"></polygon>'
+      + text
+      + '</svg>';
+  }
+
+  function weightedTagCloud(tags) {
+    var list = normalizeList(tags, 'Tag').slice(0, 20);
+    if (!list.length) return '<div style="font-size:0.78rem;color:var(--text-dim)">No PANNs tags available.</div>';
+    var html = '<div class="tags">';
+    list.forEach(function(t) {
+      var c = Math.max(0, Math.min(1, Number(t.confidence) || 0));
+      var size = 11 + Math.round(c * 9);
+      var op = 0.45 + (c * 0.55);
+      html += '<span class="tag" style="font-size:' + size + 'px;opacity:' + op.toFixed(2) + '">' + esc(t.label) + ' ' + Math.round(c * 100) + '%</span>';
+    });
+    html += '</div>';
+    return html;
+  }
+
   // ========== Log Panel ==========
   var logEntries = [];
   function clearLog() { logEntries = []; renderLog(); }
@@ -557,6 +620,26 @@ body {
     if (watermark != null) html += confBar('Watermark Detection', watermark, '#c084fc');
     if (knn != null) html += confBar('KNN Reference', knn, '#60a5fa');
     if (provenance != null) html += confBar('Catalog Provenance', provenance, 'var(--red)');
+
+    var anomalySignal = ai.signals && ai.signals.anomalies ? ai.signals.anomalies : null;
+    var stemForensicsIncluded = !!(
+      anomalySignal
+      && anomalySignal.details
+      && anomalySignal.details.stem_forensics
+    );
+    if (stemForensicsIncluded) {
+      html += '<div style="margin-top:8px">' + badge('Stem-Forensics', 'success') + '</div>';
+    }
+    if (anomaly != null && anomaly > 0 && anomalySignal && Array.isArray(anomalySignal.flags) && anomalySignal.flags.length) {
+      var forensicFlags = anomalySignal.flags.filter(function(f) {
+        return /FREQ_CUTOFF|PHASE|SPECTRAL|METRONOMIC|CREST|ZCR|MFCC|CHROMA|ENERGY_ARC|CHECKERBOARD|PRE_ECHO|NOISE_FLOOR|STEM_/i.test(f);
+      });
+      if (forensicFlags.length) {
+        html += '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--text-dim)">Forensic flags fired (' + forensicFlags.length + ')</summary><div class="tags" style="margin-top:8px">';
+        forensicFlags.forEach(function(f) { html += tag(f, false); });
+        html += '</div></details>';
+      }
+    }
     if (ai.flags && ai.flags.length) {
       html += '<div class="tags" style="margin-top:8px">';
       ai.flags.forEach(function(f) { html += tag(f, true); });
@@ -662,14 +745,7 @@ body {
 
   // ========== Module 2: Audio Analysis ==========
   function moodProfileHtml(mood) {
-    var items = normalizeList(mood, 'Mood').slice(0, 8);
-    if (!items.length) return '<div style="font-size:0.78rem;color:var(--text-dim)">Mood profile unavailable.</div>';
-    var html = '';
-    items.forEach(function(m) {
-      var pct = m.confidence == null ? 0 : scorePct(m.confidence);
-      html += confBar(m.label, pct, 'var(--accent-2)');
-    });
-    return html;
+    return moodRadarSvg(mood);
   }
 
   function renderM2Result(data) {
@@ -679,13 +755,25 @@ body {
     var genres = normalizeList(a.genre, 'Genre').slice(0, 6);
     if (!genres.length) html += '<div style="font-size:0.78rem;color:var(--text-dim)">Genre data unavailable.</div>';
     genres.forEach(function(g) { html += confBar(g.label, scorePct(g.confidence), 'var(--accent)'); });
+    if (Array.isArray(a.genre_corroboration) && a.genre_corroboration.length) {
+      html += '<div style="font-size:0.75rem;color:var(--text-dim);margin-top:8px">PANNs genre corroboration</div><div class="tags">';
+      a.genre_corroboration.slice(0, 8).forEach(function(g) {
+        html += tag(g.label + ' ' + scorePct(g.confidence) + '%', false);
+      });
+      html += '</div>';
+    }
     html += '</div>';
 
     html += '<div class="card"><div class="card-title">Mood Profile</div><div class="mood-profile">' + moodProfileHtml(a.mood) + '</div></div>';
 
+    var keyBadge = '';
+    if (a.key_detection_source) {
+      var srcLabel = a.key_detection_source === 'demucs_stems' ? 'Stem-Aware' : 'Mix HPSS';
+      keyBadge = ' <span style="font-size:0.7rem;padding:2px 8px;border:1px solid var(--border);border-radius:10px;color:var(--text-dim)">' + srcLabel + '</span>';
+    }
     html += '<div class="compare-cols">';
     html += '<div class="card"><div class="card-title">BPM</div><div style="font-size:1.9rem;font-weight:800;color:var(--accent)">' + (a.bpm && a.bpm.value != null ? esc(a.bpm.value) : 'N/A') + '</div><div style="font-size:0.75rem;color:var(--text-dim)">Confidence: ' + (a.bpm && a.bpm.confidence != null ? scorePct(a.bpm.confidence) + '%' : 'N/A') + '</div></div>';
-    html += '<div class="card"><div class="card-title">Key</div><div style="font-size:1.9rem;font-weight:800;color:var(--accent)">' + esc((a.key && (a.key.value || a.key.label)) || 'N/A') + '</div><div style="font-size:0.75rem;color:var(--text-dim)">Confidence: ' + (a.key && a.key.confidence != null ? scorePct(a.key.confidence) + '%' : 'N/A') + '</div></div>';
+    html += '<div class="card"><div class="card-title">Key' + keyBadge + '</div><div style="font-size:1.9rem;font-weight:800;color:var(--accent)">' + esc((a.key && (a.key.value || a.key.label)) || 'N/A') + '</div><div style="font-size:0.75rem;color:var(--text-dim)">Confidence: ' + (a.key && a.key.confidence != null ? scorePct(a.key.confidence) + '%' : 'N/A') + '</div></div>';
     html += '</div>';
 
     html += '<div class="card"><div class="card-title">Instruments (PANNs)</div>';
@@ -693,18 +781,23 @@ body {
     if (!inst.length) html += '<div style="font-size:0.78rem;color:var(--text-dim)">Instrument detection unavailable.</div>';
     inst.forEach(function(i) { html += confBar(i.label, scorePct(i.confidence), 'var(--yellow)'); });
     html += '</div>';
+    html += '<div class="card"><div class="card-title">PANNs Tag Cloud</div>' + weightedTagCloud(a.panns_tags) + '</div>';
 
     var vocals = a.vocals || {};
     html += '<div class="card"><div class="card-title">Vocals</div><div class="result-grid">'
       + row('Present', vocals.present ? 'Yes' : 'No')
+      + row('Confidence', vocals.confidence != null ? scorePct(vocals.confidence) + '%' : 'N/A')
+      + row('Source', esc(vocals.source || 'clap'))
+      + row('PANNs Tag', esc(vocals.panns_tag || 'N/A'))
       + row('Gender', esc(vocals.gender || 'N/A'))
       + '</div></div>';
 
     var metrics = [
-      { k: 'Loudness', v: a.loudness != null ? a.loudness : (a.metrics && a.metrics.loudness) },
-      { k: 'Dynamic Range', v: a.dynamic_range != null ? a.dynamic_range : (a.metrics && a.metrics.dynamic_range) },
+      { k: 'Loudness', v: a.loudness != null ? a.loudness : (a.loudness_db != null ? a.loudness_db : (a.metrics && a.metrics.loudness)) },
+      { k: 'Dynamic Range', v: a.dynamic_range != null ? a.dynamic_range : (a.dynamic_range_db != null ? a.dynamic_range_db : (a.metrics && a.metrics.dynamic_range)) },
       { k: 'Energy', v: a.energy != null ? a.energy : (a.metrics && a.metrics.energy) },
       { k: 'Danceability', v: a.danceability != null ? a.danceability : (a.metrics && a.metrics.danceability) },
+      { k: 'Duration', v: a.duration },
     ];
     html += '<div class="slide-two-col" style="max-width:none">';
     metrics.forEach(function(m) {
@@ -785,7 +878,7 @@ body {
 
   function renderM3Result(data) {
     var fp = data.fingerprint || {};
-    var fpHash = fp.hash || fp.fingerprint_hash || fp.chromaprint || data.fingerprint_hash || 'N/A';
+    var fpHash = fp.hash || fp.fingerprint_hash || fp.chromaprint_hash || fp.chromaprint || data.fingerprint_hash || 'N/A';
     var html = '<div class="card" style="margin-top:12px"><div class="card-title">Chromaprint Fingerprint</div><div style="font-size:0.82rem;color:var(--accent);word-break:break-all">' + esc(fpHash) + '</div></div>';
     html += renderCatalogCheck(data.catalog_check);
     return html;

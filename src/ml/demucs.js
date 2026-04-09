@@ -3,6 +3,19 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
+function detectAudioExtension(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return '.wav';
+  const head = buffer.slice(0, 12);
+  if (head.slice(0, 4).toString('ascii') === 'RIFF') return '.wav';
+  if (head.slice(0, 4).toString('ascii') === 'fLaC') return '.flac';
+  if (head.slice(0, 4).toString('ascii') === 'OggS') return '.ogg';
+  if (head.slice(0, 3).toString('ascii') === 'ID3') return '.mp3';
+  if (head[0] === 0xFF && (head[1] & 0xE0) === 0xE0) return '.mp3';
+  if (head.slice(4, 8).toString('ascii') === 'ftyp') return '.m4a';
+  if (head.slice(0, 4).toString('ascii') === 'FORM') return '.aiff';
+  return '.wav';
+}
+
 const DEMUCS_CONFIG = {
   scriptPath: path.join(__dirname, '../../scripts/demucs_separate.py'),
   pythonCommand: process.env.ORBIT_DEMUCS_PYTHON
@@ -130,9 +143,10 @@ async function separate(input, options = {}) {
   let inputTempFile = null;
 
   if (Buffer.isBuffer(input)) {
+    const ext = detectAudioExtension(input);
     inputTempFile = path.join(
       os.tmpdir(),
-      `orbit-demucs-input-${Date.now()}-${Math.random().toString(36).slice(2)}.audio`
+      `orbit-demucs-input-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
     );
     fs.writeFileSync(inputTempFile, input);
     audioPath = inputTempFile;

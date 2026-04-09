@@ -133,6 +133,9 @@ const INSTRUMENT_PROMPTS = [
 const VOCAL_PROMPTS = [
   { label: 'vocals_present', prompt: 'human voice singing words and lyrics over music' },
   { label: 'vocals_present', prompt: 'vocal melody with lyrics over instrumental accompaniment' },
+  { label: 'vocals_present', prompt: 'a person singing along to music' },
+  { label: 'vocals_present', prompt: 'background vocals or harmonies in a song' },
+  { label: 'vocals_present', prompt: 'spoken word or voice over a musical beat' },
   { label: 'instrumental', prompt: 'instrumental music without any singing or human voice' },
   { label: 'instrumental', prompt: 'purely instrumental performance with no vocals' },
   { label: 'male_vocals', prompt: 'male voice singing or rapping' },
@@ -598,7 +601,8 @@ async function detectVocals(input, options = {}) {
   const femaleScore = mappedResults.female_vocals || 0;
   
   // Determine if vocals are present
-  const present = vocalScore > instrumentalScore;
+  const ratio = vocalScore / (vocalScore + instrumentalScore + 0.001);
+  const present = ratio > 0.35;
   const confidence = present ? vocalScore : instrumentalScore;
   
   // Determine gender if vocals present
@@ -613,6 +617,7 @@ async function detectVocals(input, options = {}) {
   return {
     present,
     confidence,
+    ratio,
     gender,
     genderConfidence,
   };

@@ -378,9 +378,14 @@ async function analyzeHandler(req, res) {
           verbose,
           config: {
             enableClap: needsClap,
+            enablePanns: includeSet.has('instruments') || includeSet.has('genre') || needsEmbedding,
+            enableGenreClassifier: includeSet.has('genre'),
             enableAudioAnalysis: needsAudioAnalysis,
             enableEmbedding: needsEmbedding,
+            enablePannsEmbedding: needsEmbedding,
+            enableDemucs: needsAudioAnalysis || needsAiDetection,
             aiForensics: needsAiDetection,
+            stemsDir: req.body.stemsDir || null,
           },
         });
         
@@ -469,6 +474,15 @@ async function analyzeHandler(req, res) {
           metadata: req.body.metadata || {},
           analysisResult: metadataResult,
           catalogResult: catalogResult,
+          flags: {
+            v2Enabled: true,
+            shadowMode: false,
+            knnEnabled: true,
+            promptsV2Enabled: true,
+            metadataV2Enabled: true,
+            crossSignalV2Enabled: true,
+            forensicsV3Enabled: true,
+          },
           verbose,
         });
         
@@ -529,7 +543,13 @@ async function analyzeHandler(req, res) {
       }
       
       if (metadataResult.loudness_db !== null) {
+        response.analysis.loudness = metadataResult.loudness_db;
         response.analysis.loudness_db = metadataResult.loudness_db;
+      }
+
+      if (metadataResult.dynamic_range_db !== null) {
+        response.analysis.dynamic_range = metadataResult.dynamic_range_db;
+        response.analysis.dynamic_range_db = metadataResult.dynamic_range_db;
       }
       
       if (metadataResult.danceability !== null) {
@@ -538,6 +558,22 @@ async function analyzeHandler(req, res) {
       
       if (metadataResult.duration !== null) {
         response.analysis.duration = metadataResult.duration;
+      }
+
+      if (metadataResult.sample_rate !== null) {
+        response.analysis.sample_rate = metadataResult.sample_rate;
+      }
+
+      if (metadataResult.key_detection_source) {
+        response.analysis.key_detection_source = metadataResult.key_detection_source;
+      }
+
+      if (Array.isArray(metadataResult.panns_tags) && metadataResult.panns_tags.length > 0) {
+        response.analysis.panns_tags = metadataResult.panns_tags;
+      }
+
+      if (Array.isArray(metadataResult.genre_corroboration) && metadataResult.genre_corroboration.length > 0) {
+        response.analysis.genre_corroboration = metadataResult.genre_corroboration;
       }
       
       // Add extraction status

@@ -1357,6 +1357,75 @@ def analyze_audio(audio_path, max_length_seconds=120, ai_forensics=False, stems_
             'pitch_jitter': measure_pitch_jitter(y, sr),
             'noise_floor_structure': measure_noise_floor_structure(y, sr),
         }
+
+        if stems_dir and os.path.isdir(stems_dir):
+            import numpy as np
+            import librosa
+
+            stem_forensics = {}
+
+            def load_stem(stem_name):
+                stem_path = os.path.join(stems_dir, f'{stem_name}.wav')
+                if not os.path.exists(stem_path):
+                    return None
+                stem_y, _ = librosa.load(stem_path, sr=sr, mono=True)
+                max_samples_stem = int(max_length_seconds * sr)
+                if len(stem_y) > max_samples_stem:
+                    stem_y = stem_y[:max_samples_stem]
+                return stem_y
+
+            vocals_stem = load_stem('vocals')
+            drums_stem = load_stem('drums')
+            bass_stem = load_stem('bass')
+            other_stem = load_stem('other')
+
+            if vocals_stem is not None and len(vocals_stem) > 0:
+                stem_forensics['vocal_spectral_cutoff'] = detect_spectral_cutoff(vocals_stem, sr)
+                stem_forensics['vocal_phase_entropy'] = measure_phase_entropy(vocals_stem, sr)
+
+            if drums_stem is not None and len(drums_stem) > 0:
+                stem_forensics['drum_onset_regularity'] = measure_onset_regularity(drums_stem, sr)
+
+            stem_dynamic_ranges = {}
+            for stem_name, stem_y in [('vocals', vocals_stem), ('drums', drums_stem), ('bass', bass_stem), ('other', other_stem)]:
+                if stem_y is not None and len(stem_y) > 0:
+                    stem_dynamic_ranges[stem_name] = calculate_dynamic_range(stem_y)
+            if stem_dynamic_ranges:
+                stem_forensics['stem_dynamic_ranges'] = stem_dynamic_ranges
+
+            if vocals_stem is not None and len(vocals_stem) > 1000:
+                bleed_scores = []
+                for stem_y in [drums_stem, bass_stem, other_stem]:
+                    if stem_y is None or len(stem_y) < 1000:
+                        continue
+                    target_len = min(len(vocals_stem), len(stem_y))
+                    if target_len < 1000:
+                        continue
+                    v = vocals_stem[:target_len]
+                    o = stem_y[:target_len]
+                    v_std = float(np.std(v))
+                    o_std = float(np.std(o))
+                    if v_std <= 1e-10 or o_std <= 1e-10:
+                        continue
+                    corr = float(np.corrcoef(v, o)[0, 1])
+                    if not np.isnan(corr):
+                        bleed_scores.append(abs(corr))
+
+                if bleed_scores:
+                    mean_bleed = float(np.mean(bleed_scores))
+                    stem_forensics['vocal_instrumental_bleed'] = {
+                        'available': True,
+                        'mean_abs_correlation': round(mean_bleed, 4),
+                        'high_bleed': mean_bleed > 0.12,
+                    }
+                else:
+                    stem_forensics['vocal_instrumental_bleed'] = {
+                        'available': False,
+                        'reason': 'insufficient_stems',
+                    }
+
+            if stem_forensics:
+                result['ai_forensics']['stem_forensics'] = stem_forensics
     
     return result
 

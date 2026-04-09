@@ -23,6 +23,24 @@ const fs = require('fs');
 const os = require('os');
 
 /**
+ * Detect audio format from buffer magic bytes and return a suitable file extension.
+ * Librosa's decoder chain (soundfile → audioread → ffmpeg) can fail on unrecognized
+ * extensions on some systems, so we infer the real format from the header.
+ */
+function detectAudioExtension(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return '.wav';
+  const head = buffer.slice(0, 12);
+  if (head.slice(0, 4).toString('ascii') === 'RIFF') return '.wav';
+  if (head.slice(0, 4).toString('ascii') === 'fLaC') return '.flac';
+  if (head.slice(0, 4).toString('ascii') === 'OggS') return '.ogg';
+  if (head.slice(0, 3).toString('ascii') === 'ID3') return '.mp3';
+  if (head[0] === 0xFF && (head[1] & 0xE0) === 0xE0) return '.mp3';
+  if (head.slice(4, 8).toString('ascii') === 'ftyp') return '.m4a';
+  if (head.slice(0, 4).toString('ascii') === 'FORM') return '.aiff';
+  return '.wav';
+}
+
+/**
  * Audio Analysis Configuration
  */
 const ANALYSIS_CONFIG = {
@@ -164,9 +182,10 @@ async function analyze(input, options = {}) {
   let tempFile = null;
   
   if (Buffer.isBuffer(input)) {
+    const ext = detectAudioExtension(input);
     tempFile = path.join(
       os.tmpdir(),
-      `orbit-analysis-${Date.now()}-${Math.random().toString(36).slice(2)}.audio`
+      `orbit-analysis-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
     );
     fs.writeFileSync(tempFile, input);
     audioPath = tempFile;
@@ -362,9 +381,10 @@ async function extractFileMetadata(input) {
   let tempFile = null;
 
   if (Buffer.isBuffer(input)) {
+    const ext = detectAudioExtension(input);
     tempFile = path.join(
       os.tmpdir(),
-      `orbit-ffprobe-${Date.now()}-${Math.random().toString(36).slice(2)}.audio`
+      `orbit-ffprobe-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
     );
     fs.writeFileSync(tempFile, input);
     audioPath = tempFile;
