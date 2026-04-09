@@ -805,24 +805,26 @@ body {
     var a = data.analysis || {};
     var html = '';
     html += '<div class="card" style="margin-top:12px"><div class="card-title">Genre Classification</div>';
-    var genres = normalizeList(a.genre, 'Genre').slice(0, 5);
-    if (!genres.length) {
+    var pannsGenres = Array.isArray(a.genre_corroboration) ? a.genre_corroboration.slice(0, 5) : [];
+    var w2vGenres = normalizeList(a.genre, 'Genre').slice(0, 3);
+    var primaryGenres = pannsGenres.length ? pannsGenres : w2vGenres;
+    if (!primaryGenres.length) {
       html += '<div style="font-size:0.78rem;color:var(--text-dim)">Genre data unavailable.</div>';
     } else {
-      var topConf = genres[0] ? (Number(genres[0].confidence) || 0) : 1;
-      genres.forEach(function(g, i) {
+      var topConf = Number(primaryGenres[0].confidence) || 0.01;
+      primaryGenres.forEach(function(g, i) {
         var conf = Number(g.confidence) || 0;
         var relWidth = topConf > 0 ? Math.round((conf / topConf) * 100) : 0;
         var opacity = i === 0 ? '1' : (0.7 - i * 0.1).toFixed(2);
         html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
-          + '<span style="font-size:0.82rem;font-weight:600;min-width:90px;color:var(--text);opacity:' + opacity + '">' + esc(g.label) + '</span>'
+          + '<span style="font-size:0.82rem;font-weight:600;min-width:120px;color:var(--text);opacity:' + opacity + '">' + esc(g.label) + '</span>'
           + '<div style="flex:1;height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden"><div style="width:' + relWidth + '%;height:100%;background:var(--accent);border-radius:3px"></div></div>'
           + '</div>';
       });
     }
-    if (Array.isArray(a.genre_corroboration) && a.genre_corroboration.length) {
-      html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:8px">PANNs corroboration</div><div class="tags">';
-      a.genre_corroboration.slice(0, 6).forEach(function(g) {
+    if (w2vGenres.length && pannsGenres.length) {
+      html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:8px">wav2vec2 classification</div><div class="tags">';
+      w2vGenres.forEach(function(g) {
         html += tag(g.label + ' ' + scorePct(g.confidence) + '%', false);
       });
       html += '</div>';
