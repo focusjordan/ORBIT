@@ -787,7 +787,6 @@ body {
       try {
         var d = await analyzeBlob(blob, selectedMeta());
         state.module1.ai = d;
-        addLog(d.processing_log || []);
         $('#m1-results').innerHTML = renderM1Result(d);
       } catch (err) {
         $('#m1-results').innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
