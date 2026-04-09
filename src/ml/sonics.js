@@ -3,6 +3,19 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
+function detectAudioExtension(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return '.wav';
+  const head = buffer.slice(0, 12);
+  if (head.slice(0, 4).toString('ascii') === 'RIFF') return '.wav';
+  if (head.slice(0, 4).toString('ascii') === 'fLaC') return '.flac';
+  if (head.slice(0, 4).toString('ascii') === 'OggS') return '.ogg';
+  if (head.slice(0, 3).toString('ascii') === 'ID3') return '.mp3';
+  if (head[0] === 0xFF && (head[1] & 0xE0) === 0xE0) return '.mp3';
+  if (head.slice(4, 8).toString('ascii') === 'ftyp') return '.m4a';
+  if (head.slice(0, 4).toString('ascii') === 'FORM') return '.aiff';
+  return '.wav';
+}
+
 const SONICS_CONFIG = {
   scriptPath: path.join(__dirname, '../../scripts/sonics_detect.py'),
   timeoutMs: 180000,
@@ -163,9 +176,10 @@ async function detect(input, options = {}) {
   let tempFile = null;
 
   if (Buffer.isBuffer(input)) {
+    const ext = detectAudioExtension(input);
     tempFile = path.join(
       os.tmpdir(),
-      `orbit-sonics-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`
+      `orbit-sonics-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
     );
     fs.writeFileSync(tempFile, input);
     audioPath = tempFile;
