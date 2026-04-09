@@ -344,7 +344,7 @@ async function extractMetadata(input, options = {}) {
         maxLength: cfg.audioAnalysisMaxLength,
         stemsDir,
         aiForensics: cfg.aiForensics,
-        verbose: false,
+        verbose,
       });
       
       result.bpm = analysisResult.bpm;
@@ -359,6 +359,12 @@ async function extractMetadata(input, options = {}) {
       // Propagate AI forensic data if available
       if (analysisResult.ai_forensics) {
         result.ai_forensics = analysisResult.ai_forensics;
+      }
+      if (verbose) {
+        const forensicKeys = Object.keys(analysisResult.ai_forensics || {});
+        console.log(
+          `   AudioAnalysis forensics payload: present=${Boolean(analysisResult.ai_forensics)} keys=${forensicKeys.length ? forensicKeys.join(',') : 'none'}`
+        );
       }
       
       // Calculate danceability from BPM and energy

@@ -388,6 +388,7 @@ async function probeAIGenerated(input, options = {}) {
  */
 function checkAudioAnomalies(analysisResult, options = {}) {
   const { v2Enabled = false, forensicsV3Enabled = false } = options;
+  const verbose = process.env.ORBIT_ML_VERBOSE === 'true';
   const flags = [];
   const details = {};
   let anomalyScore = 0;
@@ -430,6 +431,7 @@ function checkAudioAnomalies(analysisResult, options = {}) {
       anomalyScore += 0.07;
     }
   }
+  const classicFlagsCount = flags.length;
   
   // --- Spectral forensics (when ai_forensics data is available) ---
   
@@ -629,6 +631,14 @@ function checkAudioAnomalies(analysisResult, options = {}) {
         anomalyScore += 0.12;
       }
     }
+  }
+
+  if (verbose) {
+    const forensicKeys = Object.keys(forensics || {});
+    const forensicFlags = flags.slice(classicFlagsCount);
+    console.log(
+      `   AudioAnomaly forensics: present=${Boolean(forensics)} keys=${forensicKeys.length ? forensicKeys.join(',') : 'none'} flags=${forensicFlags.length ? forensicFlags.join(',') : 'none'}`
+    );
   }
   
   return {

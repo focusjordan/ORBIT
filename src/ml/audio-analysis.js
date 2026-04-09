@@ -273,6 +273,14 @@ async function analyze(input, options = {}) {
             reject(new Error(`AudioAnalysis error (${result.error}): ${result.message}`));
             return;
           }
+          if (verbose) {
+            const forensicKeys = Object.keys(result.ai_forensics || {});
+            const cutoffHit = Boolean(result.ai_forensics?.spectral_cutoff?.has_16k_cutoff);
+            const lowPhaseEntropy = Boolean(result.ai_forensics?.phase_entropy?.low_entropy);
+            console.log(
+              `   Forensics JSON: present=${Boolean(result.ai_forensics)} keys=${forensicKeys.length ? forensicKeys.join(',') : 'none'} cutoff16k=${cutoffHit} lowPhaseEntropy=${lowPhaseEntropy}`
+            );
+          }
           
           if (verbose) {
             console.log(`✅ AudioAnalysis: Completed in ${(elapsed / 1000).toFixed(1)}s`);
