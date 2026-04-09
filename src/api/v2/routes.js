@@ -383,7 +383,9 @@ async function analyzeHandler(req, res) {
             enableAudioAnalysis: needsAudioAnalysis,
             enableEmbedding: needsEmbedding,
             enablePannsEmbedding: needsEmbedding,
-            enableDemucs: needsAudioAnalysis || needsAiDetection,
+            // Demo latency safeguard: do not run runtime Demucs in analyze flow.
+            // Stem-aware analysis still works when caller provides stemsDir.
+            enableDemucs: false,
             aiForensics: needsAiDetection,
             stemsDir: req.body.stemsDir || null,
           },
