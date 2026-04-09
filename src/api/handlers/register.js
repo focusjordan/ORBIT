@@ -540,15 +540,19 @@ async function registerHandler(req, res) {
     }
     
     // ========================================================================
-    // 11. AI MUSIC DETECTION (Always runs - advisory signals for review)
+    // 11. AI MUSIC DETECTION (advisory signals for review)
     // Multi-signal detection using CLAP semantic probe + anomaly analysis
     // Results are informational only - does not block registration
+    // Skippable via metadata.skip_ai_detection for callers that handle
+    // detection separately (e.g. the demo watermark flow).
     // ========================================================================
     
     let aiDetectionResult = null;
     let aiAnalysisResult = null;
     
-    try {
+    if (metadata.skip_ai_detection) {
+      log('⏭️  AI detection skipped (caller handles separately)');
+    } else try {
       log('🤖 Running AI music detection...');
 
       if (config.ai.registerAnalysisEnabled) {

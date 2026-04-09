@@ -340,6 +340,7 @@ app.post('/api/register', upload.single('audio'), async (req, res) => {
     };
     if (req.body.isrc) metadata.isrc = req.body.isrc;
     if (req.body.genre) metadata.primary_genre = req.body.genre;
+    if (req.body.skip_ai_detection === 'true') metadata.skip_ai_detection = true;
 
     if (!metadata.title || !metadata.artist) {
       return res.status(400).json({ error: 'Title and artist are required' });

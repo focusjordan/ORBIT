@@ -1098,6 +1098,7 @@ body {
       fd.append('artist', artist);
       if ($('#m4-isrc').value.trim()) fd.append('isrc', $('#m4-isrc').value.trim());
       if ($('#m4-genre').value.trim()) fd.append('genre', $('#m4-genre').value.trim());
+      fd.append('skip_ai_detection', 'true');
       try {
         var res = await fetch('/api/register', { method: 'POST', body: fd });
         var data = await res.json();
