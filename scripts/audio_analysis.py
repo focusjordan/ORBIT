@@ -64,8 +64,8 @@ def check_dependencies():
 
     try:
         import scipy.stats
-    except ImportError:
-        missing.append('scipy')
+    except (ImportError, ValueError) as e:
+        missing.append(f'scipy ({e})')
     
     if missing:
         print(json.dumps({
