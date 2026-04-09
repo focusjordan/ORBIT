@@ -299,8 +299,9 @@ async function analyze(input, options = {}) {
       });
       
       proc.on('error', (err) => {
+        const timeoutMs = aiForensics ? 180000 : ANALYSIS_CONFIG.timeout;
         if (err.message.includes('ETIMEDOUT') || err.message.includes('timeout')) {
-          reject(new Error(`AudioAnalysis timed out after ${ANALYSIS_CONFIG.timeout / 1000}s`));
+          reject(new Error(`AudioAnalysis timed out after ${timeoutMs / 1000}s`));
         } else {
           reject(new Error(`AudioAnalysis process error: ${err.message}`));
         }

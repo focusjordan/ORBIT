@@ -25,7 +25,6 @@
  */
 
 const clap = require('./clap');
-const aiKnn = require('./ai-knn');
 const audioAnalysis = require('./audio-analysis');
 const silentcipher = require('./silentcipher');
 const sonics = require('./sonics');
@@ -333,7 +332,7 @@ async function probeAIGenerated(input, options = {}) {
     }
   }
   
-  // Normalize scores (3 prompts each category)
+  // Normalize scores by however many prompts each label family currently uses.
   const aiPromptCount = promptBank.filter(p => p.label === 'ai_generated').length;
   const humanPromptCount = promptBank.filter(p => p.label === 'human_performance').length;
   
@@ -1133,16 +1132,34 @@ async function detectAI(audioInput, options = {}) {
   } = options;
 
   const featureFlags = resolveFeatureFlags(flagOverrides);
-  const shouldComputeV2 = featureFlags.v2Enabled || featureFlags.shadowMode;
-  const shouldComputeV3 = featureFlags.forensicsV3Enabled;
   const startTime = Date.now();
 
-  // Auto-run audio analysis with forensics when v2/v3 is active and no analysis provided
+  const activeModel =
+    featureFlags.forensicsV3Enabled ? 'v3' :
+    (featureFlags.v2Enabled || featureFlags.shadowMode) ? 'v2' :
+    'legacy';
+  const useModernPipeline = activeModel !== 'legacy';
+  const needsForensics = useModernPipeline;
+  const activeWeights =
+    activeModel === 'v3' ? AI_DETECTION_CONFIG.weightsV3 :
+    activeModel === 'v2' ? AI_DETECTION_CONFIG.weightsV2 :
+    AI_DETECTION_CONFIG.weights;
+  const activeThresholds =
+    activeModel === 'v3' ? AI_DETECTION_CONFIG.thresholdsV3 :
+    activeModel === 'v2' ? AI_DETECTION_CONFIG.thresholdsV2 :
+    AI_DETECTION_CONFIG.thresholds;
+
   let analysisResult = options.analysisResult || null;
-  if (!analysisResult && (shouldComputeV2 || shouldComputeV3)) {
+  const missingRequiredForensics = needsForensics && !analysisResult?.ai_forensics;
+  if ((!analysisResult && useModernPipeline) || missingRequiredForensics) {
     try {
-      analysisResult = await audioAnalysis.analyze(audioInput, { aiForensics: true, maxLength: 120 });
-      if (verbose) console.log('   Auto-ran audio analysis with forensics for v2');
+      analysisResult = await audioAnalysis.analyze(audioInput, {
+        aiForensics: needsForensics,
+        maxLength: 120,
+      });
+      if (verbose) {
+        console.log(`   Auto-ran audio analysis for ${activeModel} pipeline`);
+      }
     } catch (analysisErr) {
       if (verbose) console.log(`   ⚠️ Auto-analysis failed: ${analysisErr.message}`);
     }
@@ -1151,9 +1168,6 @@ async function detectAI(audioInput, options = {}) {
   if (verbose) {
     console.log('🤖 AI Detection: Starting multi-signal analysis...');
   }
-
-  const weights = AI_DETECTION_CONFIG.weights;
-  const thresholds = AI_DETECTION_CONFIG.thresholds;
 
   // Initialize result structure
   const result = {
@@ -1170,7 +1184,12 @@ async function detectAI(audioInput, options = {}) {
     processing_time_ms: 0,
   };
 
-  function aggregateScores(signalScores, weightingConfig, floorInputs = null, thresholdConfig = thresholds) {
+  function aggregateScores(
+    signalScores,
+    weightingConfig,
+    floorInputs = null,
+    thresholdConfig = AI_DETECTION_CONFIG.thresholds
+  ) {
     const catalogInformative = signalScores.catalog > 0 ||
       signalScores.catalogFlags?.includes('KNOWN_WORK_METADATA_MISMATCH');
     const knnInformative = typeof signalScores.knn === 'number';
@@ -1267,331 +1286,117 @@ async function detectAI(audioInput, options = {}) {
   }
 
   try {
-    // Signal 1: Semantic CLAP probe (legacy baseline)
-    let semanticScore = 0;
+    const semanticOptions = {
+      verbose,
+      useV2Prompts: useModernPipeline && featureFlags.promptsV2Enabled,
+    };
+
+    // Run the active semantic probe exactly once so logs match the returned score.
+    let semanticSignal;
     try {
-      const semanticResult = await probeAIGenerated(audioInput, { verbose, useV2Prompts: false });
-      result.signals.semantic = semanticResult;
-      semanticScore = semanticResult.aiScore;
+      semanticSignal = await probeAIGenerated(audioInput, semanticOptions);
     } catch (error) {
       if (verbose) {
         console.log(`   ⚠️ Semantic probe failed: ${error.message}`);
       }
-      result.signals.semantic = { error: error.message, aiScore: 0 };
-      semanticScore = 0;
+      semanticSignal = { error: error.message, aiScore: 0, flags: ['SEMANTIC_PROBE_ERROR'] };
     }
-    
-    // Signal 2: Audio anomalies (use provided analysis or skip)
-    let anomalyScore = 0;
-    if (analysisResult) {
-      const anomalyResult = checkAudioAnomalies(analysisResult, { v2Enabled: false });
-      result.signals.anomalies = anomalyResult;
-      anomalyScore = anomalyResult.anomalyScore;
-    } else {
-      result.signals.anomalies = { 
-        anomalyScore: 0, 
-        flags: ['NO_ANALYSIS_PROVIDED'],
-        details: {} 
-      };
-    }
-    
-    // Signal 3: Metadata patterns
-    const duration = analysisResult?.duration || 
-                     (metadata.duration_ms ? metadata.duration_ms / 1000 : 0);
-    const metadataPatterns = checkMetadataPatterns(metadata, duration, {
-      metadataV2Enabled: false,
-      crossSignalV2Enabled: false,
-      analysisResult,
-    });
-    result.signals.metadata = metadataPatterns;
-    const metadataScore = metadataPatterns.suspicionScore;
-    
-    // Signal 4: Catalog provenance mismatch
-    let catalogScore = 0;
-    const catalogSignal = checkCatalogProvenance(catalogResult);
-    result.signals.catalog = catalogSignal;
-    catalogScore = catalogSignal.provenanceScore;
-    
-    const legacyAggregate = aggregateScores(
-      {
-        semantic: semanticScore,
-        anomaly: anomalyScore,
-        metadata: metadataScore,
-        catalog: catalogScore,
-        catalogFlags: catalogSignal.flags || [],
-      },
-      weights,
-      {
-        metaFlags: metadataPatterns.flags,
-        anomalyFlags: result.signals.anomalies?.flags || [],
-      },
-      thresholds
-    );
 
-    result.legacy = {
-      score: legacyAggregate.score,
-      recommendation: legacyAggregate.recommendation,
-      weights_used: legacyAggregate.weights_used,
-      score_floor_applied: legacyAggregate.score_floor_applied,
-      signals: result.signals,
+    const anomalySignal = analysisResult
+      ? checkAudioAnomalies(analysisResult, {
+          v2Enabled: useModernPipeline,
+          forensicsV3Enabled: activeModel === 'v3',
+        })
+      : {
+        anomalyScore: 0,
+        flags: ['NO_ANALYSIS_PROVIDED'],
+        details: {},
+      };
+
+    const duration = analysisResult?.duration ||
+      (metadata.duration_ms ? metadata.duration_ms / 1000 : 0);
+
+    let fileMetadata = {};
+    if (useModernPipeline && featureFlags.metadataV2Enabled) {
+      try {
+        fileMetadata = await audioAnalysis.extractFileMetadata(audioInput);
+      } catch (fmErr) {
+        fileMetadata = { available: false, reason: 'extraction_error', error: fmErr.message };
+      }
+    }
+
+    const metadataSignal = checkMetadataPatterns(metadata, duration, {
+      metadataV2Enabled: useModernPipeline && featureFlags.metadataV2Enabled,
+      crossSignalV2Enabled: useModernPipeline && featureFlags.crossSignalV2Enabled,
+      analysisResult,
+      fileMetadata: fileMetadata.available ? fileMetadata : {},
+    });
+
+    const catalogSignal = checkCatalogProvenance(catalogResult);
+    let anomalyScore = anomalySignal.anomalyScore || 0;
+    if (useModernPipeline && featureFlags.crossSignalV2Enabled) {
+      const topGenre = analysisResult?.genre?.[0]?.label || null;
+      const anomalyFlags = anomalySignal.flags || [];
+      if (topGenre && /classical|jazz|acoustic/i.test(topGenre) && anomalyFlags.includes('METRONOMIC_TIMING')) {
+        anomalyScore = Math.min(1, anomalyScore + 0.06);
+      }
+      if (topGenre && /edm|electronic|techno/i.test(topGenre) && anomalyFlags.includes('METRONOMIC_TIMING')) {
+        anomalyScore = Math.max(0, anomalyScore - 0.04);
+      }
+    }
+
+    const sonicsSignal = useModernPipeline
+      ? await checkSonicsDetection(audioInput, { verbose: false })
+      : null;
+
+    result.signals = {
+      semantic: semanticSignal,
+      anomalies: anomalySignal,
+      metadata: metadataSignal,
+      catalog: catalogSignal,
+      sonics: sonicsSignal,
     };
 
-    let v2Result = null;
-    if (shouldComputeV2) {
-      const semanticV2 = await probeAIGenerated(audioInput, {
-        verbose: false,
-        useV2Prompts: featureFlags.promptsV2Enabled,
-      }).catch((error) => ({ aiScore: 0, error: error.message, flags: ['SEMANTIC_V2_ERROR'] }));
+    const aggregate = aggregateScores(
+      {
+        semantic: semanticSignal.aiScore || 0,
+        anomaly: anomalyScore,
+        metadata: metadataSignal.suspicionScore || 0,
+        catalog: catalogSignal.provenanceScore || 0,
+        sonics: typeof sonicsSignal?.sonicsScore === 'number' ? sonicsSignal.sonicsScore : null,
+        catalogFlags: catalogSignal.flags || [],
+      },
+      activeWeights,
+      {
+        metaFlags: metadataSignal.flags || [],
+        anomalyFlags: anomalySignal.flags || [],
+        sonicsFlags: sonicsSignal?.flags || [],
+      },
+      activeThresholds
+    );
 
-      const anomalyV2 = analysisResult
-        ? checkAudioAnomalies(analysisResult, { v2Enabled: true })
-        : { anomalyScore: 0, flags: ['NO_ANALYSIS_PROVIDED'], details: {} };
-
-      let fileMetadata = {};
-      if (featureFlags.metadataV2Enabled) {
-        try {
-          fileMetadata = await audioAnalysis.extractFileMetadata(audioInput);
-        } catch (fmErr) {
-          fileMetadata = { available: false, reason: 'extraction_error', error: fmErr.message };
-        }
-      }
-
-      const metadataV2 = checkMetadataPatterns(metadata, duration, {
-        metadataV2Enabled: featureFlags.metadataV2Enabled,
-        crossSignalV2Enabled: featureFlags.crossSignalV2Enabled,
-        analysisResult,
-        fileMetadata: fileMetadata.available ? fileMetadata : {},
-      });
-
-      let adjustedAnomalyV2Score = anomalyV2.anomalyScore || 0;
-      if (featureFlags.crossSignalV2Enabled) {
-        const topGenre = analysisResult?.genre?.[0]?.label || null;
-        const anomalyFlags = anomalyV2.flags || [];
-        if (topGenre && /classical|jazz|acoustic/i.test(topGenre) && anomalyFlags.includes('METRONOMIC_TIMING')) {
-          adjustedAnomalyV2Score = Math.min(1, adjustedAnomalyV2Score + 0.06);
-        }
-        if (topGenre && /edm|electronic|techno/i.test(topGenre) && anomalyFlags.includes('METRONOMIC_TIMING')) {
-          adjustedAnomalyV2Score = Math.max(0, adjustedAnomalyV2Score - 0.04);
-        }
-      }
-
-      let knnSignal = { available: false, status: 'disabled' };
-      if (featureFlags.knnEnabled) {
-        try {
-          knnSignal = await aiKnn.classifyWithReferences(audioInput);
-        } catch (knnError) {
-          knnSignal = {
-            available: false,
-            status: 'unavailable',
-            reason: 'knn_error',
-            details: { error: knnError.message },
-          };
-        }
-      }
-
-      const sonicsV2 = await checkSonicsDetection(audioInput, { verbose: false });
-
-      const v2Aggregate = aggregateScores(
-        {
-          semantic: semanticV2.aiScore || 0,
-          anomaly: adjustedAnomalyV2Score,
-          metadata: metadataV2.suspicionScore || 0,
-          catalog: catalogScore,
-          sonics: typeof sonicsV2.sonicsScore === 'number' ? sonicsV2.sonicsScore : null,
-          knn: knnSignal.available ? knnSignal.aiLikelihood : null,
-          catalogFlags: catalogSignal.flags || [],
-        },
-        AI_DETECTION_CONFIG.weightsV2,
-        {
-          metaFlags: metadataV2.flags || [],
-          anomalyFlags: anomalyV2.flags || [],
-          sonicsFlags: sonicsV2.flags || [],
-        },
-        AI_DETECTION_CONFIG.thresholdsV2
-      );
-
-      v2Result = {
-        score: v2Aggregate.score,
-        recommendation: v2Aggregate.recommendation,
-        weights_used: v2Aggregate.weights_used,
-        score_floor_applied: v2Aggregate.score_floor_applied,
-        signals: {
-          semantic: semanticV2,
-          anomalies: anomalyV2,
-          metadata: metadataV2,
-          catalog: catalogSignal,
-          sonics: sonicsV2,
-          knn: knnSignal,
-        },
-      };
-
-      if (knnSignal.available && knnSignal.distanceMargin > 0.06) {
-        v2Result.signals.knn.flags = ['KNN_AI_REFERENCE_CLOSER'];
-      } else if (knnSignal.available && knnSignal.distanceMargin < -0.06) {
-        v2Result.signals.knn.flags = ['KNN_HUMAN_REFERENCE_CLOSER'];
-      } else if (!knnSignal.available && featureFlags.knnEnabled) {
-        v2Result.signals.knn.flags = ['KNN_UNAVAILABLE_FAIL_OPEN'];
-      }
-    }
-
-    // ----- V3 Forensics Path -----
-    let v3Result = null;
-    if (shouldComputeV3) {
-      const anomalyV3 = analysisResult
-        ? checkAudioAnomalies(analysisResult, { v2Enabled: true, forensicsV3Enabled: true })
-        : { anomalyScore: 0, flags: ['NO_ANALYSIS_PROVIDED'], details: {} };
-
-      const watermarkSignal = { watermarkScore: 0, flags: [], details: { skipped: 'not_in_ai_detection_pipeline' } };
-
-      const sonicsV3 = v2Result?.signals?.sonics || await checkSonicsDetection(audioInput, { verbose: false });
-
-      const semanticV3 = v2Result
-        ? v2Result.signals.semantic
-        : await probeAIGenerated(audioInput, {
-            verbose: false,
-            useV2Prompts: featureFlags.promptsV2Enabled,
-          }).catch((error) => ({ aiScore: 0, error: error.message, flags: ['SEMANTIC_V3_ERROR'] }));
-
-      const metadataV3 = v2Result
-        ? v2Result.signals.metadata
-        : checkMetadataPatterns(metadata, duration, {
-            metadataV2Enabled: featureFlags.metadataV2Enabled,
-            crossSignalV2Enabled: featureFlags.crossSignalV2Enabled,
-            analysisResult,
-          });
-
-      const knnV3 = v2Result?.signals?.knn || { available: false, status: 'disabled' };
-
-      const v3Aggregate = aggregateScores(
-        {
-          semantic: semanticV3.aiScore || 0,
-          anomaly: anomalyV3.anomalyScore || 0,
-          metadata: metadataV3.suspicionScore || 0,
-          catalog: catalogScore,
-          knn: knnV3.available ? knnV3.aiLikelihood : null,
-          watermark: watermarkSignal.watermarkScore,
-          sonics: typeof sonicsV3.sonicsScore === 'number' ? sonicsV3.sonicsScore : null,
-          catalogFlags: catalogSignal.flags || [],
-        },
-        AI_DETECTION_CONFIG.weightsV3,
-        {
-          metaFlags: metadataV3.flags || [],
-          anomalyFlags: anomalyV3.flags || [],
-          watermarkFlags: watermarkSignal.flags || [],
-          sonicsFlags: sonicsV3.flags || [],
-        },
-        AI_DETECTION_CONFIG.thresholdsV3
-      );
-
-      v3Result = {
-        score: v3Aggregate.score,
-        recommendation: v3Aggregate.recommendation,
-        weights_used: v3Aggregate.weights_used,
-        score_floor_applied: v3Aggregate.score_floor_applied,
-        signals: {
-          semantic: semanticV3,
-          anomalies: anomalyV3,
-          metadata: metadataV3,
-          catalog: catalogSignal,
-          knn: knnV3,
-          watermark: watermarkSignal,
-          sonics: sonicsV3,
-        },
-      };
-    }
-
-    const activeModel = shouldComputeV3 ? 'v3' : (featureFlags.v2Enabled ? 'v2' : 'legacy');
-    if (shouldComputeV3 && v3Result) {
-      result.score = v3Result.score;
-      result.recommendation = v3Result.recommendation;
-      result.signals = v3Result.signals;
-      result.weights_used = v3Result.weights_used;
-      if (v3Result.score_floor_applied !== null) result.score_floor_applied = v3Result.score_floor_applied;
-    } else if (featureFlags.v2Enabled && v2Result) {
-      result.score = v2Result.score;
-      result.recommendation = v2Result.recommendation;
-      result.signals = v2Result.signals;
-      result.weights_used = v2Result.weights_used;
-      if (v2Result.score_floor_applied !== null) result.score_floor_applied = v2Result.score_floor_applied;
-    } else {
-      result.score = legacyAggregate.score;
-      result.recommendation = legacyAggregate.recommendation;
-      result.weights_used = legacyAggregate.weights_used;
-      if (legacyAggregate.score_floor_applied !== null) result.score_floor_applied = legacyAggregate.score_floor_applied;
-    }
-
-    if (featureFlags.shadowMode && !featureFlags.v2Enabled && v2Result) {
-      result.shadow = {
-        legacy: {
-          score: legacyAggregate.score,
-          recommendation: legacyAggregate.recommendation,
-        },
-        v2: {
-          score: v2Result.score,
-          recommendation: v2Result.recommendation,
-        },
-      };
-      result.v2 = v2Result;
-    } else if (v2Result) {
-      result.v2 = v2Result;
-    }
-
-    if (v3Result) {
-      result.v3 = v3Result;
-    }
+    result.score = aggregate.score;
+    result.recommendation = aggregate.recommendation;
+    result.weights_used = aggregate.weights_used;
+    if (aggregate.score_floor_applied !== null) result.score_floor_applied = aggregate.score_floor_applied;
 
     result.telemetry = {
       mode: activeModel,
       active_flags: featureFlags,
-      legacy: {
-        score: legacyAggregate.score,
-        recommendation: legacyAggregate.recommendation,
-        weights_used: legacyAggregate.weights_used,
+      active_pipeline: {
+        score: aggregate.score,
+        recommendation: aggregate.recommendation,
+        weights_used: aggregate.weights_used,
+        score_floor_applied: aggregate.score_floor_applied,
+        prompt_set: semanticSignal.prompt_set || 'v1',
+        sonics: sonicsSignal || null,
       },
-      v2: v2Result
-        ? {
-          score: v2Result.score,
-          recommendation: v2Result.recommendation,
-          weights_used: v2Result.weights_used,
-          sonics: v2Result.signals?.sonics || null,
-        }
-        : null,
-      v3: v3Result
-        ? {
-          score: v3Result.score,
-          recommendation: v3Result.recommendation,
-          weights_used: v3Result.weights_used,
-          sonics: v3Result.signals?.sonics || null,
-        }
-        : null,
       per_signal_contributions: {
-        legacy: {
-          semantic: Math.round(semanticScore * legacyAggregate.weights_used.semantic * 1000) / 1000,
-          anomaly: Math.round(anomalyScore * legacyAggregate.weights_used.anomaly * 1000) / 1000,
-          metadata: Math.round(metadataScore * legacyAggregate.weights_used.metadata * 1000) / 1000,
-          catalog: Math.round(catalogScore * legacyAggregate.weights_used.catalog * 1000) / 1000,
-        },
-        v2: v2Result
-          ? {
-            semantic: Math.round((v2Result.signals.semantic?.aiScore || 0) * v2Result.weights_used.semantic * 1000) / 1000,
-            anomaly: Math.round((v2Result.signals.anomalies?.anomalyScore || 0) * v2Result.weights_used.anomaly * 1000) / 1000,
-            metadata: Math.round((v2Result.signals.metadata?.suspicionScore || 0) * v2Result.weights_used.metadata * 1000) / 1000,
-            catalog: Math.round((v2Result.signals.catalog?.provenanceScore || 0) * v2Result.weights_used.catalog * 1000) / 1000,
-            sonics: Math.round(((v2Result.signals.sonics?.sonicsScore || 0) * (v2Result.weights_used.sonics || 0)) * 1000) / 1000,
-            knn: Math.round(((v2Result.signals.knn?.aiLikelihood || 0) * v2Result.weights_used.knn) * 1000) / 1000,
-          }
-          : null,
-        v3: v3Result
-          ? {
-            semantic: Math.round((v3Result.signals.semantic?.aiScore || 0) * v3Result.weights_used.semantic * 1000) / 1000,
-            anomaly: Math.round((v3Result.signals.anomalies?.anomalyScore || 0) * v3Result.weights_used.anomaly * 1000) / 1000,
-            metadata: Math.round((v3Result.signals.metadata?.suspicionScore || 0) * v3Result.weights_used.metadata * 1000) / 1000,
-            catalog: Math.round((v3Result.signals.catalog?.provenanceScore || 0) * v3Result.weights_used.catalog * 1000) / 1000,
-            knn: Math.round(((v3Result.signals.knn?.aiLikelihood || 0) * (v3Result.weights_used.knn || 0)) * 1000) / 1000,
-            watermark: Math.round(((v3Result.signals.watermark?.watermarkScore || 0) * (v3Result.weights_used.watermark || 0)) * 1000) / 1000,
-            sonics: Math.round(((v3Result.signals.sonics?.sonicsScore || 0) * (v3Result.weights_used.sonics || 0)) * 1000) / 1000,
-          }
-          : null,
+        semantic: Math.round((semanticSignal.aiScore || 0) * aggregate.weights_used.semantic * 1000) / 1000,
+        anomaly: Math.round(anomalyScore * aggregate.weights_used.anomaly * 1000) / 1000,
+        metadata: Math.round((metadataSignal.suspicionScore || 0) * aggregate.weights_used.metadata * 1000) / 1000,
+        catalog: Math.round((catalogSignal.provenanceScore || 0) * aggregate.weights_used.catalog * 1000) / 1000,
+        sonics: Math.round(((sonicsSignal?.sonicsScore || 0) * (aggregate.weights_used.sonics || 0)) * 1000) / 1000,
       },
     };
     
@@ -1674,29 +1479,8 @@ function getAllFlags(detectionResult) {
   if (detectionResult.signals?.catalog?.flags) {
     flags.push(...detectionResult.signals.catalog.flags);
   }
-  if (detectionResult.signals?.knn?.flags) {
-    flags.push(...detectionResult.signals.knn.flags);
-  }
   if (detectionResult.signals?.sonics?.flags) {
     flags.push(...detectionResult.signals.sonics.flags);
-  }
-  if (detectionResult.signals?.watermark?.flags) {
-    flags.push(...detectionResult.signals.watermark.flags);
-  }
-  if (detectionResult.v2?.signals?.knn?.flags) {
-    flags.push(...detectionResult.v2.signals.knn.flags);
-  }
-  if (detectionResult.v2?.signals?.sonics?.flags) {
-    flags.push(...detectionResult.v2.signals.sonics.flags);
-  }
-  if (detectionResult.v3?.signals?.knn?.flags) {
-    flags.push(...detectionResult.v3.signals.knn.flags);
-  }
-  if (detectionResult.v3?.signals?.sonics?.flags) {
-    flags.push(...detectionResult.v3.signals.sonics.flags);
-  }
-  if (detectionResult.v3?.signals?.watermark?.flags) {
-    flags.push(...detectionResult.v3.signals.watermark.flags);
   }
   
   return [...new Set(flags)];

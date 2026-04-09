@@ -608,6 +608,7 @@ async function analyzeHandler(req, res) {
         flags: aiDetection.getAllFlags(aiDetectionResult),
         processing_time_ms: aiDetectionResult.processing_time_ms,
         active_flags: aiDetectionResult.active_flags,
+        score_floor_applied: aiDetectionResult.score_floor_applied ?? null,
         telemetry: aiDetectionResult.telemetry || null,
       };
       if (aiDetectionResult.error) {
@@ -615,13 +616,6 @@ async function analyzeHandler(req, res) {
       }
       if (aiDetectionResult.shadow) {
         response.ai_detection.shadow = aiDetectionResult.shadow;
-      }
-      if (aiDetectionResult.v2) {
-        response.ai_detection.v2 = {
-          score: aiDetectionResult.v2.score,
-          recommendation: aiDetectionResult.v2.recommendation,
-          signals: aiDetectionResult.v2.signals,
-        };
       }
     }
     

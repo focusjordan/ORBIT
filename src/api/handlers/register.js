@@ -561,7 +561,7 @@ async function registerHandler(req, res) {
               enableClap: false,
               enableEmbedding: false,
               enableAudioAnalysis: true,
-              aiForensics: config.ai.v2Enabled || config.ai.shadowMode,
+              aiForensics: config.ai.v2Enabled || config.ai.shadowMode || config.ai.forensicsV3Enabled,
             },
           });
         } catch (analysisError) {
@@ -585,7 +585,7 @@ async function registerHandler(req, res) {
       }
       if (aiDetectionResult.telemetry) {
         const t = aiDetectionResult.telemetry;
-        log(`   Telemetry: mode=${t.mode}, legacy=${t.legacy?.recommendation}, v2=${t.v2?.recommendation || 'n/a'}`);
+        log(`   Telemetry: mode=${t.mode}, active=${t.active_pipeline?.recommendation || 'n/a'}`);
       }
       
     } catch (aiDetectionError) {
@@ -657,6 +657,7 @@ async function registerHandler(req, res) {
         flags: aiDetection.getAllFlags(aiDetectionResult),
         processing_time_ms: aiDetectionResult.processing_time_ms,
         active_flags: aiDetectionResult.active_flags,
+        score_floor_applied: aiDetectionResult.score_floor_applied ?? null,
         telemetry: aiDetectionResult.telemetry || null,
       };
       
@@ -666,13 +667,6 @@ async function registerHandler(req, res) {
       }
       if (aiDetectionResult.shadow) {
         response.ai_detection.shadow = aiDetectionResult.shadow;
-      }
-      if (aiDetectionResult.v2) {
-        response.ai_detection.v2 = {
-          score: aiDetectionResult.v2.score,
-          recommendation: aiDetectionResult.v2.recommendation,
-          signals: aiDetectionResult.v2.signals,
-        };
       }
     }
     

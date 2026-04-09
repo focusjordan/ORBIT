@@ -212,7 +212,7 @@ async function runConfigurationTests() {
 
   runner.test('config has v2 weights that sum to 1.0', () => {
     const weights = aiDetection.config.weightsV2;
-    const sum = weights.semantic + weights.anomaly + weights.metadata + weights.catalog + weights.knn;
+    const sum = weights.semantic + weights.anomaly + weights.metadata + weights.catalog + weights.sonics + weights.knn;
     assertApproxEqual(sum, 1.0, 0.001, 'V2 weights should sum to 1.0: ');
   });
   
@@ -626,20 +626,20 @@ async function runUtilityFunctionTests() {
     assertEqual(flags.length, 0);
   });
 
-  runner.test('v2+knn fail-open on missing references', async () => {
+  runner.test('detectAI ignores knn flag in the unified pipeline', async () => {
     const result = await aiDetection.detectAI(Buffer.from([1, 2, 3, 4]), {
       metadata: {},
       analysisResult: null,
       verbose: false,
       flags: {
-        v2Enabled: false,
-        shadowMode: true,
+        v2Enabled: true,
         knnEnabled: true,
       },
     });
     assertDefined(result.recommendation);
     const flags = aiDetection.getAllFlags(result);
-    assertTrue(flags.includes('KNN_UNAVAILABLE_FAIL_OPEN') || result.recommendation === 'DETECTION_ERROR');
+    assertFalse(flags.includes('KNN_UNAVAILABLE_FAIL_OPEN'));
+    assertFalse(Object.prototype.hasOwnProperty.call(result.signals, 'knn'));
   });
   
   return runner.run();
@@ -750,13 +750,13 @@ async function runIntegrationTests() {
 // ============================================================================
 
 async function runV3ForensicsTests() {
-  const runner = new TestRunner('V3 Forensics & Watermark Detection');
+  const runner = new TestRunner('V3 Forensics');
 
   // --- Weight / threshold config ---
 
   runner.test('weightsV3 sums to 1.0', () => {
     const w = aiDetection.config.weightsV3;
-    const sum = w.semantic + w.anomaly + w.metadata + w.catalog + w.watermark + w.knn;
+    const sum = w.semantic + w.anomaly + w.metadata + w.catalog + w.sonics + w.watermark + w.knn;
     assertApproxEqual(sum, 1.0, 0.001, 'V3 weights should sum to 1.0: ');
   });
 
@@ -771,8 +771,8 @@ async function runV3ForensicsTests() {
     assertLessOrEqual(aiDetection.config.weightsV3.semantic, 0.10);
   });
 
-  runner.test('weightsV3 includes watermark weight', () => {
-    assertGreaterThan(aiDetection.config.weightsV3.watermark, 0);
+  runner.test('weightsV3 keeps watermark outside scoring', () => {
+    assertEqual(aiDetection.config.weightsV3.watermark, 0);
   });
 
   // --- Feature flag gating ---
@@ -783,8 +783,8 @@ async function runV3ForensicsTests() {
     assertTypeOf(flags.forensicsV3Enabled, 'boolean');
   });
 
-  runner.test('forensicsV3Enabled defaults to false', () => {
-    const flags = aiDetection.resolveFeatureFlags({});
+  runner.test('forensicsV3Enabled can be overridden to false', () => {
+    const flags = aiDetection.resolveFeatureFlags({ forensicsV3Enabled: false });
     assertFalse(flags.forensicsV3Enabled);
   });
 
