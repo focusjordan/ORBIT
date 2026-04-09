@@ -293,6 +293,9 @@ class OrbitClient {
     if (this.apiKey) {
       headers['X-ORBIT-API-Key'] = this.apiKey;
     }
+    if (metadata.skip_ai_detection) {
+      headers['X-Skip-AI-Detection'] = 'true';
+    }
 
     const url = `${this.apiUrl}/orbit/v1/register`;
     const response = await fetch(url, {

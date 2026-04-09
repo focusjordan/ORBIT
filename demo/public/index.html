@@ -1096,6 +1096,7 @@ body {
       fd.append('audio', blob, fileName || 'track');
       fd.append('title', title);
       fd.append('artist', artist);
+      if (fileName) fd.append('filename', fileName);
       if ($('#m4-isrc').value.trim()) fd.append('isrc', $('#m4-isrc').value.trim());
       if ($('#m4-genre').value.trim()) fd.append('genre', $('#m4-genre').value.trim());
       fd.append('skip_ai_detection', 'true');

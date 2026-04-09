@@ -340,10 +340,22 @@ app.post('/api/register', upload.single('audio'), async (req, res) => {
     };
     if (req.body.isrc) metadata.isrc = req.body.isrc;
     if (req.body.genre) metadata.primary_genre = req.body.genre;
-    if (req.body.skip_ai_detection === 'true') metadata.skip_ai_detection = true;
+    const skipAi = req.body.skip_ai_detection === 'true';
+    if (skipAi) metadata.skip_ai_detection = true;
 
     if (!metadata.title || !metadata.artist) {
       return res.status(400).json({ error: 'Title and artist are required' });
+    }
+
+    const safeFilename = req.body.filename ? path.basename(req.body.filename) : null;
+    const forceLive = req.query.live === 'true';
+
+    if (safeFilename && !forceLive) {
+      const cached = getCachedResult('register_' + safeFilename);
+      if (cached) {
+        console.log(`  [register] Serving cached result for ${safeFilename}`);
+        return res.json(cached);
+      }
     }
 
     const ownerId = client.platformId;
@@ -369,6 +381,11 @@ app.post('/api/register', upload.single('audio'), async (req, res) => {
     if (data.watermarked_audio) {
       response.has_watermarked_audio = true;
       response.watermarked_audio_b64 = data.watermarked_audio;
+    }
+
+    if (safeFilename) {
+      saveCachedResult('register_' + safeFilename, response);
+      console.log(`  [register] Cached result for ${safeFilename}`);
     }
 
     res.json(response);

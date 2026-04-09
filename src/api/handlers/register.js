@@ -550,7 +550,8 @@ async function registerHandler(req, res) {
     let aiDetectionResult = null;
     let aiAnalysisResult = null;
     
-    if (metadata.skip_ai_detection) {
+    const skipAiDetection = metadata.skip_ai_detection || req.headers['x-skip-ai-detection'] === 'true';
+    if (skipAiDetection) {
       log('⏭️  AI detection skipped (caller handles separately)');
     } else try {
       log('🤖 Running AI music detection...');
