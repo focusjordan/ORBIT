@@ -6,8 +6,8 @@
                    ReleaseProfileVersionId="CommonReleaseTypes/14/AudioAlbum">
 
   <MessageHeader>
-    <MessageThreadId>T-2025-JK-001</MessageThreadId>
-    <MessageId>MSG-2025-02-24-JK001</MessageId>
+    <MessageThreadId>T-2026-ACQ-001</MessageThreadId>
+    <MessageId>MSG-2026-04-08-CATALOG-TRANSFER</MessageId>
     <MessageSender>
       <PartyId>PADPIDA2025022401J</PartyId>
       <PartyName><FullName>Jordan Kugler Music</FullName></PartyName>
@@ -20,7 +20,7 @@
       <PartyId>PADPIDA2024000001O</PartyId>
       <PartyName><FullName>ORBIT Protocol</FullName></PartyName>
     </MessageRecipient>
-    <MessageCreatedDateTime>2025-02-24T12:00:00Z</MessageCreatedDateTime>
+    <MessageCreatedDateTime>2026-04-08T12:00:00Z</MessageCreatedDateTime>
   </MessageHeader>
 
   <ResourceList>
@@ -260,6 +260,100 @@
       </TechnicalSoundRecordingDetails>
     </SoundRecording>
 
+    <SoundRecording>
+      <ResourceReference>A6</ResourceReference>
+      <SoundRecordingType>MusicalWorkSoundRecording</SoundRecordingType>
+      <SoundRecordingId>
+        <ISRC>USORB2500006</ISRC>
+      </SoundRecordingId>
+      <ReferenceTitle>
+        <TitleText>She A Bop</TitleText>
+      </ReferenceTitle>
+      <Duration>PT3M15S</Duration>
+      <LanguageOfPerformance>en</LanguageOfPerformance>
+      <DisplayArtist>
+        <PartyName><FullName>Jordan Kugler</FullName></PartyName>
+        <ArtistRole>MainArtist</ArtistRole>
+      </DisplayArtist>
+      <Contributor>
+        <PartyName><FullName>Jordan Kugler</FullName></PartyName>
+        <Role>Composer</Role>
+      </Contributor>
+      <Contributor>
+        <PartyName><FullName>Jordan Kugler</FullName></PartyName>
+        <Role>Producer</Role>
+      </Contributor>
+      <PLine>
+        <Year>2019</Year>
+        <PLineText>2019 Jordan Kugler Music</PLineText>
+      </PLine>
+      <CLine>
+        <Year>2019</Year>
+        <CLineText>2019 Jordan Kugler Music</CLineText>
+      </CLine>
+      <Genre>
+        <GenreText>Pop</GenreText>
+      </Genre>
+      <ParentalWarningType>NotExplicit</ParentalWarningType>
+      <TechnicalSoundRecordingDetails>
+        <TechnicalResourceDetailsReference>T6</TechnicalResourceDetailsReference>
+        <AudioCodecType>WAV</AudioCodecType>
+        <NumberOfChannels>2</NumberOfChannels>
+        <SamplingRate>44100</SamplingRate>
+        <BitsPerSample>16</BitsPerSample>
+        <File>
+          <FileName>7-2-19-She A Bop.wav</FileName>
+        </File>
+      </TechnicalSoundRecordingDetails>
+    </SoundRecording>
+
+    <SoundRecording>
+      <ResourceReference>A7</ResourceReference>
+      <SoundRecordingType>MusicalWorkSoundRecording</SoundRecordingType>
+      <SoundRecordingId>
+        <ISRC>USORB2500007</ISRC>
+      </SoundRecordingId>
+      <ReferenceTitle>
+        <TitleText>The Birds</TitleText>
+      </ReferenceTitle>
+      <Duration>PT2M51S</Duration>
+      <LanguageOfPerformance>en</LanguageOfPerformance>
+      <DisplayArtist>
+        <PartyName><FullName>Jordan Kugler</FullName></PartyName>
+        <ArtistRole>MainArtist</ArtistRole>
+      </DisplayArtist>
+      <Contributor>
+        <PartyName><FullName>Jordan Kugler</FullName></PartyName>
+        <Role>Composer</Role>
+      </Contributor>
+      <Contributor>
+        <PartyName><FullName>Jordan Kugler</FullName></PartyName>
+        <Role>Producer</Role>
+      </Contributor>
+      <PLine>
+        <Year>2019</Year>
+        <PLineText>2019 Jordan Kugler Music</PLineText>
+      </PLine>
+      <CLine>
+        <Year>2019</Year>
+        <CLineText>2019 Jordan Kugler Music</CLineText>
+      </CLine>
+      <Genre>
+        <GenreText>Instrumental</GenreText>
+      </Genre>
+      <ParentalWarningType>NotExplicit</ParentalWarningType>
+      <TechnicalSoundRecordingDetails>
+        <TechnicalResourceDetailsReference>T7</TechnicalResourceDetailsReference>
+        <AudioCodecType>WAV</AudioCodecType>
+        <NumberOfChannels>2</NumberOfChannels>
+        <SamplingRate>44100</SamplingRate>
+        <BitsPerSample>16</BitsPerSample>
+        <File>
+          <FileName>11-4-19-The Birds Instrumental.wav</FileName>
+        </File>
+      </TechnicalSoundRecordingDetails>
+    </SoundRecording>
+
   </ResourceList>
 
   <ReleaseList>
@@ -269,7 +363,7 @@
         <ICPN>0196588364999</ICPN>
       </ReleaseId>
       <ReferenceTitle>
-        <TitleText>The Kugler Collection</TitleText>
+        <TitleText>The Kugler Catalog — Complete Works</TitleText>
       </ReferenceTitle>
       <ReleaseType>Album</ReleaseType>
       <ReleaseDetailsByTerritory>
@@ -278,7 +372,8 @@
         <LabelName>Jordan Kugler Music</LabelName>
         <ParentalWarningType>Explicit</ParentalWarningType>
       </ReleaseDetailsByTerritory>
-      <ReleaseDate>2025-03-15</ReleaseDate>
+      <ReleaseDate>2026-04-08</ReleaseDate>
+      <OriginalReleaseDate>2019-07-02</OriginalReleaseDate>
       <ResourceGroup>
         <ResourceGroupContentItem>
           <SequenceNumber>1</SequenceNumber>
@@ -299,6 +394,14 @@
         <ResourceGroupContentItem>
           <SequenceNumber>5</SequenceNumber>
           <ReleaseResourceReference>A5</ReleaseResourceReference>
+        </ResourceGroupContentItem>
+        <ResourceGroupContentItem>
+          <SequenceNumber>6</SequenceNumber>
+          <ReleaseResourceReference>A6</ReleaseResourceReference>
+        </ResourceGroupContentItem>
+        <ResourceGroupContentItem>
+          <SequenceNumber>7</SequenceNumber>
+          <ReleaseResourceReference>A7</ReleaseResourceReference>
         </ResourceGroupContentItem>
       </ResourceGroup>
     </Release>
@@ -333,6 +436,18 @@
       <ReleaseResourceReference>A5</ReleaseResourceReference>
     </TrackRelease>
 
+    <TrackRelease>
+      <ReleaseId><ISRC>USORB2500006</ISRC></ReleaseId>
+      <ReferenceTitle><TitleText>She A Bop</TitleText></ReferenceTitle>
+      <ReleaseResourceReference>A6</ReleaseResourceReference>
+    </TrackRelease>
+
+    <TrackRelease>
+      <ReleaseId><ISRC>USORB2500007</ISRC></ReleaseId>
+      <ReferenceTitle><TitleText>The Birds</TitleText></ReferenceTitle>
+      <ReleaseResourceReference>A7</ReleaseResourceReference>
+    </TrackRelease>
+
   </ReleaseList>
 
   <DealList>
@@ -344,7 +459,24 @@
           <TerritoryCode>Worldwide</TerritoryCode>
         </Territory>
         <ValidityPeriod>
-          <StartDate>2025-03-15</StartDate>
+          <StartDate>2026-04-08</StartDate>
+        </ValidityPeriod>
+      </DealTerms>
+    </ReleaseDeal>
+    <ReleaseDeal>
+      <DealReleaseReference>R0</DealReleaseReference>
+      <DealTerms>
+        <CommercialModelType>PayAsYouGoModel</CommercialModelType>
+        <Territory>
+          <TerritoryCode>US</TerritoryCode>
+          <TerritoryCode>GB</TerritoryCode>
+          <TerritoryCode>DE</TerritoryCode>
+          <TerritoryCode>JP</TerritoryCode>
+          <TerritoryCode>AU</TerritoryCode>
+        </Territory>
+        <ValidityPeriod>
+          <StartDate>2026-04-08</StartDate>
+          <EndDate>2028-04-08</EndDate>
         </ValidityPeriod>
       </DealTerms>
     </ReleaseDeal>

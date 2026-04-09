@@ -9,13 +9,13 @@
 
 :root {
   --bg: #0a0a0f;
-  --surface: #12121a;
+  --surface: #13131d;
   --surface-2: #1a1a26;
   --border: #2a2a3a;
   --text: #e0e0e8;
-  --text-dim: #8888a0;
-  --accent: #00d4aa;
-  --accent-glow: rgba(0, 212, 170, 0.15);
+  --text-dim: #9494aa;
+  --accent: #2dd4a8;
+  --accent-glow: rgba(45, 212, 168, 0.10);
   --accent-2: #00b4d8;
   --red: #ff4466;
   --yellow: #ffaa22;
@@ -33,8 +33,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Header */
-.header { text-align: center; padding: 28px 24px 16px; }
+.header { text-align: center; padding: 20px 24px 12px; }
 .header h1 { font-size: 1.8rem; font-weight: 700; letter-spacing: 0.08em; color: var(--accent); }
 .header p { color: var(--text-dim); font-size: 0.8rem; margin-top: 4px; letter-spacing: 0.04em; }
 .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; background: var(--text-dim); }
@@ -42,8 +41,7 @@ body {
 .status-dot.err { background: var(--red); box-shadow: 0 0 6px var(--red); }
 .status-line { font-size: 0.7rem; color: var(--text-dim); margin-top: 8px; }
 
-/* Module indicator */
-.progress-bar { display: flex; justify-content: center; gap: 8px; padding: 0 24px 20px; max-width: 1100px; margin: 0 auto; flex-wrap: wrap; }
+.progress-bar { display: flex; justify-content: center; gap: 6px; padding: 0 24px 14px; max-width: 1200px; margin: 0 auto; flex-wrap: wrap; }
 .step-circle {
   padding: 7px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface);
   color: var(--text-dim); font-size: 0.68rem; letter-spacing: 0.04em; text-transform: uppercase;
@@ -52,8 +50,7 @@ body {
 .step-circle:hover { border-color: var(--accent); color: var(--text); }
 .step-circle.active { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); box-shadow: 0 0 8px var(--accent-glow); }
 
-/* Main layout */
-.main { display: flex; max-width: 1200px; margin: 0 auto; padding: 0 16px 60px; gap: 16px; min-height: 70vh; }
+.main { display: flex; max-width: 1280px; margin: 0 auto; padding: 0 16px 60px; gap: 16px; min-height: 70vh; }
 .content-panel { flex: 1; min-width: 0; }
 .log-panel {
   width: 380px; flex-shrink: 0; background: #0d0d14; border: 1px solid var(--border); border-radius: var(--radius);
@@ -66,18 +63,15 @@ body {
 .log-entry .log-time { color: var(--accent-2); margin-right: 8px; }
 .log-entry .log-msg { color: var(--text); }
 
-/* Section containers */
 .section { display: none; animation: fadeIn 0.3s ease; }
 .section.active { display: block; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
-/* Card */
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 14px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
 .card-title { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
 .section-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 4px; }
-.section-subtitle { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 18px; }
+.section-subtitle { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 10px; }
 
-/* Drop Zone */
 .dropzone {
   border: 2px dashed var(--border); border-radius: var(--radius); padding: 28px 16px;
   text-align: center; cursor: pointer; transition: var(--transition); position: relative;
@@ -88,7 +82,6 @@ body {
 .dropzone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .file-name { margin-top: 8px; font-size: 0.78rem; color: var(--accent); word-break: break-all; }
 
-/* Form fields */
 .field { margin-top: 12px; }
 .field label { display: block; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.06em; }
 .field input, .field select {
@@ -100,7 +93,6 @@ body {
 .row { display: flex; gap: 12px; }
 .row .field { flex: 1; }
 
-/* Track selector */
 .track-selector { margin-bottom: 12px; }
 .track-selector label { display: block; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.06em; }
 .track-selector select {
@@ -111,7 +103,6 @@ body {
 }
 .track-loading-msg { font-size: 0.72rem; color: var(--accent); margin-top: 5px; }
 
-/* Buttons */
 .btn {
   display: inline-block; margin-top: 16px; padding: 11px 24px; border: none; border-radius: 6px;
   font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: var(--transition);
@@ -123,42 +114,34 @@ body {
 .btn-outline { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
 .btn-outline:hover { background: var(--accent-glow); }
 
-/* Navigation */
 .nav-bar { display: flex; justify-content: space-between; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
 
-/* Loading */
 .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 10px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-inline { padding: 20px 0; color: var(--text-dim); font-size: 0.85rem; }
 
-/* Results */
 .result-grid { display: grid; gap: 1px; background: var(--border); border-radius: var(--radius); overflow: hidden; margin-top: 12px; }
 .result-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 13px; background: var(--surface); }
 .result-row .label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
 .result-row .value { font-size: 0.82rem; text-align: right; word-break: break-all; max-width: 65%; }
 
-/* Badges */
 .badge { display: inline-block; padding: 4px 14px; border-radius: 16px; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; }
 .badge.success { background: rgba(0, 214, 143, 0.15); color: var(--green); }
 .badge.warning { background: rgba(255, 170, 34, 0.15); color: var(--yellow); }
 .badge.error { background: rgba(255, 68, 102, 0.15); color: var(--red); }
 
-/* Tags */
 .tags { display: flex; flex-wrap: wrap; gap: 5px; }
 .tag { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 0.72rem; font-weight: 600; background: var(--surface-2); border: 1px solid var(--border); }
 .tag.accent { border-color: var(--accent); color: var(--accent); }
 
-/* Confidence bars */
 .conf-bar-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
 .conf-label { font-size: 0.78rem; min-width: 100px; }
 .conf-bar { flex: 1; height: 5px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
 .conf-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
 .conf-pct { font-size: 0.72rem; color: var(--text-dim); min-width: 38px; text-align: right; }
 
-/* Two-column comparison */
 .compare-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
-/* XML viewer */
 .xml-viewer {
   background: #0d0d14; border: 1px solid var(--border); border-radius: var(--radius);
   padding: 14px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.72rem;
@@ -169,7 +152,6 @@ body {
 .xml-attr { color: var(--yellow); }
 .xml-val { color: var(--green); }
 
-/* Chain visualization */
 .chain-node {
   display: flex; align-items: center; gap: 12px; padding: 12px 16px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px;
@@ -182,10 +164,8 @@ body {
 .chain-detail .chain-label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
 .chain-detail .chain-value { font-size: 0.85rem; }
 
-/* Error */
 .error-msg { margin-top: 14px; padding: 12px; background: rgba(255,68,102,0.08); border: 1px solid rgba(255,68,102,0.2); border-radius: var(--radius); color: var(--red); font-size: 0.82rem; }
 
-/* Download link */
 .download-link {
   display: inline-block; margin-top: 10px; padding: 7px 14px; border-radius: 6px; font-size: 0.78rem;
   font-weight: 600; background: var(--surface-2); border: 1px solid var(--border); color: var(--accent);
@@ -193,19 +173,12 @@ body {
 }
 .download-link:hover { border-color: var(--accent); background: var(--accent-glow); }
 
-/* Slide sections */
-.slide-section { text-align: center; max-width: 1000px; margin: 0 auto; padding: 10px 20px 0; }
-.slide-headline { font-size: 2rem; font-weight: 800; color: #fff; line-height: 1.2; margin-bottom: 10px; }
-.slide-subline { font-size: 1rem; color: var(--text-dim); line-height: 1.6; max-width: 750px; margin: 0 auto 20px; }
+.slide-section { text-align: center; max-width: 1140px; margin: 0 auto; padding: 10px 20px 0; }
+.slide-headline { font-size: 1.8rem; font-weight: 800; color: #fff; line-height: 1.2; margin-bottom: 6px; }
+.slide-subline { font-size: 0.92rem; color: var(--text-dim); line-height: 1.5; max-width: 750px; margin: 0 auto 14px; }
 .slide-pitch { font-size: 0.85rem; color: var(--text-dim); line-height: 1.7; max-width: 700px; margin: 12px auto 0; }
-.slide-logo { margin: 0 auto 12px; }
-.slide-wordmark { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.15em; color: #6366f1; margin-bottom: 4px; }
 
-.slide-screenshot-wrap { margin: 16px auto 0; max-width: 480px; }
-.slide-screenshot { width: 100%; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: 0 4px 24px rgba(0,0,0,0.5); }
-.slide-screenshot-sm { max-width: 340px; }
-
-.slide-stats { display: flex; flex-direction: column; gap: 12px; max-width: 700px; margin: 20px auto 0; text-align: left; }
+.slide-stats { display: flex; flex-direction: column; gap: 10px; max-width: 700px; margin: 16px auto 0; text-align: left; }
 .slide-stat { display: flex; align-items: flex-start; gap: 14px; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 .slide-stat-icon {
   width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
@@ -214,76 +187,97 @@ body {
 .slide-stat-text { flex: 1; font-size: 0.82rem; color: var(--text-dim); line-height: 1.5; }
 .slide-stat-text strong { display: block; color: var(--text); font-size: 0.88rem; margin-bottom: 2px; }
 
-.slide-icon-row { display: flex; justify-content: center; gap: 20px; margin: 24px auto; flex-wrap: wrap; }
-.slide-icon-item { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100px; }
-.slide-icon-circle {
-  width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  font-size: 1.3rem; background: var(--surface); border: 1px solid var(--border);
-}
-.slide-icon-label { font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
-
-.slide-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 900px; margin: 20px auto 0; text-align: left; }
+.slide-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 1060px; margin: 20px auto 0; text-align: left; }
 .slide-col-card { padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 .slide-col-card h3 { font-size: 0.9rem; color: var(--accent); margin-bottom: 6px; }
 .slide-col-card p { font-size: 0.78rem; color: var(--text-dim); line-height: 1.5; }
 
-.slide-bars { max-width: 700px; margin: 20px auto 0; text-align: left; }
-.slide-bar-item { margin-bottom: 10px; }
-.slide-bar-header { display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 4px; }
-.slide-bar-header .bar-label { color: var(--text); }
-.slide-bar-header .bar-value { color: var(--text-dim); }
-.slide-bar-track { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
-.slide-bar-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width 0.6s ease; }
-
-.slide-credits { margin: 18px auto 0; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); max-width: 700px; }
-.slide-credits-title { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
-.slide-credits-grid { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; font-size: 0.78rem; }
-.slide-credits-grid .credit-name { color: var(--text); }
-.slide-credits-grid .credit-value { color: var(--text-dim); text-align: right; }
-
-.slide-timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 24px auto 0; max-width: 100%; }
-.slide-quarter { padding: 14px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); text-align: left; }
-.slide-quarter-label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
-.slide-quarter-cac { font-size: 1.3rem; font-weight: 800; color: var(--accent); margin-bottom: 8px; }
-.slide-quarter-items { font-size: 0.7rem; color: var(--text-dim); line-height: 1.6; list-style: none; padding: 0; }
-.slide-quarter-items li { padding-left: 10px; position: relative; margin-bottom: 3px; }
-.slide-quarter-items li::before { content: '\00b7'; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
-
-.slide-three-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 900px; margin: 18px auto 0; text-align: left; }
+.slide-three-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 1060px; margin: 18px auto 0; text-align: left; }
 .slide-three-col .slide-col-card ul { list-style: none; padding: 0; margin: 0; }
 .slide-three-col .slide-col-card li { font-size: 0.76rem; color: var(--text-dim); line-height: 1.5; padding-left: 12px; position: relative; margin-bottom: 4px; }
 .slide-three-col .slide-col-card li::before { content: '\2022'; position: absolute; left: 0; color: var(--accent); }
+
 .slide-divider { width: 60px; height: 2px; background: var(--border); margin: 16px auto; }
 
-/* Session E additions */
 .module-card:hover { border-color: var(--accent); background: var(--accent-glow); }
 .replaces-banner { padding: 10px; margin-bottom: 10px; border: 1px solid var(--accent); border-radius: var(--radius); background: rgba(0,212,170,0.06); }
 .key-stat-banner { padding: 10px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
 .mood-profile { padding: 2px 0; }
 
-/* Responsive */
+/* Pipeline funnel */
+.funnel { max-width: 1060px; margin: 20px auto 0; text-align: left; }
+.funnel-step { display: flex; gap: 16px; align-items: stretch; margin-bottom: 0; }
+.funnel-line { display: flex; flex-direction: column; align-items: center; width: 40px; flex-shrink: 0; }
+.funnel-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--accent); background: var(--bg); flex-shrink: 0; z-index: 1; }
+.funnel-dot.active { background: var(--accent); }
+.funnel-connector { flex: 1; width: 2px; background: var(--border); }
+.funnel-content { flex: 1; padding: 8px 16px 14px; }
+.funnel-label { font-size: 0.72rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.funnel-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.funnel-desc { font-size: 0.8rem; color: var(--text-dim); line-height: 1.5; }
+.funnel-modules { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.funnel-mod { padding: 3px 10px; border-radius: 12px; font-size: 0.68rem; font-weight: 600; background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); }
+.funnel-mod.active { border-color: var(--accent); color: var(--accent); }
+
+/* Tech table */
+.tech-table { width: 100%; border-collapse: collapse; margin-top: 16px; text-align: left; font-size: 0.76rem; }
+.tech-table th { padding: 8px 10px; background: var(--surface-2); color: var(--text-dim); text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
+.tech-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+.tech-table tr:hover td { background: rgba(0,212,170,0.04); }
+.tech-table .model-name { color: var(--accent); font-weight: 600; white-space: nowrap; }
+
+/* Patent items */
+.patent-item { display: flex; gap: 12px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; text-align: left; }
+.patent-num { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-glow); border: 1px solid var(--accent); display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; color: var(--accent); flex-shrink: 0; }
+.patent-text { flex: 1; }
+.patent-text strong { display: block; font-size: 0.82rem; color: var(--text); margin-bottom: 2px; }
+.patent-text span { font-size: 0.74rem; color: var(--text-dim); line-height: 1.4; }
+
+/* Competitive comparison */
+.comp-card { padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); text-align: left; }
+.comp-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.comp-vs { font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; padding: 3px 8px; border-radius: 4px; background: var(--surface-2); }
+.comp-row { display: flex; gap: 12px; margin-bottom: 6px; font-size: 0.76rem; }
+.comp-label { width: 110px; flex-shrink: 0; color: var(--text-dim); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; padding-top: 2px; }
+.comp-them { flex: 1; padding: 6px 10px; background: rgba(255,68,102,0.06); border: 1px solid rgba(255,68,102,0.15); border-radius: 6px; color: var(--text-dim); }
+.comp-us { flex: 1; padding: 6px 10px; background: rgba(0,212,170,0.06); border: 1px solid rgba(0,212,170,0.15); border-radius: 6px; color: var(--text); }
+.comp-na { flex: 1; padding: 6px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; color: var(--text-dim); font-style: italic; }
+
+/* Value grid */
+.value-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; max-width: 1060px; margin: 16px auto 0; text-align: left; }
+.value-item { padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); text-align: center; }
+.value-item h4 { font-size: 0.72rem; color: var(--accent); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+.value-item p { font-size: 0.7rem; color: var(--text-dim); line-height: 1.3; margin: 0; }
+.value-item .vi-stat { font-size: 1.4rem; font-weight: 800; color: var(--text); margin: 2px 0; }
+
+.nowhere-banner {
+  max-width: 700px; margin: 20px auto; padding: 16px; text-align: center;
+  border: 2px solid var(--accent); border-radius: var(--radius); background: rgba(0,212,170,0.08);
+  font-size: 0.9rem; font-weight: 700; color: var(--accent); letter-spacing: 0.02em;
+}
+
 @media (max-width: 860px) {
   .main { flex-direction: column; }
   .log-panel { width: 100%; max-height: 300px; position: static; }
   .compare-cols { grid-template-columns: 1fr; }
-  .slide-timeline { grid-template-columns: repeat(2, 1fr); }
   .slide-two-col { grid-template-columns: 1fr; }
+  .slide-three-col { grid-template-columns: 1fr; }
+  .value-grid { grid-template-columns: 1fr; }
+  .comp-row { flex-direction: column; gap: 6px; }
+  .comp-label { width: auto; }
 }
 </style>
 </head>
 <body>
 
-<!-- Header -->
 <div class="header">
   <h1>ORBIT</h1>
   <p>Origin-Based Identity &amp; Rights Transfer Protocol</p>
   <div class="status-line"><span id="statusDot" class="status-dot"></span><span id="statusText">Connecting...</span></div>
 </div>
 
-<!-- Progress Bar -->
 <div class="progress-bar" id="progressBar"></div>
 
-<!-- Main Layout -->
 <div class="main">
   <div class="content-panel" id="contentPanel"></div>
   <div class="log-panel" id="logPanel">
@@ -296,7 +290,6 @@ body {
 (function() {
   'use strict';
 
-  // ========== State ==========
   var currentView = 'hub';
   var state = {
     demoTracks: [],
@@ -317,14 +310,16 @@ body {
     { id: 'hub', label: 'Overview', type: 'hub' },
     { id: 'mod-ai-detect', label: 'AI Detection', type: 'demo' },
     { id: 'mod-analysis', label: 'Audio Analysis', type: 'demo' },
-    { id: 'mod-fingerprint', label: 'Fingerprinting', type: 'demo' },
+    { id: 'mod-fingerprint', label: 'Catalog Intelligence', type: 'demo' },
     { id: 'mod-watermark', label: 'Watermarking', type: 'demo' },
-    { id: 'mod-ddex', label: 'DDEX Ingest', type: 'demo' },
-    { id: 'mod-provenance', label: 'Provenance Transfer', type: 'demo' },
+    { id: 'mod-ddex', label: 'Catalog Ingest', type: 'demo' },
+    { id: 'mod-provenance', label: 'Catalog Transfer', type: 'demo' },
+    { id: 'pipeline', label: 'Acquisition Pipeline', type: 'slide' },
+    { id: 'technical', label: 'Technical', type: 'slide' },
+    { id: 'competitive', label: 'Competitive', type: 'slide' },
     { id: 'closing', label: 'Value', type: 'slide' },
   ];
 
-  // ========== Utilities ==========
   var $ = function(s) { return document.querySelector(s); };
   function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
   function truncHash(h, n) { if (!h) return 'N/A'; return String(h).length > n ? String(h).slice(0, n) + '...' : String(h); }
@@ -421,11 +416,13 @@ body {
   function moduleScaffold(title, subtitle, replaces, keyStat, bodyHtml) {
     return ''
       + '<div class="card" style="padding:14px">'
-      + '<a href="#" id="back-to-hub" style="font-size:0.78rem;color:var(--accent);text-decoration:none">&larr; Back to Platform Overview</a>'
-      + '<div class="section-title" style="margin-top:8px">' + title + '</div>'
-      + '<div class="section-subtitle">' + subtitle + '</div>'
-      + '<div class="replaces-banner"><span style="font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em">Replaces</span><div style="font-size:0.85rem;color:var(--text);margin-top:3px">' + replaces + '</div></div>'
-      + '<div class="key-stat-banner"><span style="font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em">Key Stat</span><div style="font-size:0.85rem;color:var(--text);margin-top:3px">' + keyStat + '</div></div>'
+      + '<a href="#" id="back-to-hub" style="font-size:0.78rem;color:var(--accent);text-decoration:none">&larr; Back</a>'
+      + '<div class="section-title" style="margin-top:6px">' + title + '</div>'
+      + '<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:10px">' + subtitle + '</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;font-size:0.72rem">'
+      + '<span style="padding:3px 10px;border-radius:12px;background:rgba(45,212,168,0.08);border:1px solid rgba(45,212,168,0.2);color:var(--accent)">Replaces: ' + replaces + '</span>'
+      + '<span style="padding:3px 10px;border-radius:12px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-dim)">' + keyStat + '</span>'
+      + '</div>'
       + bodyHtml
       + '</div>';
   }
@@ -500,28 +497,28 @@ body {
   // ========== Hub ==========
   function renderHub() {
     var cards = [
-      { id: 'mod-ai-detect', icon: '&#128737;', name: 'AI Music Detection', desc: 'Screen incoming audio for synthetic generation risk.', repl: 'Illuminarty, Boomy AI Detector, manual listening teams' },
-      { id: 'mod-analysis', icon: '&#127911;', name: 'Audio Analysis & Metadata', desc: 'Enrich every track with production-grade descriptors.', repl: 'Cyanite, Musiio, ACRCloud metadata services' },
-      { id: 'mod-fingerprint', icon: '&#128376;', name: 'Fingerprinting & Catalog Matching', desc: 'Identify known works across global references in real time.', repl: 'Audible Magic, Pex, ACRCloud identification' },
-      { id: 'mod-watermark', icon: '&#128274;', name: 'Neural Watermarking', desc: 'Embed provenance identity directly into the waveform.', repl: 'Digimarc, Intrinsic.ai, Irdeto/Civolution' },
-      { id: 'mod-ddex', icon: '&#128196;', name: 'DDEX Parsing & Ingest', desc: 'Parse ERN payloads into immediately usable structures.', repl: 'FUGA ingest tooling, Labelcamp, custom parsers' },
-      { id: 'mod-provenance', icon: '&#128279;', name: 'Provenance & Rights Transfer', desc: 'Move custody across platforms with verifiable chain of title.', repl: 'Manual rights ops, chain-of-title spreadsheets, blockchain startups' },
+      { id: 'mod-ai-detect', icon: '&#128737;', name: 'AI Music Detection', desc: 'Screen every track for synthetic content.' },
+      { id: 'mod-analysis', icon: '&#127911;', name: 'Audio Analysis & Metadata', desc: 'Genre, mood, BPM, key, instruments — automated.' },
+      { id: 'mod-fingerprint', icon: '&#128376;', name: 'Catalog Intelligence', desc: 'Unified verification via AcoustID + ACRCloud.' },
+      { id: 'mod-watermark', icon: '&#128274;', name: 'Neural Watermarking', desc: 'Provenance identity embedded in the waveform.' },
+      { id: 'mod-ddex', icon: '&#128196;', name: 'Catalog Ingest', desc: 'DDEX ERN parsing into usable structures.' },
+      { id: 'mod-provenance', icon: '&#128279;', name: 'Catalog Transfer', desc: 'Cryptographic custody transfer across platforms.' },
     ];
     var html = '<div class="slide-section">'
-      + '<h1 class="slide-headline">ORBIT — One Platform. Six Vendor Categories.</h1>'
-      + '<p class="slide-subline">Every capability a label or distributor needs. No vendor stack required.</p>'
-      + '<div class="slide-two-col" style="max-width:1000px">';
+      + '<h1 class="slide-headline">Catalog Acquisition &amp; Distribution Intelligence</h1>'
+      + '<p class="slide-subline">One integration. Five vendor categories replaced.</p>'
+      + '<div style="margin-bottom:14px"><button class="btn" id="open-pipeline">Acquisition Pipeline</button> '
+      + '<button class="btn btn-outline" id="open-technical">Technical</button> '
+      + '<button class="btn btn-outline" id="open-competitive">Competitive</button> '
+      + '<button class="btn btn-outline" id="open-closing">Value</button></div>'
+      + '<div class="slide-two-col" style="max-width:1060px">';
     cards.forEach(function(c) {
-      html += '<div class="slide-col-card module-card" data-view="' + c.id + '" style="cursor:pointer">'
-        + '<div style="font-size:1.3rem;margin-bottom:6px">' + c.icon + '</div>'
-        + '<h3 style="margin-bottom:4px">' + c.name + '</h3>'
-        + '<p style="margin-bottom:8px">' + c.desc + '</p>'
-        + '<div style="font-size:0.72rem;color:var(--text-dim)">Replaces: ' + c.repl + '</div>'
+      html += '<div class="slide-col-card module-card" data-view="' + c.id + '" style="cursor:pointer;padding:14px">'
+        + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px"><span style="font-size:1.2rem">' + c.icon + '</span><h3 style="margin:0;font-size:0.88rem">' + c.name + '</h3></div>'
+        + '<p style="margin:0;font-size:0.78rem">' + c.desc + '</p>'
         + '</div>';
     });
-    html += '</div>'
-      + '<div style="margin-top:20px"><button class="btn btn-outline" id="open-closing">View Closing Value Slide</button></div>'
-      + '</div>';
+    html += '</div></div>';
     return html;
   }
 
@@ -529,26 +526,36 @@ body {
     document.querySelectorAll('.module-card').forEach(function(card) {
       card.addEventListener('click', function() { goToView(this.dataset.view); });
     });
-    var c = $('#open-closing');
-    if (c) c.addEventListener('click', function() { goToView('closing'); });
+    var btns = [
+      ['open-closing', 'closing'], ['open-pipeline', 'pipeline'],
+      ['open-technical', 'technical'], ['open-competitive', 'competitive']
+    ];
+    btns.forEach(function(b) {
+      var el = $('#' + b[0]);
+      if (el) el.addEventListener('click', function() { goToView(b[1]); });
+    });
   }
 
-  // ========== Module 1 ==========
+  // ========== Module 1: AI Detection ==========
   function renderM1Result(data) {
     var ai = data.ai_detection || {};
     var rec = ai.recommendation || 'UNAVAILABLE';
     var type = rec === 'LIKELY_HUMAN' ? 'success' : rec === 'REVIEW' ? 'warning' : 'error';
     var html = '<div style="text-align:center;margin:12px 0">' + badge(rec.replace(/_/g, ' '), type) + '</div>';
     html += confBar('Overall Score', scorePct(ai.score), type === 'success' ? 'var(--green)' : (type === 'error' ? 'var(--red)' : 'var(--yellow)'));
-    var sonics = readSignalScore(ai, ['sonics.aiScore', 'sonics.score', 'sonics.confidence']);
+    var sonics = readSignalScore(ai, ['sonics.sonicsScore', 'sonics.aiScore', 'sonics.score', 'sonics.confidence']);
     var semantic = readSignalScore(ai, ['semantic.aiScore', 'semantic.score']);
     var anomaly = readSignalScore(ai, ['anomalies.anomalyScore', 'anomalies.score']);
-    var metadata = readSignalScore(ai, ['metadata.metadataScore', 'metadata.score']);
+    var metadata = readSignalScore(ai, ['metadata.suspicionScore', 'metadata.metadataScore', 'metadata.score']);
     var provenance = readSignalScore(ai, ['catalog.provenanceScore', 'catalog.score']);
-    if (sonics != null) html += confBar('SONICS Signal', sonics, 'var(--accent)');
+    var watermark = readSignalScore(ai, ['watermark.watermarkScore', 'watermark.score']);
+    var knn = readSignalScore(ai, ['knn.aiLikelihood', 'knn.score']);
+    if (sonics != null) html += confBar('SONICS SpecTTTra', sonics, 'var(--accent)');
     if (semantic != null) html += confBar('Semantic Probe', semantic, 'var(--accent-2)');
-    if (anomaly != null) html += confBar('Anomaly Detection', anomaly, 'var(--yellow)');
-    if (metadata != null) html += confBar('Metadata Analysis', metadata, '#8f95b2');
+    if (anomaly != null) html += confBar('Forensic Anomaly', anomaly, 'var(--yellow)');
+    if (metadata != null) html += confBar('Metadata Intelligence', metadata, '#8f95b2');
+    if (watermark != null) html += confBar('Watermark Detection', watermark, '#c084fc');
+    if (knn != null) html += confBar('KNN Reference', knn, '#60a5fa');
     if (provenance != null) html += confBar('Catalog Provenance', provenance, 'var(--red)');
     if (ai.flags && ai.flags.length) {
       html += '<div class="tags" style="margin-top:8px">';
@@ -573,19 +580,19 @@ body {
   function renderM1() {
     var body = '<div class="compare-cols">'
       + '<div class="card"><div class="card-title">AI-Generated Track</div>'
-      + trackSelectHtml('m1-ai-track', function(t) { return t.genre === 'Jazz' || String(t.title).toLowerCase().includes('ai'); })
+      + trackSelectHtml('m1-ai-track', function(t) { return t.genre === 'Jazz' || t.genre === 'AI' || String(t.title).toLowerCase().includes('ai'); })
       + '<div class="dropzone" id="m1-ai-drop"><div class="dropzone-label"><strong>Drop AI track here</strong>or select from library</div><input type="file" id="m1-ai-file" accept="audio/*"><div class="file-name" id="m1-ai-filename"></div></div>'
       + '<button class="btn btn-full" id="m1-ai-btn" disabled>Analyze AI Track</button><div id="m1-ai-results"></div></div>'
       + '<div class="card"><div class="card-title">Human Track</div>'
-      + trackSelectHtml('m1-human-track', function(t) { return t.artist === 'Fleetwood Mac' || t.genre === 'Rock'; })
+      + trackSelectHtml('m1-human-track', function(t) { return t.artist === 'Fleetwood Mac' || t.genre === 'Rock' || t.artist === 'Jordan Kugler'; })
       + '<div class="dropzone" id="m1-human-drop"><div class="dropzone-label"><strong>Drop human track here</strong>or select from library</div><input type="file" id="m1-human-file" accept="audio/*"><div class="file-name" id="m1-human-filename"></div></div>'
       + '<button class="btn btn-full" id="m1-human-btn" disabled>Analyze Human Track</button><div id="m1-human-results"></div></div>'
       + '</div><div id="m1-verdict">' + renderM1Verdict() + '</div>';
     return moduleScaffold(
       'AI Music Detection',
-      'Side-by-side model confidence and review routing.',
+      'Five independent signal families screen every track before it enters your catalog.',
       'Illuminarty, Boomy AI Detector, manual listening teams',
-      'Three independent detection methodologies. 95.2% corpus accuracy. 100% effective with review routing.',
+      '5-signal ensemble (SONICS + CLAP semantic + 13 librosa forensics + metadata intelligence + catalog corroboration). 95.2% corpus accuracy.',
       body
     );
   }
@@ -611,7 +618,6 @@ body {
     }
     wireSelect('m1-ai-track', 'm1-ai-track-msg', 'm1-ai-filename', function(b) { aiBlob = b; }, 'm1-ai-btn');
     wireSelect('m1-human-track', 'm1-human-track-msg', 'm1-human-filename', function(b) { humanBlob = b; }, 'm1-human-btn');
-
     bindFileInput('m1-ai', function(b) { aiBlob = b; }, function() {});
     bindFileInput('m1-human', function(b) { humanBlob = b; }, function() {});
     $('#m1-ai-file').addEventListener('change', function() { $('#m1-ai-btn').disabled = !this.files.length; });
@@ -654,7 +660,7 @@ body {
     });
   }
 
-  // ========== Module 2 ==========
+  // ========== Module 2: Audio Analysis ==========
   function moodProfileHtml(mood) {
     var items = normalizeList(mood, 'Mood').slice(0, 8);
     if (!items.length) return '<div style="font-size:0.78rem;color:var(--text-dim)">Mood profile unavailable.</div>';
@@ -717,9 +723,9 @@ body {
       + '</div>';
     return moduleScaffold(
       'Audio Analysis & Metadata Enrichment',
-      'Deep descriptors with local model inference and graceful fallback.',
+      'Deep descriptors generated from the audio itself. No third-party metadata API dependency.',
       'Cyanite, Musiio (SoundCloud), ACRCloud metadata services',
-      'Real-time BPM, key, genre, mood, and instrument detection. Local inference, no third-party API dependency.',
+      'Real-time BPM, key (Demucs stem-aware), genre (wav2vec2), mood (CLAP), instruments (PANNs). 100% local inference.',
       body
     );
   }
@@ -759,7 +765,7 @@ body {
     });
   }
 
-  // ========== Module 3 ==========
+  // ========== Module 3: Catalog Intelligence ==========
   function renderCatalogCheck(cc) {
     if (!cc) return '<div class="error-msg">Catalog lookup unavailable.</div>';
     var title = 'Catalog Check';
@@ -782,22 +788,21 @@ body {
     var fpHash = fp.hash || fp.fingerprint_hash || fp.chromaprint || data.fingerprint_hash || 'N/A';
     var html = '<div class="card" style="margin-top:12px"><div class="card-title">Chromaprint Fingerprint</div><div style="font-size:0.82rem;color:var(--accent);word-break:break-all">' + esc(fpHash) + '</div></div>';
     html += renderCatalogCheck(data.catalog_check);
-    html += '<div style="font-size:0.74rem;color:var(--text-dim);margin-top:8px">Exact-match fingerprinting. Fuzzy similarity matching on roadmap.</div>';
     return html;
   }
 
   function renderM3() {
     var body = '<div class="card">'
       + trackSelectHtml('m3-track')
-      + '<div class="dropzone" id="m3-drop"><div class="dropzone-label"><strong>Drop a track for catalog matching</strong>or select from library</div><input type="file" id="m3-file" accept="audio/*"><div class="file-name" id="m3-filename"></div></div>'
-      + '<button class="btn btn-full" id="m3-btn" disabled>Fingerprint & Match</button>'
+      + '<div class="dropzone" id="m3-drop"><div class="dropzone-label"><strong>Drop a track for catalog verification</strong>or select from library</div><input type="file" id="m3-file" accept="audio/*"><div class="file-name" id="m3-filename"></div></div>'
+      + '<button class="btn btn-full" id="m3-btn" disabled>Fingerprint & Verify</button>'
       + '<div id="m3-results">' + (state.module3.result ? renderM3Result(state.module3.result) : '') + '</div>'
       + '</div>';
     return moduleScaffold(
-      'Audio Fingerprinting & Catalog Matching',
-      'Chromaprint hash + global known-work validation.',
-      'Audible Magic, Pex, ACRCloud identification',
-      'Chromaprint fingerprinting + real-time identification against AcoustID, ACRCloud, and MusicBrainz global catalogs.',
+      'Catalog Intelligence',
+      'Orchestrate AcoustID, ACRCloud, and MusicBrainz into a unified verification layer for every incoming track.',
+      'Custom integration scripts, manual catalog lookups, siloed identification results',
+      'Chromaprint fingerprinting + real-time verification against AcoustID (~30M refs), ACRCloud (100M+ refs), and MusicBrainz. Integrates with \u2014 does not replace \u2014 your existing identification services.',
       body
     );
   }
@@ -823,7 +828,7 @@ body {
       if (!blob) return;
       this.disabled = true;
       clearLog();
-      addLogMsg('--- Module 3 Fingerprint & Catalog Check ---');
+      addLogMsg('--- Catalog Intelligence: Fingerprint & Verify ---');
       $('#m3-results').innerHTML = '<div class="loading-inline"><span class="spinner"></span>Matching against catalogs...</div>';
       try {
         var t = getTrackMeta($('#m3-track').value);
@@ -837,7 +842,7 @@ body {
     });
   }
 
-  // ========== Module 4 ==========
+  // ========== Module 4: Watermarking ==========
   function renderRegResult(d) {
     var html = '<div style="text-align:center;margin:14px 0">' + badge('Registered', 'success') + '</div>';
     html += '<div class="result-grid">';
@@ -881,9 +886,9 @@ body {
       + '</div>';
     return moduleScaffold(
       'Neural Watermarking',
-      'Registration-driven identity embedding and downloadable marked audio.',
+      'Embed your ownership identity directly into the audio. Survives transcoding, re-upload, and format conversion.',
       'Digimarc, Intrinsic.ai, Irdeto/Civolution',
-      'Dual-mode: Sony SilentCipher neural watermarking + spread-spectrum fallback. Identity embedded in the audio itself.',
+      'Dual-mode: Sony SilentCipher neural watermark (primary) + spread-spectrum fallback. Identity embedded in the waveform itself — extractable from any copy.',
       body
     );
   }
@@ -944,14 +949,16 @@ body {
     if (state.module4.result) setupWatermarkDownload(state.module4.result, state.module4.filename || 'track.wav', 'dl-wm');
   }
 
-  // ========== Module 5 ==========
+  // ========== Module 5: Catalog Ingest (DDEX) ==========
   function renderDDEX() {
-    var html = '<div class="card"><div class="card-title">DDEX ERN Document</div><div class="xml-viewer" id="ddex-xml-view">Loading XML...</div><button class="btn" id="ddex-parse-btn" style="margin-top:14px">Parse Document</button></div><div id="ddex-results"></div>';
+    var html = '<div class="card"><div class="card-title">Incoming Catalog Delivery (DDEX ERN 4.3)</div>'
+      + '<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:10px">This simulates receiving a catalog delivery from an acquired label. ORBIT parses the ERN payload and extracts release metadata, track details, territories, deal terms, and contributor information automatically.</div>'
+      + '<div class="xml-viewer" id="ddex-xml-view">Loading XML...</div><button class="btn" id="ddex-parse-btn" style="margin-top:14px">Ingest Catalog</button></div><div id="ddex-results"></div>';
     return moduleScaffold(
-      'DDEX Parsing & Ingest',
-      'Parse ERN payloads into release, tracks, territories, and deal structures.',
+      'Catalog Ingest (DDEX)',
+      'Parse incoming catalog deliveries into structured, actionable metadata. First step in any acquisition pipeline.',
       'FUGA ingest tooling, Labelcamp, custom DDEX parsers',
-      'ERN 3.x and 4.x. Tracks, deals, territories, contributors, rights lines - all extracted automatically.',
+      'ERN 3.x and 4.x. Tracks, deals, territories, contributors, rights lines, technical specs — all extracted automatically from the seller\'s delivery.',
       html
     );
   }
@@ -972,7 +979,7 @@ body {
     btn.addEventListener('click', async function() {
       this.disabled = true;
       clearLog();
-      addLogMsg('--- Module 5 DDEX Parse ---');
+      addLogMsg('--- Catalog Ingest: DDEX Parse ---');
       try {
         var res = await fetch('/api/parse-ddex', { method: 'POST' });
         var data = await res.json();
@@ -991,13 +998,13 @@ body {
     });
   }
 
-  // ========== Module 6 ==========
+  // ========== Module 6: Catalog Transfer ==========
   function renderChain(regs) {
     var html = '';
     regs.forEach(function(r, i) {
       if (i > 0) html += '<div class="chain-arrow">&#8595;</div>';
       var meta = r.metadata || {};
-      html += '<div class="chain-node"><div class="chain-icon ' + (i === 0 ? 'origin' : 'transfer') + '">' + (i === 0 ? '&#9733;' : '&#8594;') + '</div><div class="chain-detail"><div class="chain-label">' + (i === 0 ? 'ORIGIN' : 'TRANSFER') + '</div><div class="chain-value">' + esc(r.platform || 'N/A') + '</div><div style="font-size:0.72rem;color:var(--text-dim)">' + esc(meta.title || '') + ' by ' + esc(meta.artist || '') + '</div></div></div>';
+      html += '<div class="chain-node"><div class="chain-icon ' + (i === 0 ? 'origin' : 'transfer') + '">' + (i === 0 ? '&#9733;' : '&#8594;') + '</div><div class="chain-detail"><div class="chain-label">' + (i === 0 ? 'ORIGIN (Seller)' : 'TRANSFER (Acquirer)') + '</div><div class="chain-value">' + esc(r.platform || 'N/A') + '</div><div style="font-size:0.72rem;color:var(--text-dim)">' + esc(meta.title || '') + ' by ' + esc(meta.artist || '') + '</div></div></div>';
     });
     return html;
   }
@@ -1005,53 +1012,56 @@ body {
   function renderM6Results() {
     var html = '';
     if (state.module6.result) {
-      html += '<div class="card"><div class="card-title">Registration Complete</div><div class="result-grid">'
+      html += '<div class="card"><div class="card-title">Registration Complete (Seller Side)</div><div class="result-grid">'
         + row('Registration ID', '<strong>' + state.module6.result.registration_id + '</strong>')
         + row('Fingerprint', truncHash(state.module6.result.fingerprint_hash, 24))
         + '</div></div>';
     }
     if (state.module6.transfer) {
-      html += '<div class="card"><div class="card-title">Transfer Initiated</div><div class="result-grid">'
+      html += '<div class="card"><div class="card-title">Custody Transfer Initiated</div><div class="result-grid">'
         + row('Transfer ID', '<strong>' + state.module6.transfer.transfer_id + '</strong>')
+        + row('From', esc(state.module6.transfer.from_platform || 'Platform A (Seller)'))
+        + row('To', esc(state.module6.transfer.to_platform || 'Platform B (Acquirer)'))
         + row('Status', esc(state.module6.transfer.status || 'pending'))
         + '</div></div>';
     }
     if (state.module6.accept) {
-      html += '<div class="card"><div class="card-title">Transfer Accepted</div><div class="result-grid">'
+      html += '<div class="card"><div class="card-title">Acquisition Accepted — Custody Transferred</div><div class="result-grid">'
         + row('New Registration ID', '<strong>' + state.module6.accept.new_registration_id + '</strong>')
         + '</div></div>';
       if (state.module6.accept.full_chain && state.module6.accept.full_chain.length) {
-        html += '<div class="card"><div class="card-title">Provenance Chain</div>' + renderChain(state.module6.accept.full_chain) + '</div>';
+        html += '<div class="card"><div class="card-title">Provenance Chain (Chain of Title)</div>' + renderChain(state.module6.accept.full_chain) + '</div>';
       }
     }
     if (state.module6.chain && state.module6.chain.registrations) {
-      html += '<div class="card"><div class="card-title">Chain Lookup</div>' + renderChain(state.module6.chain.registrations) + '</div>';
+      html += '<div class="card"><div class="card-title">Verified Chain of Title</div>' + renderChain(state.module6.chain.registrations) + '</div>';
     }
     return html;
   }
 
   function renderM6() {
     var body = '<div class="card">'
+      + '<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:12px;padding:10px;background:var(--surface-2);border-radius:var(--radius)">This demonstrates the full catalog transfer lifecycle: the <strong>seller</strong> registers their catalog on Platform A, initiates a <strong>custody transfer</strong> to the acquirer on Platform B, who <strong>accepts</strong> with cryptographic proof, creating a verifiable <strong>chain of title</strong>.</div>'
       + trackSelectHtml('m6-track')
-      + '<div class="dropzone" id="m6-drop"><div class="dropzone-label"><strong>Upload/select a track for full custody transfer flow</strong></div><input type="file" id="m6-file" accept="audio/*"><div class="file-name" id="m6-filename"></div></div>'
+      + '<div class="dropzone" id="m6-drop"><div class="dropzone-label"><strong>Select a catalog track for custody transfer</strong></div><input type="file" id="m6-file" accept="audio/*"><div class="file-name" id="m6-filename"></div></div>'
       + '<div class="field"><label>Title *</label><input id="m6-title" type="text" placeholder="Track title"></div>'
       + '<div class="field"><label>Artist *</label><input id="m6-artist" type="text" placeholder="Artist name"></div>'
       + '<div class="row"><div class="field"><label>ISRC</label><input id="m6-isrc" type="text" placeholder="USRC12400001"></div><div class="field"><label>Genre</label><input id="m6-genre" type="text" placeholder="Electronic"></div></div>'
       + '<div class="row">'
-      + '<button class="btn" id="m6-reg-btn" disabled>1) Register</button>'
-      + '<button class="btn btn-outline" id="m6-transfer-btn" disabled>2) Transfer</button>'
+      + '<button class="btn" id="m6-reg-btn" disabled>1) Seller Registers</button>'
+      + '<button class="btn btn-outline" id="m6-transfer-btn" disabled>2) Initiate Transfer</button>'
       + '</div>'
       + '<div class="row">'
-      + '<button class="btn btn-outline" id="m6-accept-btn" disabled>3) Accept</button>'
-      + '<button class="btn btn-outline" id="m6-chain-btn" disabled>4) Lookup Chain</button>'
+      + '<button class="btn btn-outline" id="m6-accept-btn" disabled>3) Acquirer Accepts</button>'
+      + '<button class="btn btn-outline" id="m6-chain-btn" disabled>4) Verify Chain of Title</button>'
       + '</div>'
       + '<div id="m6-results">' + renderM6Results() + '</div>'
       + '</div>';
     return moduleScaffold(
-      'Provenance & Rights Transfer',
-      'Combined register -> transfer -> accept -> chain lookup in one custody flow.',
-      'Manual rights management, chain-of-title spreadsheets, blockchain provenance startups',
-      'Ed25519 cryptographic signatures. Immutable provenance chain. Platform-to-platform custody transfer.',
+      'Catalog Transfer & Provenance',
+      'Full acquisition lifecycle: Register \u2192 Transfer \u2192 Accept \u2192 Chain of Title. Cryptographic proof at every step.',
+      'Manual rights management, chain-of-title spreadsheets, blockchain provenance startups (Audius $11M, Royal $75M)',
+      'Ed25519 cryptographic signatures. Immutable provenance chain. Platform-to-platform custody transfer. Forward-deployable to sellers pre-acquisition.',
       body
     );
   }
@@ -1094,7 +1104,7 @@ body {
       if (!title || !artist) { $('#m6-results').innerHTML = '<div class="error-msg">Title and artist are required.</div>'; return; }
       this.disabled = true;
       clearLog();
-      addLogMsg('--- Module 6 Registration ---');
+      addLogMsg('--- Seller Registration ---');
       var fd = new FormData();
       fd.append('audio', blob, fileName || 'track');
       fd.append('title', title);
@@ -1119,7 +1129,7 @@ body {
     transferBtn.addEventListener('click', async function() {
       if (!state.module6.result) return;
       this.disabled = true;
-      addLogMsg('--- Module 6 Transfer ---');
+      addLogMsg('--- Custody Transfer Initiated ---');
       try {
         var res = await fetch('/api/transfer', {
           method: 'POST',
@@ -1139,7 +1149,7 @@ body {
     acceptBtn.addEventListener('click', async function() {
       if (!state.module6.transfer) return;
       this.disabled = true;
-      addLogMsg('--- Module 6 Accept Transfer ---');
+      addLogMsg('--- Acquirer Accepts Custody ---');
       try {
         var res = await fetch('/api/accept-transfer', {
           method: 'POST',
@@ -1159,7 +1169,7 @@ body {
       var fp = state.module6.result && state.module6.result.fingerprint_hash;
       if (!fp) return;
       this.disabled = true;
-      addLogMsg('--- Module 6 Chain Lookup ---');
+      addLogMsg('--- Chain of Title Lookup ---');
       try {
         var res = await fetch('/api/chain/' + encodeURIComponent(fp));
         var data = await res.json();
@@ -1174,17 +1184,204 @@ body {
     });
   }
 
-  // ========== Closing slide ==========
+  // ========== Pipeline Slide ==========
+  function renderPipeline() {
+    return '<div class="slide-section">'
+      + '<h1 class="slide-headline">Catalog Acquisition Pipeline</h1>'
+      + '<p class="slide-subline">Forward-deploy to any seller. Screen, verify, enrich, transfer, and protect before it enters your platform.</p>'
+      + '<div class="funnel">'
+
+      + '<div class="funnel-step"><div class="funnel-line"><div class="funnel-dot active"></div><div class="funnel-connector"></div></div>'
+      + '<div class="funnel-content"><div class="funnel-label">Phase 1 — Pre-Acquisition Audit</div>'
+      + '<div class="funnel-title">Screen &amp; Verify Before You Pay</div>'
+      + '<div class="funnel-desc">AI detection flags synthetic content. Fingerprinting verifies against 130M+ references. Metadata audit catches gaps.</div>'
+      + '<div class="funnel-modules"><span class="funnel-mod active">AI Detection</span><span class="funnel-mod active">Catalog Intelligence</span><span class="funnel-mod active">Audio Analysis</span></div>'
+      + '</div></div>'
+
+      + '<div class="funnel-step"><div class="funnel-line"><div class="funnel-dot active"></div><div class="funnel-connector"></div></div>'
+      + '<div class="funnel-content"><div class="funnel-label">Phase 2 — Catalog Ingest</div>'
+      + '<div class="funnel-title">Parse &amp; Enrich</div>'
+      + '<div class="funnel-desc">DDEX ERN parsed automatically. Every track enriched with ML-derived genre, mood, instruments, BPM, key.</div>'
+      + '<div class="funnel-modules"><span class="funnel-mod active">DDEX Ingest</span><span class="funnel-mod active">Audio Analysis</span></div>'
+      + '</div></div>'
+
+      + '<div class="funnel-step"><div class="funnel-line"><div class="funnel-dot active"></div><div class="funnel-connector"></div></div>'
+      + '<div class="funnel-content"><div class="funnel-label">Phase 3 — Custody Transfer</div>'
+      + '<div class="funnel-title">Cryptographic Chain of Title</div>'
+      + '<div class="funnel-desc">Seller registers under their identity. Ed25519 signatures transfer custody to acquirer. Verifiable by both parties.</div>'
+      + '<div class="funnel-modules"><span class="funnel-mod active">Catalog Transfer</span><span class="funnel-mod active">Provenance Chain</span></div>'
+      + '</div></div>'
+
+      + '<div class="funnel-step"><div class="funnel-line"><div class="funnel-dot"></div></div>'
+      + '<div class="funnel-content"><div class="funnel-label">Phase 4 — Post-Migration Protection</div>'
+      + '<div class="funnel-title">Watermark &amp; Defend</div>'
+      + '<div class="funnel-desc">Sony SilentCipher neural watermark embeds provenance identity. Survives transcoding. Extractable from any copy.</div>'
+      + '<div class="funnel-modules"><span class="funnel-mod active">Neural Watermark</span><span class="funnel-mod active">Fingerprint</span></div>'
+      + '</div></div>'
+
+      + '</div>'
+      + '<div style="max-width:1060px;margin:14px auto 0;padding:10px 14px;background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius);text-align:center;font-size:0.82rem;color:var(--accent);font-weight:600">'
+      + 'Result: Every acquired catalog is verified, enriched, cryptographically transferred, and watermarked.'
+      + '</div>'
+      + '<div style="margin-top:16px"><button class="btn btn-outline" id="pipeline-hub">Back to Overview</button></div>'
+      + '</div>';
+  }
+
+  function bindPipeline() {
+    var b = $('#pipeline-hub');
+    if (b) b.addEventListener('click', function() { goToView('hub'); });
+  }
+
+  // ========== Technical Deep Dive ==========
+  function renderTechnical() {
+    return '<div class="slide-section" style="text-align:left;max-width:1140px">'
+      + '<div style="text-align:center"><h1 class="slide-headline" style="font-size:1.6rem">Technical Architecture</h1></div>'
+
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'
+
+      + '<div class="card" style="padding:14px;overflow-x:auto"><div class="card-title">Model Stack</div>'
+      + '<table class="tech-table"><thead><tr><th>Model</th><th>Capability</th><th>Used In</th><th>Output</th></tr></thead><tbody>'
+      + '<tr><td class="model-name">SONICS SpecTTTra</td><td>Synthetic vs. real classifier</td><td>AI Detection</td><td>Probability</td></tr>'
+      + '<tr><td class="model-name">CLAP HTSAT</td><td>Zero-shot classification + embeddings</td><td>AI probe, mood, vocals</td><td>512-dim vector</td></tr>'
+      + '<tr><td class="model-name">wav2vec2-GTZAN</td><td>Supervised genre classification</td><td>Metadata enrichment</td><td>Genre probs</td></tr>'
+      + '<tr><td class="model-name">PANNs Cnn14</td><td>Audio tagging + embeddings</td><td>Instruments, catalog</td><td>2048-dim vector</td></tr>'
+      + '<tr><td class="model-name">Demucs htdemucs</td><td>4-stem source separation</td><td>Key detection</td><td>Stem WAVs</td></tr>'
+      + '<tr><td class="model-name">SilentCipher</td><td>Neural audio watermarking</td><td>Provenance, AI probe</td><td>Marked audio</td></tr>'
+      + '<tr><td class="model-name">librosa + scipy</td><td>13 spectral forensic signals</td><td>AI forensic layer</td><td>Signal scores</td></tr>'
+      + '<tr><td class="model-name">Chromaprint</td><td>Audio fingerprinting</td><td>Identification</td><td>FP hash</td></tr>'
+      + '<tr><td class="model-name">Ed25519 + CBOR</td><td>Cryptographic signing</td><td>Provenance chain</td><td>Signed payloads</td></tr>'
+      + '</tbody></table></div>'
+
+      + '<div><div class="card" style="padding:14px"><div class="card-title">AI Detection — 5 Signal Ensemble</div>'
+      + '<div class="result-grid" style="margin-top:6px">'
+      + row('SONICS SpecTTTra', 'Neural synthetic classifier')
+      + row('CLAP Semantic Probe', 'Zero-shot AI detection prompts')
+      + row('Spectral Forensics', '13 librosa signals (crest, MFCC, phase, jitter...)')
+      + row('Metadata Intelligence', 'Encoder tags, Suno/Udio format signatures')
+      + row('Catalog Corroboration', 'AcoustID/ACRCloud match + consistency')
+      + row('Watermark Probe', 'SilentCipher residual check')
+      + row('Corpus Accuracy', '<strong style="color:var(--accent)">95.2%</strong>')
+      + '</div></div>'
+
+      + '<div class="card" style="padding:14px;margin-top:14px"><div class="card-title">Patentable IP (6 areas)</div>'
+      + '<div style="font-size:0.76rem;line-height:1.8;margin-top:6px">'
+      + '<div><span style="color:var(--accent);font-weight:700">1.</span> Multi-Signal AI Detection Ensemble</div>'
+      + '<div><span style="color:var(--accent);font-weight:700">2.</span> Forward-Deploy Catalog Acquisition Pipeline</div>'
+      + '<div><span style="color:var(--accent);font-weight:700">3.</span> Watermark-Linked Provenance Identity</div>'
+      + '<div><span style="color:var(--accent);font-weight:700">4.</span> Stem-Aware Musical Key Detection</div>'
+      + '<div><span style="color:var(--accent);font-weight:700">5.</span> Cross-Platform Custody Transfer Protocol</div>'
+      + '<div><span style="color:var(--accent);font-weight:700">6.</span> AI Forensic Signal Architecture</div>'
+      + '</div></div></div>'
+
+      + '</div>'
+      + '<div style="text-align:center;margin-top:14px"><button class="btn btn-outline" id="tech-hub">Back to Overview</button></div>'
+      + '</div>';
+  }
+
+  function bindTechnical() {
+    var b = $('#tech-hub');
+    if (b) b.addEventListener('click', function() { goToView('hub'); });
+  }
+
+  // ========== Competitive Comparison ==========
+  function renderCompetitive() {
+    var dot = function(color) { return '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + color + ';margin-right:6px;vertical-align:middle"></span>'; };
+    var gd = dot('var(--green)'), rd = dot('var(--red)'), yd = dot('var(--yellow)');
+
+    return '<div class="slide-section" style="text-align:left;max-width:1140px">'
+      + '<div style="text-align:center"><h1 class="slide-headline" style="font-size:1.6rem">Competitive Landscape</h1></div>'
+
+      + '<div class="slide-three-col" style="max-width:1140px">'
+
+      // Sureel vs ORBIT
+      + '<div class="comp-card" style="padding:14px">'
+      + '<div class="comp-header"><strong>Sureel</strong><span class="comp-vs">vs ORBIT</span></div>'
+      + '<div style="font-size:0.74rem;line-height:1.7">'
+      + '<div>' + yd + '<strong>Core:</strong> Attribution-as-a-Service, opt-in/out registry, dynamic licensing. 11 patents.</div>'
+      + '<div>' + yd + '<strong>Strengths:</strong> Creator control rules, AI monetization framework, BeatStars partnership.</div>'
+      + '<div>' + rd + '<strong>AI Detection:</strong> Not offered</div>'
+      + '<div>' + yd + '<strong>Enforcement:</strong> Voluntary — no US legal mandate</div>'
+      + '<div>' + rd + '<strong>Watermark:</strong> Not offered</div>'
+      + '<div>' + rd + '<strong>Catalog Ops:</strong> No fingerprint, metadata, DDEX, or transfers</div>'
+      + '</div>'
+      + '<div style="margin-top:8px;padding:8px;background:rgba(45,212,168,0.06);border:1px solid rgba(45,212,168,0.15);border-radius:6px;font-size:0.72rem;color:var(--text-dim)">' + gd + '<strong style="color:var(--text)">ORBIT:</strong> Different scope. Sureel manages rights <em>within</em> AI systems. ORBIT screens and protects assets <em>before/after</em> distribution. Complementary.</div>'
+      + '</div>'
+
+      // MusicStory vs ORBIT
+      + '<div class="comp-card" style="padding:14px">'
+      + '<div class="comp-header"><strong>Music Story</strong><span class="comp-vs">vs ORBIT</span></div>'
+      + '<div style="font-size:0.74rem;line-height:1.7">'
+      + '<div>' + yd + '<strong>Core:</strong> Editorial metadata API — bios, charts, lyrics, art</div>'
+      + '<div>' + rd + '<strong>Audio Analysis:</strong> None — editorial only, not audio-derived</div>'
+      + '<div>' + rd + '<strong>AI Detection:</strong> Not offered</div>'
+      + '<div>' + rd + '<strong>Watermark:</strong> Not offered</div>'
+      + '<div>' + rd + '<strong>Provenance:</strong> Not offered</div>'
+      + '<div>' + yd + '<strong>Best for:</strong> DSP editorial pages and recommendation UIs</div>'
+      + '</div>'
+      + '<div style="margin-top:8px;padding:8px;background:rgba(45,212,168,0.06);border:1px solid rgba(45,212,168,0.15);border-radius:6px;font-size:0.72rem;color:var(--text-dim)">' + gd + '<strong style="color:var(--text)">ORBIT:</strong> ML-derived metadata from audio + AI detection + watermarking + provenance.</div>'
+      + '</div>'
+
+      // Harmix + Cyanite vs ORBIT
+      + '<div class="comp-card" style="padding:14px">'
+      + '<div class="comp-header"><strong>Harmix + Cyanite</strong><span class="comp-vs">vs ORBIT</span></div>'
+      + '<div style="font-size:0.74rem;line-height:1.7">'
+      + '<div>' + yd + '<strong>Harmix:</strong> Music search, prompt matching, sync licensing</div>'
+      + '<div>' + yd + '<strong>Cyanite:</strong> Genre, mood, BPM, key analysis (\u20ac2.2M raised)</div>'
+      + '<div>' + rd + '<strong>AI Detection:</strong> Neither offers this</div>'
+      + '<div>' + rd + '<strong>Watermark:</strong> Neither offers this</div>'
+      + '<div>' + rd + '<strong>Provenance:</strong> Neither offers this</div>'
+      + '<div>' + rd + '<strong>DDEX / Transfers:</strong> Neither offers this</div>'
+      + '</div>'
+      + '<div style="margin-top:8px;padding:8px;background:rgba(45,212,168,0.06);border:1px solid rgba(45,212,168,0.15);border-radius:6px;font-size:0.72rem;color:var(--text-dim)">' + gd + '<strong style="color:var(--text)">ORBIT:</strong> All of Cyanite\'s analysis + 4 capabilities neither provides.</div>'
+      + '</div>'
+
+      + '</div>'
+
+      + '<div class="nowhere-banner" style="margin-top:16px">No company at any funding level combines AI detection + metadata + watermarking + provenance + transfers.</div>'
+
+      + '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:12px;font-size:0.72rem">'
+      + '<span style="padding:4px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border)">Pex <strong>$57M</strong></span>'
+      + '<span style="padding:4px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border)">Cyanite <strong>\u20ac2.2M</strong></span>'
+      + '<span style="padding:4px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border)">Musiio <strong>~$5\u201310M acq</strong></span>'
+      + '<span style="padding:4px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border)">Royal <strong>$75M</strong></span>'
+      + '<span style="padding:4px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border)">Audius <strong>$11M</strong></span>'
+      + '<span style="padding:4px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border)">Digimarc <strong>Public</strong></span>'
+      + '</div>'
+      + '<div style="text-align:center;font-size:0.72rem;color:var(--text-dim);margin-top:6px">Each raised millions to do <strong>one</strong> thing ORBIT does.</div>'
+
+      + '<div style="text-align:center;margin-top:14px"><button class="btn btn-outline" id="comp-hub">Back to Overview</button></div>'
+      + '</div>';
+  }
+
+  function bindCompetitive() {
+    var b = $('#comp-hub');
+    if (b) b.addEventListener('click', function() { goToView('hub'); });
+  }
+
+  // ========== Closing / Value ==========
   function renderClosing() {
     return '<div class="slide-section">'
-      + '<h1 class="slide-headline">You are currently paying 3-6 vendors plus internal headcount for what ORBIT does in one stack.</h1>'
-      + '<p class="slide-subline">This is not software consolidation. It is an operational model change for labels and distributors.</p>'
-      + '<div class="slide-two-col" style="max-width:700px">'
-      + '<div class="slide-col-card" style="text-align:center"><h3 style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em">Setup &amp; Integration</h3><div style="font-size:1.8rem;font-weight:800;color:var(--accent);margin:8px 0">$1,500</div><div style="font-size:0.76rem;color:var(--text-dim)">One-time onboarding and integration support</div></div>'
-      + '<div class="slide-col-card" style="text-align:center"><h3 style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em">First Month</h3><div style="font-size:1.8rem;font-weight:800;color:var(--accent);margin:8px 0">$4,000<span style="font-size:0.7rem;font-weight:400;color:var(--text-dim)">/mo</span></div><div style="font-size:0.76rem;color:var(--text-dim)">50% introductory rate</div></div>'
+      + '<h1 class="slide-headline">What You Get</h1>'
+      + '<p class="slide-subline">Five vendor categories. One integration.</p>'
+
+      + '<div class="value-grid">'
+      + '<div class="value-item"><h4>AI Detection</h4><div class="vi-stat" style="font-size:1.4rem">5 Signals</div><p>95.2% corpus accuracy</p></div>'
+      + '<div class="value-item"><h4>Audio Analysis</h4><div class="vi-stat" style="font-size:1.4rem">7 Dimensions</div><p>Genre, mood, BPM, key, instruments</p></div>'
+      + '<div class="value-item"><h4>Catalog Intelligence</h4><div class="vi-stat" style="font-size:1.4rem">130M+ Refs</div><p>AcoustID + ACRCloud + MusicBrainz</p></div>'
+      + '<div class="value-item"><h4>Watermarking</h4><div class="vi-stat" style="font-size:1.4rem">Dual-Mode</div><p>SilentCipher neural + spread-spectrum</p></div>'
+      + '<div class="value-item"><h4>Catalog Ingest</h4><div class="vi-stat" style="font-size:1.4rem">ERN 3.x/4.x</div><p>Tracks, deals, territories, contributors</p></div>'
+      + '<div class="value-item"><h4>Provenance</h4><div class="vi-stat" style="font-size:1.4rem">Ed25519</div><p>Cryptographic custody transfer</p></div>'
       + '</div>'
-      + '<div style="max-width:700px;margin:14px auto 0;font-size:0.8rem;color:var(--text-dim)">After first month: $8,000/mo on a rolling 6-month commitment.</div>'
-      + '<div style="margin-top:20px"><button class="btn btn-outline" id="closing-hub">Back to Platform Overview</button></div>'
+
+      + '<div class="nowhere-banner">This combination does not exist anywhere else — at any funding level.</div>'
+
+      + '<div class="slide-two-col" style="max-width:600px;margin-top:16px">'
+      + '<div class="slide-col-card" style="text-align:center;padding:14px"><h3 style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em">Setup</h3><div style="font-size:1.8rem;font-weight:800;color:var(--accent);margin:6px 0">$1,500</div><div style="font-size:0.72rem;color:var(--text-dim)">One-time</div></div>'
+      + '<div class="slide-col-card" style="text-align:center;padding:14px"><h3 style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em">Platform</h3><div style="font-size:1.8rem;font-weight:800;color:var(--accent);margin:6px 0">$8,000<span style="font-size:0.7rem;font-weight:400;color:var(--text-dim)">/mo</span></div><div style="font-size:0.72rem;color:var(--text-dim)">All six modules</div></div>'
+      + '</div>'
+      + '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:8px">Pilot: $4,000/mo first month. Replaces $20K+/mo in vendors + headcount.</div>'
+
+      + '<div style="margin-top:14px"><button class="btn btn-outline" id="closing-hub">Back to Overview</button></div>'
       + '</div>';
   }
 
@@ -1193,7 +1390,7 @@ body {
     if (b) b.addEventListener('click', function() { goToView('hub'); });
   }
 
-  // ========== Rendering dispatcher ==========
+  // ========== Rendering Dispatcher ==========
   function renderView() {
     var panel = $('#contentPanel');
     if (currentView === 'hub') panel.innerHTML = '<div class="section active">' + renderHub() + '</div>';
@@ -1203,6 +1400,9 @@ body {
     else if (currentView === 'mod-watermark') panel.innerHTML = '<div class="section active">' + renderM4() + '</div>';
     else if (currentView === 'mod-ddex') panel.innerHTML = '<div class="section active">' + renderDDEX() + '</div>';
     else if (currentView === 'mod-provenance') panel.innerHTML = '<div class="section active">' + renderM6() + '</div>';
+    else if (currentView === 'pipeline') panel.innerHTML = '<div class="section active">' + renderPipeline() + '</div>';
+    else if (currentView === 'technical') panel.innerHTML = '<div class="section active">' + renderTechnical() + '</div>';
+    else if (currentView === 'competitive') panel.innerHTML = '<div class="section active">' + renderCompetitive() + '</div>';
     else panel.innerHTML = '<div class="section active">' + renderClosing() + '</div>';
 
     var view = VIEWS.find(function(v) { return v.id === currentView; });
@@ -1216,6 +1416,9 @@ body {
     else if (currentView === 'mod-watermark') bindM4();
     else if (currentView === 'mod-ddex') bindDDEX();
     else if (currentView === 'mod-provenance') bindM6();
+    else if (currentView === 'pipeline') bindPipeline();
+    else if (currentView === 'technical') bindTechnical();
+    else if (currentView === 'competitive') bindCompetitive();
     else bindClosing();
   }
 

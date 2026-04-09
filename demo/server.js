@@ -14,7 +14,11 @@ const PORT = process.env.DEMO_PORT || 3000;
 // Demo Track Library
 // ---------------------------------------------------------------------------
 
-const DEMO_AUDIO_DIR = path.resolve(__dirname, '..', 'audio-under-230');
+const DEMO_AUDIO_DIR_CANDIDATES = [
+  path.resolve(__dirname, '..', 'audio-under-230'),
+  path.resolve(__dirname, '..', 'Audio-under-230'),
+];
+const DEMO_AUDIO_DIR = DEMO_AUDIO_DIR_CANDIDATES.find(p => fs.existsSync(p)) || DEMO_AUDIO_DIR_CANDIDATES[0];
 
 const TRACK_META = {
   'Symphony.wav':                          { title: 'Symphony',              artist: 'Jordan Kugler', genre: 'Orchestral' },
@@ -26,6 +30,18 @@ const TRACK_META = {
   '11-4-19-The Birds Instrumental.wav':    { title: 'The Birds',             artist: 'Jordan Kugler', genre: 'Instrumental' },
   'Never Going Back Again (2004 Remaster).mp3': { title: 'Never Going Back Again', artist: 'Fleetwood Mac', genre: 'Rock' },
   '50 Cent - 21 Questions (Old School Vibe) [Full Version] AI cover.mp3': { title: '21 Questions (AI Jazz Cover)', artist: '50 Cent (AI Cover)', genre: 'Jazz' },
+  'Boots And Stuff.mp3':                   { title: 'Boots And Stuff',       artist: 'Suno', genre: 'AI' },
+  'Guaracha Diss-Track.mp3':               { title: 'Guaracha Diss-Track',   artist: 'Suno', genre: 'AI' },
+  'Happy Folk Anthem.mp3':                 { title: 'Happy Folk Anthem',     artist: 'Suno', genre: 'AI' },
+  'Hard On The Beat.mp3':                  { title: 'Hard On The Beat',      artist: 'Suno', genre: 'AI' },
+  'Hingey Door Horses.mp3':                { title: 'Hingey Door Horses',    artist: 'Suno', genre: 'AI' },
+  'Moshpit Bleach Mist.mp3':               { title: 'Moshpit Bleach Mist',   artist: 'Suno', genre: 'AI' },
+  'My Piano.mp3':                          { title: 'My Piano',              artist: 'Suno', genre: 'AI' },
+  'Mythic Jingle-Jangle.mp3':              { title: 'Mythic Jingle-Jangle',  artist: 'Suno', genre: 'AI' },
+  'Pants On Beat.mp3':                     { title: 'Pants On Beat',         artist: 'Suno', genre: 'AI' },
+  'Party Antehm.mp3':                      { title: 'Party Antehm',          artist: 'Suno', genre: 'AI' },
+  'Plastic Crowns.mp3':                    { title: 'Plastic Crowns',        artist: 'Suno', genre: 'AI' },
+  'Ripped-Up Cheeseburger.mp3':            { title: 'Ripped-Up Cheeseburger', artist: 'Suno', genre: 'AI' },
 };
 
 // ---------------------------------------------------------------------------
@@ -212,6 +228,13 @@ app.post('/api/analyze', upload.single('audio'), async (req, res) => {
     }
 
     const d = data.data || data;
+    const det = d.ai_detection;
+    if (det?.signals) {
+      console.log('  [analyze] AI signals →',
+        Object.entries(det.signals).map(([k, v]) =>
+          `${k}: ${v == null ? 'NULL' : typeof v === 'object' ? (v.sonicsScore ?? v.aiScore ?? v.anomalyScore ?? v.suspicionScore ?? v.provenanceScore ?? v.watermarkScore ?? v.aiLikelihood ?? 'obj') : v}`
+        ).join(', '));
+    }
     res.json({
       analysis: d.analysis || d,
       ai_detection: d.ai_detection || null,
