@@ -706,7 +706,7 @@ body {
     else if (sonics != null && sonics >= 3) other.push({ name: 'SONICS SpecTTTra', pct: sonics, explain: 'Neural classifier returned low synthetic probability', color: 'var(--accent)' });
 
     if (noMatch) {
-      agreeing.push({ name: 'Catalog Provenance', pct: 0, explain: 'No exact or fuzzy match found in ACRCloud, AcoustID, or MusicBrainz — consistent with AI-generated content', color: 'var(--red)' });
+      agreeing.push({ name: 'Catalog Provenance', pct: 0, explain: 'No exact or fuzzy match found in ACRCloud, AcoustID, or MusicBrainz', color: 'var(--red)' });
     } else if (catalogScore != null && catalogScore > 0) {
       other.push({ name: 'Catalog Provenance', pct: catalogScore, explain: 'Partial catalog match found — metadata inconsistency with known work', color: 'var(--red)' });
     }
