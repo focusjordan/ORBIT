@@ -265,16 +265,6 @@ export ORBIT_SILENTCIPHER_PYTHON=/path/to/ORBIT/.venv-watermark/bin/python3
 
 ---
 
-## 📚 Documentation
-
-| Document | Description |
-|----------|-------------|
-| [Technical Specification](./ORBIT_SPECIFICATION.md) | Complete v1 architecture, API specs, code examples |
-| [v2 Enhancements](./ORBIT_ENHANCEMENTS.md) | Neural watermarking, MERT, CLAP, similarity search |
-| [Implementation Roadmap](./ORBIT_ROADMAP.md) | Session-by-session build guide with status tracking |
-
----
-
 ## 🎯 Use Cases
 
 **For Music Platforms:**

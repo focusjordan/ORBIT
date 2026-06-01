@@ -66,3 +66,14 @@ docs/AGENT_SESSION_PROMPTS.md
 
 # Generated test output
 tests/corpus-results.json
+
+# Internal / developer handoff documentation (ignore root MDs except README)
+*.md
+!README.md
+!packages/**/*.md
+docs/
+AWS_DEPLOYMENT_CHECKLIST.md
+DEPLOYMENT_HANDOFF.md
+SESSION_*_COMPLETE.md
+SESSION_*_HANDOFF.md
+ohnrshyp_explanation.md
