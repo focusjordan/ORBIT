@@ -1,15 +1,21 @@
-ISC License
+Business Source License 1.1
 
-Copyright (c) 2026, Jordan Kugler / Ohnrshyp
+Parameters
 
-Permission to use, copy, modify, and/or distribute this software for any
-purpose with or without fee is hereby granted, provided that the above
-copyright notice and this permission notice appear in all copies.
+Licensor: Jordan Kugler / Ohnrshyp
+Licensed Work: The ORBIT core server, registry engine, and dashboard platform (excluding packages located under the packages/ directory).
+Additional Use Grant: You may run and use the Licensed Work for non-production development, testing, and internal operational workflows. Any production use of the Licensed Work to provide a commercial audio metadata extraction, watermarking, database registry, or audio provenance service to third parties is explicitly prohibited.
+Change License: Apache License, Version 2.0
+Change Date: June 1, 2030
 
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+Terms
+
+1. The Licensor hereby grants you the right to copy, modify, create derivative works, redistribute, and make non-production use of the Licensed Work.
+
+2. You may use the Licensed Work for production purposes only if your use complies with the Additional Use Grant specified in the Parameters above.
+
+3. On the Change Date, this License shall automatically convert to the Change License, and your rights shall be governed by the Change License.
+
+4. If you violate the terms of this License, your rights under this License terminate automatically.
+
+5. THE LICENSED WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
