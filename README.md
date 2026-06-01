@@ -76,6 +76,48 @@ ORBIT is a protocol combining **audio steganography**, **cryptographic signing**
 
 ---
 
+## 📦 Standalone Libraries (Open-Core Workspace)
+
+ORBIT's core engines are completely decoupled and available as standalone, lightweight packages on NPM and PyPI. You can install and run them locally in your own applications for free:
+
+### NPM Packages (Node.js)
+* **`@ohnrshyp/dsp`** — CPU-only classical feature extraction (BPM, key, loudness, duration).
+  ```bash
+  npm install @ohnrshyp/dsp
+  ```
+* **`@ohnrshyp/forensics`** — Spectral forensics, phase entropy, and manipulation detection.
+  ```bash
+  npm install @ohnrshyp/forensics
+  ```
+* **`@ohnrshyp/watermark`** — SilentCipher neural watermark & Spread Spectrum embedding/extraction.
+  ```bash
+  npm install @ohnrshyp/watermark
+  ```
+* **`@ohnrshyp/ledger`** — CBOR encoding, Ed25519 signing, and pgvector database matching queries.
+  ```bash
+  npm install @ohnrshyp/ledger
+  ```
+* **`@ohnrshyp/metadata`** — Dynamic, lazy-loaded AI audio metadata tagger (LAION-CLAP, PANNs, Demucs).
+  ```bash
+  npm install @ohnrshyp/metadata
+  ```
+
+### PyPI Packages (Python)
+* **`orbit-dsp`** — CPU-only feature extraction (BPM, key, loudness, duration).
+  ```bash
+  pip install orbit-dsp
+  ```
+* **`orbit-forensics`** — Spectral forensics, phase entropy, and manipulation checks.
+  ```bash
+  pip install orbit-forensics
+  ```
+* **`orbit-watermark`** — SilentCipher neural watermarking & Spread Spectrum.
+  ```bash
+  pip install orbit-watermark
+  ```
+
+---
+
 ## ✨ Full Feature Set
 
 ### Core Protocol (v1)
@@ -96,10 +138,10 @@ ORBIT is a protocol combining **audio steganography**, **cryptographic signing**
 
 ### Platform Integration
 - 🔌 **Simple REST API** — 5 core endpoints for full functionality
-- 📦 **SDK Package** — `@ohnrshyp/orbit-sdk` for easy integration
+- 📦 **Standalone Libraries** — 5 separate scoped NPM packages and 3 PyPI modules for modular integration
 - 🪝 **Middleware** — Drop-in Express middleware for upload pipelines
 - 🏢 **Multi-Tenant** — Platform registration with API keys and rate limiting
-- 💰 **Licensable Tiers** — Verification-only (free SDK) to white-label (self-hosted)
+- 💰 **Licensable Tiers** — Verification-only (free open-core libraries) to white-label (self-hosted)
 
 ---
 
@@ -156,7 +198,13 @@ curl http://localhost:4000/orbit/v1/info
 
 ```
 orbit/
-├── src/
+├── packages/              # Standalone open-source monorepo packages
+│   ├── dsp/               # @ohnrshyp/dsp classical analysis (NPM & PyPI)
+│   ├── forensics/         # @ohnrshyp/forensics signal forensics (NPM & PyPI)
+│   ├── watermark/         # @ohnrshyp/watermark neural watermarking (NPM & PyPI)
+│   ├── ledger/            # @ohnrshyp/ledger crypto and db queries (NPM)
+│   └── metadata/          # @ohnrshyp/metadata lazy-loaded AI tagger (NPM)
+├── src/                   # Core platform server code (Private Dashboard & APIs)
 │   ├── index.js           # Express server entry point
 │   ├── config/            # Configuration and database connection
 │   ├── engines/           # Core engines
@@ -176,8 +224,7 @@ orbit/
 │   │   └── silentcipher.js # Neural watermarking
 │   └── utils/             # Utilities (audio I/O, validation)
 ├── tests/                 # Test suites
-├── scripts/               # CLI tools (migrate, generate-keypair)
-├── sdk/                   # Publishable SDK package
+├── scripts/               # CLI tools (migrate, package-all, generate-keypair)
 └── docker-compose.yml     # PostgreSQL + pgvector
 ```
 
