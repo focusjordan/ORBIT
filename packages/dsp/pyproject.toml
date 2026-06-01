@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orbit-dsp"
+version = "1.0.0"
+description = "Ultra-fast, CPU-only classical audio feature extraction (BPM, Key, Loudness, Energy, Duration)"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "ISC" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: ISC License (ISCL)",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis"
+]
+dependencies = [
+    "librosa>=0.10.0",
+    "numpy>=1.20.0",
+    "scipy>=1.8.0"
+]
+
+[tool.setuptools]
+packages = ["orbit_dsp"]
+
+[project.scripts]
+orbit-dsp = "orbit_dsp.audio_dsp:main"

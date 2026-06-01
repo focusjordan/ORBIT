@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orbit-watermark"
+version = "1.0.0"
+description = "High-robustness neural audio watermarking using SilentCipher (Sony AI) & Spread Spectrum fallback"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "ISC" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: ISC License (ISCL)",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis"
+]
+dependencies = [
+    "torch<=2.0.0",
+    "silentcipher",
+    "librosa>=0.10.0",
+    "soundfile>=0.12.0",
+    "numpy>=1.20.0"
+]
+
+[tool.setuptools]
+packages = ["orbit_watermark"]
+
+[project.scripts]
+orbit-watermark = "orbit_watermark.silentcipher_watermark:main"

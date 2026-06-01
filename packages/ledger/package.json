@@ -1,0 +1,28 @@
+{
+  "name": "@orbit/ledger",
+  "version": "1.0.0",
+  "description": "Cryptographic ledger and database query engine for ORBIT (Ed25519, CBOR, pgvector similarities)",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": [
+    "orbit",
+    "ledger",
+    "crypto",
+    "pgvector",
+    "cbor",
+    "ed25519"
+  ],
+  "author": "",
+  "license": "ISC",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "cbor": "^10.0.11",
+    "pg": "^8.16.3",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {}
+}

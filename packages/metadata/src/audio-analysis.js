@@ -1,11 +1,8 @@
 /**
- * ORBIT Audio Analysis Module Wrapper
+ * ORBIT Audio Analysis Module Wrapper (Decoupled Package Version)
  * 
- * Session 30 Refactoring: Backwards-compatible wrapper.
- * Delegates classical DSP features to src/ml/audio-dsp.js and deep forensics
- * checks to src/ml/audio-forensics.js. Eliminates duplicate code while
- * maintaining 100% parameter and function signature parity for existing code
- * and tests.
+ * Delegates classical DSP features to @orbit/dsp and deep forensics
+ * checks to @orbit/forensics. Maintaining 100% signature parity.
  */
 
 const { spawn } = require('child_process');
@@ -13,7 +10,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-// Import decoupled modules
+// Import decoupled packages
 const audioDsp = require('@orbit/dsp');
 const audioForensics = require('@orbit/forensics');
 
@@ -33,11 +30,7 @@ function detectAudioExtension(buffer) {
   return '.wav';
 }
 
-/**
- * Unified Config (Merged for backwards compatibility)
- */
 const ANALYSIS_CONFIG = {
-  scriptPath: path.join(__dirname, '../../scripts/audio_analysis.py'),
   maxLengthSeconds: 120,
   pythonCommand: audioDsp.config.pythonCommand,
   timeout: audioForensics.config.timeout,
@@ -76,7 +69,7 @@ async function analyze(input, options = {}) {
 
   const startTime = Date.now();
   if (verbose) {
-    console.log(`🎵 AudioAnalysis (Wrapper): Running DSP analysis pass...`);
+    console.log(`🎵 AudioAnalysis (Package Wrapper): Running DSP analysis pass...`);
   }
 
   // 1. Run classical DSP pass
@@ -93,7 +86,7 @@ async function analyze(input, options = {}) {
   // 2. Run forensics pass only if requested
   if (aiForensics) {
     if (verbose) {
-      console.log(`🤖 AudioAnalysis (Wrapper): Running AI spectral forensics pass...`);
+      console.log(`🤖 AudioAnalysis (Package Wrapper): Running AI spectral forensics pass...`);
     }
     try {
       const forensicsResult = await audioForensics.analyze(input, {
@@ -102,11 +95,10 @@ async function analyze(input, options = {}) {
         verbose
       });
       result.ai_forensics = forensicsResult;
-      // Ensure traditional dynamic range is duplicated inside the forensics payload for compatibility
       result.ai_forensics.dynamic_range_db = dspResult.dynamic_range_db;
     } catch (forensicsError) {
       if (verbose) {
-        console.error(`⚠️ AudioAnalysis (Wrapper) forensics pass failed: ${forensicsError.message}`);
+        console.error(`⚠️ AudioAnalysis (Package Wrapper) forensics pass failed: ${forensicsError.message}`);
       }
       throw forensicsError;
     }
@@ -116,9 +108,6 @@ async function analyze(input, options = {}) {
   return result;
 }
 
-/**
- * Helpers (Backwards-compatible API)
- */
 async function getBpm(input, options = {}) {
   const res = await audioDsp.analyze(input, options);
   return res.bpm;

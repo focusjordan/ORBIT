@@ -27,7 +27,7 @@
 const OrbitFingerprint = require('../../engines/fingerprint');
 const OrbitCrypto = require('../../engines/crypto');
 const { UnifiedWatermark, getWatermarkMethod } = require('../../engines/watermark-unified');
-const queries = require('../../ledger/queries');
+const { queries } = require('@orbit/ledger');
 const config = require('../../config');
 const AudioUtils = require('../../utils/audio');
 
@@ -36,7 +36,7 @@ const clap = require('../../ml/clap');
 
 // AI music detection (multi-signal analysis)
 const aiDetection = require('../../ml/ai-detection');
-const metadataExtractor = require('../../ml/metadata-extractor');
+const metadataExtractor = require('@orbit/metadata');
 
 // Catalog check (AcoustID + MusicBrainz known-work detection)
 const catalogCheck = require('../../engines/catalog-check');

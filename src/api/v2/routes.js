@@ -16,7 +16,7 @@ const { optionalAuth } = require('../middleware/auth');
 
 // Import ML modules
 const contentAnalysis = require('../../ml/content-analysis');
-const metadataExtractor = require('../../ml/metadata-extractor');
+const metadataExtractor = require('@orbit/metadata');
 const clap = require('../../ml/clap');
 const OrbitFingerprint = require('../../engines/fingerprint');
 const aiDetection = require('../../ml/ai-detection');

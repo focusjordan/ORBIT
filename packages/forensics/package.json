@@ -1,0 +1,26 @@
+{
+  "name": "@orbit/forensics",
+  "version": "1.0.0",
+  "description": "High-fidelity AI audio forensics and spectral anomaly detection (Phase Entropy, 16kHz cutoffs, Cepstral Vocoder check)",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": [
+    "audio",
+    "forensics",
+    "ai-detection",
+    "spectrogram",
+    "phase-entropy",
+    "vocoder",
+    "suno",
+    "udio"
+  ],
+  "author": "",
+  "license": "ISC",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

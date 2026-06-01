@@ -24,13 +24,13 @@
 const OrbitFingerprint = require('../../engines/fingerprint');
 const OrbitCrypto = require('../../engines/crypto');
 const { UnifiedWatermark } = require('../../engines/watermark-unified');
-const queries = require('../../ledger/queries');
+const { queries } = require('@orbit/ledger');
 const config = require('../../config');
 const AudioUtils = require('../../utils/audio');
 
 // ML modules for v2 enhancements (Session 20-24)
 const contentAnalysis = require('../../ml/content-analysis');
-const metadataExtractor = require('../../ml/metadata-extractor');
+const metadataExtractor = require('@orbit/metadata');
 const clap = require('../../ml/clap');
 
 /**
