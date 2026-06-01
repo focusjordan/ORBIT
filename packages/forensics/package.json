@@ -1,5 +1,5 @@
 {
-  "name": "@orbit/forensics",
+  "name": "@ohnrshyp/forensics",
   "version": "1.0.0",
   "description": "High-fidelity AI audio forensics and spectral anomaly detection (Phase Entropy, 16kHz cutoffs, Cepstral Vocoder check)",
   "main": "src/index.js",

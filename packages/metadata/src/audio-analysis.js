@@ -1,8 +1,8 @@
 /**
  * ORBIT Audio Analysis Module Wrapper (Decoupled Package Version)
  * 
- * Delegates classical DSP features to @orbit/dsp and deep forensics
- * checks to @orbit/forensics. Maintaining 100% signature parity.
+ * Delegates classical DSP features to @ohnrshyp/dsp and deep forensics
+ * checks to @ohnrshyp/forensics. Maintaining 100% signature parity.
  */
 
 const { spawn } = require('child_process');
@@ -11,8 +11,8 @@ const fs = require('fs');
 const os = require('os');
 
 // Import decoupled packages
-const audioDsp = require('@orbit/dsp');
-const audioForensics = require('@orbit/forensics');
+const audioDsp = require('@ohnrshyp/dsp');
+const audioForensics = require('@ohnrshyp/forensics');
 
 /**
  * Detect audio format from buffer magic bytes

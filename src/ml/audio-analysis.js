@@ -14,8 +14,8 @@ const fs = require('fs');
 const os = require('os');
 
 // Import decoupled modules
-const audioDsp = require('@orbit/dsp');
-const audioForensics = require('@orbit/forensics');
+const audioDsp = require('@ohnrshyp/dsp');
+const audioForensics = require('@ohnrshyp/forensics');
 
 /**
  * Detect audio format from buffer magic bytes

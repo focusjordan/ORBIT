@@ -29,7 +29,7 @@ const crypto = require('crypto');
 
 // Core watermarking implementations
 const OrbitWatermark = require('./watermark');
-const silentcipher = require('@orbit/watermark');
+const silentcipher = require('@ohnrshyp/watermark');
 const AudioUtils = require('../utils/audio');
 
 /**

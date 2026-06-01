@@ -37,7 +37,7 @@ function getPool() {
       return localDb.pool;
     } catch (e2) {
       throw new Error(
-        'Database pool not configured in @orbit/ledger. Call setPool(pool) first to initialize.'
+        'Database pool not configured in @ohnrshyp/ledger. Call setPool(pool) first to initialize.'
       );
     }
   }

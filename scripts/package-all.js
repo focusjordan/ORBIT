@@ -31,12 +31,12 @@ console.log(`📦 Found ${packages.length} packages inside monorepo workspace.`)
 for (const pkgName of packages) {
   const pkgPath = path.join(PACKAGES_DIR, pkgName);
   console.log(`\n======================================================`);
-  console.log(`🔨 Building standalone package: @orbit/${pkgName}`);
+  console.log(`🔨 Building standalone package: @ohnrshyp/${pkgName}`);
   console.log(`======================================================`);
 
   // 1. Build NPM Package
   try {
-    console.log(`🔹 Running npm pack for @orbit/${pkgName}...`);
+    console.log(`🔹 Running npm pack for @ohnrshyp/${pkgName}...`);
     // Run npm pack and capture stdout which gives the package filename
     const stdout = execSync('npm pack', { cwd: pkgPath, encoding: 'utf8' }).trim();
     const tgzName = stdout.split('\n').pop(); // Handle multi-line outputs safely
@@ -46,7 +46,7 @@ for (const pkgName of packages) {
     fs.renameSync(sourceTgz, destTgz);
     console.log(`   ✅ NPM archive created: dist/js/${tgzName}`);
   } catch (error) {
-    console.error(`   ❌ Failed to build NPM package @orbit/${pkgName}:`, error.message);
+    console.error(`   ❌ Failed to build NPM package @ohnrshyp/${pkgName}:`, error.message);
   }
 
   // 2. Build Python Package (if pyproject.toml exists)

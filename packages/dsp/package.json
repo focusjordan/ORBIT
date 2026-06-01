@@ -1,5 +1,5 @@
 {
-  "name": "@orbit/dsp",
+  "name": "@ohnrshyp/dsp",
   "version": "1.0.0",
   "description": "Ultra-fast, CPU-only classical audio feature extraction (BPM, Key, Loudness, Energy, Duration)",
   "main": "src/index.js",
