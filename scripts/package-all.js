@@ -83,18 +83,22 @@ for (const pkgName of packages) {
 
     try {
       // Build python source & wheel packages
+      // Resolve Python executable (prefer workspace .venv)
+      const venvPython = path.join(__dirname, '../.venv/bin/python');
+      const pythonCmd = fs.existsSync(venvPython) ? venvPython : 'python3';
+
       // Check if 'build' module is installed
       let hasBuildModule = false;
       try {
-        execSync('python3 -c "import build"', { stdio: 'ignore' });
+        execSync(`${pythonCmd} -c "import build"`, { stdio: 'ignore' });
         hasBuildModule = true;
       } catch (e) {}
 
       if (hasBuildModule) {
-        execSync('python3 -m build', { cwd: pkgPath, stdio: 'inherit' });
+        execSync(`${pythonCmd} -m build`, { cwd: pkgPath, stdio: 'inherit' });
       } else {
         console.log(`⚠️ 'build' module not found in Python. Falling back to setuptools sdist/bdist_wheel...`);
-        execSync('python3 setup.py sdist bdist_wheel', { cwd: pkgPath, stdio: 'ignore' });
+        execSync(`${pythonCmd} setup.py sdist bdist_wheel`, { cwd: pkgPath, stdio: 'ignore' });
       }
 
       // Move built files from packages/<pkg>/dist to dist/python/
