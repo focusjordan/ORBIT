@@ -293,7 +293,7 @@ export ORBIT_SILENTCIPHER_PYTHON=/path/to/ORBIT/.venv-watermark/bin/python3
 
 ## 📄 License
 
-ISC
+Apache 2.0
 
 ---
 

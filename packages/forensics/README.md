@@ -1,22 +1,45 @@
 # @ohnrshyp/forensics
 
-High-fidelity audio signal forensics and tampering detection library.
+**High-fidelity audio signal forensics and tampering detection library.**
 
-This library analyzes acoustic properties to identify structural manipulations, synthetic upsampling, compression degradation, and phase alterations. It helps verify the physical integrity of audio assets before registration or transfer.
-
----
-
-## Features
-
-- 📐 **Phase Entropy**: Calculates Shannon phase entropy over instantaneous group delays to flag synthetic phase alignment or vocoder alterations.
-- 📉 **Frequency Rolloff**: Detects the high-frequency cutoff (e.g., 16kHz limit) to identify lossy compression transcodes (like low-bitrate MP3 or AAC).
-- 🧩 **Upsampling Checker**: Checks for checkerboard upsampling spectral artifacts common in neural vocoder generators (AI-generated audio).
-- 🔀 **Stereo Coherence**: Analyzes Mid/Side (M/S) stereo channel phase alignment to detect phase cancellation or artificial spatialization.
-- ⚡ **Pre-echo Transients**: Measures transient ratios to identify temporal compression artifacts or pre-echo noise.
+This module runs a deep, signal-level acoustic forensics suite to detect structural manipulations, lossy audio transcoding, synthetic phase alignments, and periodic upsampling artifacts common in AI-generated audio (such as neural vocoders and synthesis generators).
 
 ---
 
-## Installation
+## 🚀 Key Forensic Diagnostics
+
+* 📐 **Phase Entropy (Instantaneous Group Delay)**: Estimates the Shannon phase entropy of the signal to catch artificial vocoding, pitch correction (autotune), or synthetic phase shifts.
+* 📉 **Spectral Cutoff Check**: Detects brick-wall frequency rolloff cutoffs (e.g. at 16kHz or 20kHz) indicating low-bitrate MP3/AAC compression transcodes or training-data restrictions.
+* 🧩 **Upsampling/Checkerboard Artifact Detector**: Captures periodic cepstral peak ratios associated with checkerboard spectral upsampling artifacts left behind by generative networks.
+* 🔀 **Stereo Mid/Side (M/S) Coherence**: Analyzes stereo channel phase and energy distributions to flag artificial stereo widening or phase cancellations.
+* ⚡ **Pre-echo Transient Check**: Analyzes onset transients to expose temporal smearing and pre-echo artifacts typical of frame-based audio codecs.
+* 🎹 **Pitch Jitter & Modulation (Vibrato Jitter)**: Scans pitch contours to flag perfectly linear pitch modulations indicating synthesized vocoder vibratos.
+* 📜 **Chroma & Flux Variance**: Measures timbral/spectral evolution variance (flux, centroid, zero-crossing rate) to flag abnormally static synthesis.
+
+---
+
+## 🔬 Architectural & Mathematical Design
+
+The library couples a Node.js child process connector with a scientific python script leveraging **Librosa**, **NumPy**, and **SciPy**.
+
+### 1. Phase Entropy
+Instantaneous group delay describes the derivative of the phase spectrum along the frequency axis. A Short-Time Fourier Transform (STFT) yields complex matrix $D(f, t)$:
+$$\text{Phase}(f, t) = \angle D(f, t)$$
+$$\text{Instantaneous Frequency}(f, t) = \text{Phase}(f, t) - \text{Phase}(f, t-1)$$
+For a series of frequency bins, the histogram of instantaneous frequency changes is computed. Shannon entropy is calculated over the histogram probabilities $p_i$:
+$$H = -\sum_{i} p_i \log_2(p_i)$$
+Natural audio yields high entropy ($H \ge 4.5$) due to complex harmonic variance. Artificial alignment or vocoder synthesis yields highly structured phase sequences, leading to abnormally low entropy ($H < 3.5$).
+
+### 2. Cepstral Checkerboard peak ratio
+To detect upsampling artifacts common in neural vocoders, the mean log-magnitude spectrum is computed:
+$$\bar{S}(f) = \frac{1}{T} \sum_{t} \log |D(f, t)|$$
+The real cepstrum is calculated by taking the inverse FFT of the log spectrum:
+$$\text{Cepstrum} = \text{Real}(\text{IFFT}(\bar{S}(f)))$$
+Periodic upsampling artifacts create distinct peaks in the high-quefrency region of the cepstrum. The ratio of the maximum peak amplitude to the average cepstral envelope amplitude exposes these vocoder structures.
+
+---
+
+## 📦 Installation
 
 ### Node.js (NPM Package)
 ```bash
@@ -28,50 +51,122 @@ npm install @ohnrshyp/forensics
 pip install orbit-forensics
 ```
 
-### System Requirements
-This library delegates spectral signal processing to a Python helper script. Ensure Python 3.8+ is installed on the host system along with:
+### Host Dependencies
+This package delegates spectral processing to Python. Ensure Python 3.8+ is installed on the host along with:
 ```bash
-pip install librosa numpy
+pip install librosa numpy scipy
 ```
 
 ---
 
-## Usage
+## 🛠️ Node.js API Reference
 
-### 1. Perform Forensics Check
-Analyze an audio file path or Buffer:
+### `analyze(input, [options])`
+Performs deep spectral forensics checks.
 
+* **Parameters**:
+  * `input` (`Buffer` | `string`): Raw binary buffer or absolute path to the target audio file.
+  * `options` (`Object`, optional):
+    * `maxLength` (`number`): Limit analysis to the first $N$ seconds of the file. Default is `120`.
+    * `stemsDir` (`string` | `null`): Optional path to a directory containing separated stems (e.g. Demucs vocal/bass/other stems) to perform advanced stem-aware forensics (e.g., vocal-specific cutoff, instrumental bleed check).
+    * `verbose` (`boolean`): Enable diagnostic logging. Default is `false`.
+
+* **Returns**: `Promise<Object>` containing the following schema:
+  ```json
+  {
+    "spectral_cutoff": {
+      "available": true,
+      "has_16k_cutoff": false,
+      "energy_ratio_above_16k": 0.0412,
+      "energy_below_16k": 12.421,
+      "energy_16k_to_20k": 0.512
+    },
+    "phase_entropy": {
+      "mean_entropy": 4.892,
+      "std_entropy": 0.241,
+      "normalized_entropy": 0.815,
+      "low_entropy": false
+    },
+    "checkerboard": {
+      "available": true,
+      "cepstral_peak_ratio": 3.412,
+      "has_artifacts": false
+    },
+    "pre_echo": {
+      "available": true,
+      "mean_pre_echo_ratio": 0.081,
+      "has_pre_echo": false
+    },
+    "ms_phase_coherence": {
+      "available": true,
+      "sub_bass_sm_ratio": 0.091,
+      "low_mid_sm_ratio": 0.241,
+      "ms_anomalous": false
+    },
+    "pitch_jitter": {
+      "available": true,
+      "perfect_vibrato": false
+    },
+    "processingTimeMs": 1420
+  }
+  ```
+
+---
+
+## 📊 Diagnostic Interpretation Matrix
+
+Combine these metrics to diagnose the structural state of your audio:
+
+| Diagnostic Metric | Pristine Master | Lossy Transcode (MP3/AAC) | AI-Generated (Vocoder/Synthesis) |
+|---|---|---|---|
+| **Phase Entropy (`normalized_entropy`)** | High ($\ge 0.75$) | Moderate ($0.65 - 0.75$) | Low ($< 0.55$) |
+| **Spectral Cutoff (`has_16k_cutoff`)** | `false` | `true` (if transcode is $< 192$ kbps) | `true` (if trained on MP3 datasets) |
+| **Checkerboard Artifacts (`has_artifacts`)**| `false` | `false` | `true` (periodic cepstral peak) |
+| **Pre-echo (`has_pre_echo`)** | `false` | `true` (temporal framing artifacts) | `false` / `true` (varies by vocoder) |
+| **M/S Stereo Coherence (`ms_anomalous`)**| `false` | `false` | `true` (artificial spatialization smearing) |
+
+---
+
+## 💻 Code Examples
+
+### Analyzing audio for AI generation or compression anomalies
 ```javascript
 const forensics = require('@ohnrshyp/forensics');
 const fs = require('fs');
 
-const audioBuffer = fs.readFileSync('suspect-track.mp3');
+async function verifyAudio() {
+  const audioBuffer = fs.readFileSync('uploaded-track.wav');
 
-// Run forensics pipeline
-const result = await forensics.analyze(audioBuffer, {
-  maxLength: 120 // inspect first 120 seconds
-});
+  try {
+    const report = await forensics.analyze(audioBuffer, {
+      maxLength: 60, // inspect first 60 seconds
+      verbose: true
+    });
 
-console.log('Shannon Phase Entropy:', result.phase_entropy);
-console.log('Frequency Rolloff Cutoff:', result.rolloff_cutoff_hz);
-console.log('Upsampling Artifacts Detected:', result.upsampling_artifacts);
-console.log('Stereo Phase Coherence Score:', result.stereo_coherence);
-```
+    console.log('--- Forensic Report ---');
+    console.log(`Phase Entropy: ${report.phase_entropy.mean_entropy} (Low: ${report.phase_entropy.low_entropy})`);
+    console.log(`Brickwall 16kHz Cutoff: ${report.spectral_cutoff.has_16k_cutoff}`);
+    console.log(`Neural Vocoder Upsampling Peak: ${report.checkerboard.has_artifacts}`);
+    console.log(`Stereo Phase Anomaly: ${report.ms_phase_coherence.ms_anomalous}`);
 
-### 2. Verify Python Subprocess
-Check if the local Python environment has the necessary tools to perform forensics:
+    if (report.phase_entropy.low_entropy && report.checkerboard.has_artifacts) {
+      console.warn('⚠️ WARNING: Audio exhibits characteristics of neural synthesis/AI vocoding!');
+    } else if (report.spectral_cutoff.has_16k_cutoff) {
+      console.warn('⚠️ WARNING: Audio has been heavily compressed or transcoded from an MP3 source.');
+    } else {
+      console.log('✅ PASS: Audio file signal matches a pristine original master.');
+    }
 
-```javascript
-const env = await forensics.checkPythonEnvironment();
-if (!env.available) {
-  console.warn('Forensics module cannot run:', env.message);
-  console.log('Install command:', env.details.install);
+  } catch (error) {
+    console.error('Forensics check failed:', error.message);
+  }
 }
+
+verifyAudio();
 ```
 
 ---
 
-## File Structure
+## 📄 License
 
-- [src/index.js](src/index.js): Node.js module wrapper and child process spawning.
-- [scripts/audio_forensics.py](scripts/audio_forensics.py): Python script implementing the spectral forensics algorithms.
+Licensed under the Apache License, Version 2.0 (the "License"). See [LICENSE](../../LICENSE) in the project root for details.

@@ -158,3 +158,10 @@ For detailed documentation on specific components:
 - [Technical FAQ](docs/TECHNICAL_FAQ.md): Common architectural and operational questions.
 - [Content ID Integration](docs/CONTENT_ID_GUIDE.md): Implementing copyright validation and duplicate checks.
 - [Chain of Custody Specification](docs/SOPHON_HANDOFF.md): In-depth details on cryptographic handoffs.
+
+---
+
+## 📄 Licensing
+
+ORBIT and all of its open-core standalone libraries are licensed under the **Apache 2.0** license. Integrated third-party machine learning models (such as SilentCipher under MIT, or PANNs under MIT) retain their original licenses, and developers should review their respective terms for usage compliance.
+

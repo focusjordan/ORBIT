@@ -81,6 +81,8 @@ jobs:
         run: |
           # Generate test audio files
           ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3 -y
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=15" -b:a 192k tests/fixtures/test-audio-short.mp3 -y
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=15" tests/fixtures/test-audio-short.wav -y
           ffmpeg -f lavfi -i "sine=frequency=440:duration=30" tests/fixtures/test-audio-watermarked.wav -y
           ffmpeg -f lavfi -i "sine=frequency=880:duration=30" tests/fixtures/test-audio-rhythm.wav -y
       
@@ -100,19 +102,23 @@ jobs:
         env:
           DATABASE_URL: postgres://orbit:orbit@localhost:5432/orbit_test
       
-      - name: Start server in background
+      - name: Start server and run V1 tests
         run: |
           npm start &
-          sleep 5  # Wait for server to start
-        env:
-          DATABASE_URL: postgres://orbit:orbit@localhost:5432/orbit_test
-          PORT: 4000
-      
-      - name: Run V1 tests
-        run: npm run test:v1
+          # Wait up to 10 seconds for the server to respond
+          for i in {1..10}; do
+            if curl -s http://localhost:4000/health > /dev/null; then
+              echo "Server is up!"
+              break
+            fi
+            echo "Waiting for server to start..."
+            sleep 1
+          done
+          npm run test:v1
         env:
           DATABASE_URL: postgres://orbit:orbit@localhost:5432/orbit_test
           API_URL: http://localhost:4000
+          PORT: 4000
           SKIP_ML_TESTS: '1'
 
   # V2 ML tests - Needs models (slow, optional)
@@ -135,13 +141,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
-      - name: Install FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: Install Python dependencies
+        run: |
+          pip install -r scripts/requirements-ml.txt
       
       - name: Create test audio fixtures
         run: |
-          ffmpeg -f lavfi -i "sine=frequency=440:duration=30" tests/fixtures/test-audio.mp3 -y
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3 -y
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=15" -b:a 192k tests/fixtures/test-audio-short.mp3 -y
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=15" tests/fixtures/test-audio-short.wav -y
           ffmpeg -f lavfi -i "sine=frequency=440:duration=30" tests/fixtures/test-audio-watermarked.wav -y
+          ffmpeg -f lavfi -i "sine=frequency=880:duration=30" tests/fixtures/test-audio-rhythm.wav -y
       
       - name: Cache ML models
         uses: actions/cache@v4
@@ -155,6 +171,7 @@ jobs:
         run: npm run test:v2:safe
         env:
           SKIP_API_TESTS: '1'
+          ORBIT_PYTHON_PATH: python3
         timeout-minutes: 30  # ML model downloads can be slow
 
 

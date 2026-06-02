@@ -1,118 +1,200 @@
 # @ohnrshyp/metadata
 
-Unified zero-shot AI audio metadata extraction pipeline. 
+**Unified hybrid neural AI audio metadata extraction pipeline.**
 
-This package integrates multiple deep learning and digital signal processing (DSP) models to automatically extract comprehensive metadata tags from raw audio files. It is the core intelligence layer powering ORBIT registration.
-
----
-
-## Features
-
-- 🧠 **Zero-shot Mood & Vocal Detection**: Uses LAION-CLAP embeddings to detect acoustic sentiment and vocal characteristics (vocals present, gender, etc.).
-- 🎵 **Instrument Classification**: Uses PANNs (Pretrained Audio Neural Networks) to isolate and rank primary instruments.
-- 🏷️ **Genre Identification**: Uses a specialized wav2vec2 model to classify musical genres.
-- 📊 **Signal Features**: Extracts BPM, musical key, loudness, energy levels, and dynamic range.
-- 🧬 **Acoustic Embeddings**: Generates 2048-dimensional PANNs semantic vector embeddings for audio similarity indexing.
+This package integrates multiple deep learning and digital signal processing (DSP) models to automatically extract comprehensive structural and semantic metadata tags from raw audio files. It is the intelligence layer powering the auto-tagging and verification capabilities of the ORBIT protocol.
 
 ---
 
-## Installation
+## 🚀 Key AI Pipelines
 
-Install via npm:
+* 🧠 **Zero-Shot Mood & Vocal Tagger (LAION-CLAP)**: Uses contrastive text-audio embeddings to detect acoustic mood, vocal presence, vocal gender, and singing style.
+* 🎹 **Primary Instrument Identification (PANNs)**: Leverages Pretrained Audio Neural Networks (CNN14 architecture) to analyze and score 50+ instruments.
+* 🏷️ **Genre Classifier (wav2vec2)**: Classifies the primary musical genre over 10 structural music classifications.
+* 🧬 **2048-dim Audio Embeddings (PANNs)**: Generates highly descriptive semantic vector representations for similarity indexing in vector databases.
+* ⏱️ **Classical DSP Features**: Integrates tempo (BPM), key/scale, RMS energy, and integrated loudness (dB) directly.
+* 🔗 **Stem-Aware Analysis (Demucs)**: Optionally splits audio into vocal, bass, drum, and instrumental stems for isolated checking.
+
+---
+
+## 🔬 Model & Pipeline Architecture
+
+The extraction orchestrator combines local JavaScript-based inferences and Python subprocess modules.
+
+```
+                    ┌─────────────────────────┐
+                    │       Audio Input       │
+                    └─────────────────────────┘
+                                 │
+         ┌───────────────────────┼───────────────────────┐
+         ▼                       ▼                       ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   LAION-CLAP    │     │      PANNs      │     │    wav2vec2     │
+│  (Transformers) │     │ (PyTorch Python)│     │  (Transformers) │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+     (Mood, Vocals)     (Instruments, Tag)          (10 Genres)
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 ▼
+                    ┌─────────────────────────┐
+                    │   DSP Signal Engine     │
+                    │   (BPM, Key, Loudness)  │
+                    └─────────────────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │    Unified JSON/DB      │
+                    │     Metadata Object     │
+                    └─────────────────────────┘
+```
+
+### 1. LAION-CLAP Inferences
+CLAP models contain joint audio and text encoders trained to project audio waveforms and textual descriptions into a shared latent space. Zero-shot tags are extracted by computing the cosine similarity between the audio embedding $E_a$ and candidate text prompt embeddings $E_t$:
+$$\text{Confidence}(i) = \frac{e^{S(E_a, E_{t, i}) / \tau}}{\sum_k e^{S(E_a, E_{t, k}) / \tau}}$$
+This outputs mood keywords and vocal properties without retraining.
+
+### 2. PANNs (Pretrained Audio Neural Networks)
+PANNs maps the audio signal into a log-mel spectrogram and runs a CNN14 architecture trained on AudioSet (527 classes). By filtering AudioSet indices, we isolate specific instrument classes and extract the 2048-dimensional output from the global pooling layer to serve as our dense audio embedding.
+
+---
+
+## 📦 Installation
+
+### Node.js (NPM Package)
 ```bash
 npm install @ohnrshyp/metadata
 ```
 
-### System Requirements
-This package runs hybrid inferences:
-1. **Local JS Inference**: Uses `@xenova/transformers` for on-device/CPU execution of CLAP and genre classification models.
-2. **Background Python Inference**: Spawns Python scripts for heavy feature extraction (Librosa) and neural separation (Demucs). Ensure Python 3.8+ is installed with `librosa`, `soundfile`, and `numpy`.
+---
+
+## 🛠️ API Reference
+
+### `extractMetadata(input, [options])`
+Extracts comprehensive structural and semantic metadata from an audio source.
+
+* **Parameters**:
+  * `input` (`Buffer` | `string`): Raw binary buffer or absolute path to the target audio file.
+  * `options` (`Object`, optional):
+    * `includeEmbedding` (`boolean`): Include the 2048-dim PANNs audio vector. Default is `false`.
+    * `verbose` (`boolean`): Enable diagnostic logging. Default is `false`.
+    * `config` (`Object`): Advanced configuration overrides (see below).
+
+* **Returns**: `Promise<Object>` containing the following schema:
+  ```json
+  {
+    "genre": [
+      { "label": "Electronic", "confidence": 0.8912 }
+    ],
+    "mood": [
+      { "label": "Energetic", "confidence": 0.8412 },
+      { "label": "Bright", "confidence": 0.7612 }
+    ],
+    "instruments": [
+      { "label": "Synthesizer", "confidence": 0.912 },
+      { "label": "Drum Kit", "confidence": 0.824 }
+    ],
+    "vocals": {
+      "present": true,
+      "confidence": 0.9412,
+      "gender": "female"
+    },
+    "bpm": {
+      "value": 128.0,
+      "confidence": 0.8912
+    },
+    "key": {
+      "value": "A minor",
+      "confidence": 0.7412
+    },
+    "energy": 0.8124,
+    "loudness_db": -12.42,
+    "danceability": 0.8942,
+    "duration": 210.42,
+    "sample_rate": 22050,
+    "extractionStatus": {
+      "clap": "success",
+      "panns": "success",
+      "genreClassifier": "success",
+      "audioAnalysis": "success",
+      "embedding": "success"
+    }
+  }
+  ```
+
+### `extractClapOnly(input, [options])`
+Performs only CLAP mood/vocals classification. Avoids PyTorch loading overhead, completing in $< 1$ second.
+
+### `extractAudioAnalysisOnly(input, [options])`
+Performs only CPU-only classical DSP feature extraction (BPM, key, loudness). No machine learning model is loaded.
+
+### `checkEnvironment()`
+Runs validation diagnostics across all sub-modules.
+* **Returns**: `Promise<Object>` detailing availability flags.
+
+### `formatForDatabase(result)`
+Formats the extraction result into the JSON structure expected by the `ai_metadata` JSONB column in PostgreSQL.
+
+### `formatEmbeddingForDatabase(embedding)`
+Converts the Float32Array embedding vector into the PostgreSQL `pgvector` string format `"[v1,v2,...]"` for query parameters.
 
 ---
 
-## Usage
+## ⚙️ Configuration Flags
 
-### 1. Extract Full Metadata
-Run the entire AI pipeline on an audio file or Buffer:
-
-```javascript
-const metadata = require('@ohnrshyp/metadata');
-const fs = require('fs');
-
-const audioBuffer = fs.readFileSync('track.mp3');
-
-// Run the unified extraction pipeline
-const result = await metadata.extractMetadata(audioBuffer, {
-  includeEmbedding: true, // Generate 2048-dim PANNs vector
-  verbose: true
-});
-
-console.log('AI Genre:', result.genre);
-console.log('Detected BPM:', result.bpm.value);
-console.log('Key:', result.key.value);
-console.log('Energy:', result.energy);
-console.log('Instruments:', result.instruments);
-```
-
-### 2. Fast / Specialized Extraction
-If you don't need the full pipeline, run faster specialized routes:
-
-```javascript
-// CLAP-only (Fast mood/instrument classification, no signal processing)
-const clapMetadata = await metadata.extractClapOnly(audioBuffer);
-
-// Audio Analysis-only (Fastest, CPU-only DSP key/BPM detection, no ML models loaded)
-const dspMetadata = await metadata.extractAudioAnalysisOnly(audioBuffer);
-```
-
-### 3. Check System Dependencies
-Verify if Python and the necessary ML packages are available:
-
-```javascript
-const env = await metadata.checkEnvironment();
-console.log('CLAP Available:', env.clap.available);
-console.log('Audio Analysis Available:', env.audioAnalysis.available);
-console.log('PANNs Available:', env.panns.available);
-```
-
-### 4. Database Format Helper
-Format extraction output to fit the `ai_metadata` JSONB schema and generate a text vector representation for `pgvector` database storage:
-
-```javascript
-const dbPayload = metadata.formatForDatabase(result);
-const vectorString = metadata.formatEmbeddingForDatabase(result.embedding); // Returns "[0.02,-0.12,...]"
-```
-
----
-
-## Configuration
-
-Configure custom options by passing a config object in the options parameter:
-
-| Config Option | Default | Description |
-|---|---|---|
-| `enableClap` | `true` | Enable LAION-CLAP mood and vocal detection. |
-| `enablePanns` | `true` | Enable PANNs instrument tagging. |
-| `enableGenreClassifier` | `true` | Enable wav2vec2 genre classification. |
-| `enableEmbedding` | `true` | Enable PANNs 2048-dimensional embedding generation. |
-| `enableAudioAnalysis` | `true` | Enable BPM, Key, energy, and loudness detection. |
-| `failOnError` | `false` | If true, errors in sub-modules cause the main extraction to fail. |
-
+Override defaults in the options parameter:
 ```javascript
 const result = await metadata.extractMetadata(audioBuffer, {
   config: {
-    enableClap: true,
-    enablePannsEmbedding: false // disable vector generation for speed
+    enableClap: true,             // Zero-shot mood/vocals
+    enablePanns: true,            // Instrument tagging
+    enableGenreClassifier: true,  // wav2vec2 genre classification
+    enableEmbedding: true,        // Generate 2048-dim vector
+    enableAudioAnalysis: true,    // Run BPM/Key DSP
+    enableDemucs: false,          // Run Demucs stem separation
+    failOnError: false            // Bypass partial module failures
   }
 });
 ```
 
 ---
 
-## File Structure
+## 💻 Code Examples
 
-- [src/index.js](src/index.js): Unified entry point and orchestration layer.
-- [src/clap.js](src/clap.js): CLAP zero-shot classification interface.
-- [src/panns.js](src/panns.js): PANNs instrumentation tagger and embedding runner.
-- [src/genre-classifier.js](src/genre-classifier.js): wav2vec2 genre classification.
-- [src/audio-analysis.js](src/audio-analysis.js): Subprocess interface to CPU-only librosa features.
+### Full Metadata Extraction & Database Formatting
+```javascript
+const metadata = require('@ohnrshyp/metadata');
+const fs = require('fs');
+
+async function run() {
+  const audioBuffer = fs.readFileSync('dance-track.mp3');
+
+  try {
+    // Extract metadata including PANNs embedding
+    const rawResult = await metadata.extractMetadata(audioBuffer, {
+      includeEmbedding: true,
+      verbose: true
+    });
+
+    console.log(`Primary Genre: ${rawResult.genre[0].label} (${(rawResult.genre[0].confidence * 100).toFixed(1)}%)`);
+    console.log(`Mood Tags: ${rawResult.mood.map(m => m.label).join(', ')}`);
+    console.log(`BPM: ${rawResult.bpm.value}`);
+
+    // Format for pg/pgvector insertion
+    const dbMetadataField = metadata.formatForDatabase(rawResult);
+    const dbVectorParam = metadata.formatEmbeddingForDatabase(rawResult.embedding);
+
+    console.log('Formatted pgvector String Prefix:', dbVectorParam.substring(0, 50));
+    
+  } catch (error) {
+    console.error('Metadata extraction failed:', error.message);
+  }
+}
+
+run();
+```
+
+---
+
+## 📄 License
+
+Licensed under the Apache License, Version 2.0 (the "License"). See [LICENSE](../../LICENSE) in the project root for details.
