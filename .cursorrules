@@ -1,0 +1,57 @@
+# ORBIT Repository Cursor Rules & Guidelines
+
+Welcome, LLM / AI Assistant! You are editing the **ORBIT (Origin-Based Identity & Rights Transfer Protocol)** codebase. Use these guidelines to understand the architecture, follow repository patterns, and make high-quality code changes.
+
+---
+
+## 🏗️ Repository Architecture
+
+This is a Node.js monorepo structured using npm workspaces, combined with Python virtual environments for AI/ML inference.
+
+### Workspace Packages (`packages/`)
+Core protocol libraries are decoupled and exposed as standalone NPM packages:
+1. **`@ohnrshyp/dsp`** ([dsp/](packages/dsp)): Traditional CPU-only audio feature extraction (BPM, key, loudness, energy). Relies on Python + librosa/numpy.
+2. **`@ohnrshyp/forensics`** ([forensics/](packages/forensics)): High-fidelity signal anomaly detection (rolloff, group delay phase entropy, vocoder artifact analysis). Relies on Python + librosa/numpy.
+3. **`@ohnrshyp/watermark`** ([watermark/](packages/watermark)): SilentCipher neural watermarking + Spread Spectrum embedders/extractors. Relies on Python + SilentCipher.
+4. **`@ohnrshyp/ledger`** ([ledger/](packages/ledger)): CBOR serialization, Ed25519 cryptography, and PostgreSQL queries (including pgvector similarity).
+5. **`@ohnrshyp/metadata`** ([metadata/](packages/metadata)): Zero-shot AI audio tagger combining wav2vec2 (genre), PANNs (instruments), CLAP (mood/vocals), and audio analysis.
+
+### Platform Server (`src/`)
+The main platform backend is an Express server exposing REST APIs:
+- `src/index.js`: Server entry point.
+- `src/api/`: Express router, handlers (e.g., `register`, `verify`, `transfer`, `accept`), and middlewares.
+- `src/engines/`: Glue code interfacing the packages with the Express API.
+- `src/ml/`: Code interfacing the JS platform with Python ML models.
+
+### Python Environments (`.venv` and `.venv-watermark`)
+Due to library/torch version constraints, two Python virtual environments are maintained:
+1. **Main Venv (`.venv/`)**: Used for CLAP, PANNs, wav2vec2, and general DSP feature extraction.
+2. **Watermark Venv (`.venv-watermark/`)**: Required specifically for SilentCipher watermarking (requires `torch==2.0.0` and `silentcipher`).
+   - The path to this python binary is configured via the `ORBIT_SILENTCIPHER_PYTHON` environment variable.
+
+---
+
+## 🛠️ Code Conventions & Guidelines
+
+### 1. JavaScript Style & Node version
+- Use **Node.js 18+** features.
+- Write standard CommonJS modules (`require` / `module.exports`) to remain compatible with package definitions, unless working on modern ES Modules files.
+- Prefer async/await over raw callbacks or promise chains.
+
+### 2. Standalone Package Decoupling
+- The folders under `packages/` must remain completely standalone.
+- **Never** import server files (`src/...`) into `packages/`.
+- If database/ledger queries are used in a package (like `@ohnrshyp/ledger`), require developers to pass the DB Pool instance dynamically via `setPool(pool)` rather than hardcoding config resolution.
+
+### 3. Audio File Handling & Temp Cleanup
+- Always wrap audio processing steps in `try...finally` blocks to ensure temporary wav/mp3 files are deleted using `fs.unlinkSync()`.
+- Use the `detectAudioExtension(buffer)` helper to correctly extract file types from magic bytes.
+
+### 4. Database Queries
+- Database interaction uses `pg`.
+- For semantic search, use pgvector cosine distance operations (`<=>` or cosine similarity `1 - (vector <=> query)`).
+- Keep SQL queries in `packages/ledger/src/index.js` or `packages/ledger/src/queries.js` structured and parameterized.
+
+### 5. Error Handling
+- Return clear error codes (e.g., `invalid_metadata`, `duplicate_registration`, `unauthorized`) alongside standard HTTP codes.
+- Do not let background process exceptions crash the Node process; capture process output (`stderr`) and reject promises gracefully.

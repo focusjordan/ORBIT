@@ -1,0 +1,160 @@
+# ORBIT
+
+> Origin-Based Identity & Rights Transfer Protocol: A next-generation audio provenance system embedding identity, ownership, and AI-extracted metadata directly into audio signals.
+
+ORBIT combines **audio steganography (neural watermarking)**, **cryptographic signatures (Ed25519)**, and **machine learning feature extraction** to provide append-only chain-of-custody tracking, duplicate detection, and semantic similarity search.
+
+---
+
+## 🏗️ Repository Roadmap
+
+The monorepo contains independent standalone packages under [packages/](packages/) and a centralized platform/API server.
+
+### Standalone Libraries (`packages/`)
+- [@ohnrshyp/dsp](packages/dsp/README.md): CPU-only feature extraction (BPM, key, loudness, energy, duration).
+- [@ohnrshyp/forensics](packages/forensics/README.md): Audio signal anomalies, manipulation detection, and phase analysis.
+- [@ohnrshyp/watermark](packages/watermark/README.md): SilentCipher neural watermarking + Spread Spectrum embedders.
+- [@ohnrshyp/ledger](packages/ledger/README.md): CBOR payload encoding, Ed25519 signatures, and pgvector database matching.
+- [@ohnrshyp/metadata](packages/metadata/README.md): Lazy-loaded AI tagger (wav2vec2 genre, PANNs instruments, CLAP mood/vocals).
+
+### Integration SDK
+- [@ohnrshyp/orbit-sdk](sdk/README.md): Unified Node.js client sdk for communicating with an ORBIT registry server.
+
+---
+
+## 📦 Standalone Packages & Usage
+
+### 1. @ohnrshyp/dsp
+Performs fast traditional signal analysis. Requires Python, `numpy`, and `librosa`.
+- **NPM Package**: `@ohnrshyp/dsp`
+- **PyPI Package**: `orbit-dsp`
+- **Installation**:
+  ```bash
+  npm install @ohnrshyp/dsp
+  ```
+- **Code Usage**:
+  ```javascript
+  const dsp = require('@ohnrshyp/dsp');
+  const result = await dsp.analyze(audioBufferOrPath, { maxLength: 120 });
+  // Returns: { bpm: { value, confidence }, key: { value, confidence }, energy, loudness_db, duration }
+  
+  const danceability = dsp.calculateDanceability(result);
+  ```
+
+### 2. @ohnrshyp/forensics
+Analyzes acoustics for tampering or synthetic alterations. Requires Python, `numpy`, and `librosa`.
+- **NPM Package**: `@ohnrshyp/forensics`
+- **PyPI Package**: `orbit-forensics`
+- **Installation**:
+  ```bash
+  npm install @ohnrshyp/forensics
+  ```
+- **Code Usage**:
+  ```javascript
+  const forensics = require('@ohnrshyp/forensics');
+  const result = await forensics.analyze(audioBufferOrPath);
+  // Returns: { shannon_phase_entropy, rolloff_cutoff_hz, upsampling_artifacts, MS_coherence }
+  ```
+
+### 3. @ohnrshyp/watermark
+Embeds and extracts binary payloads. Requires Python with `silentcipher` (`torch<=2.0.0`) in a watermark-specific virtual environment.
+- **NPM Package**: `@ohnrshyp/watermark`
+- **PyPI Package**: `orbit-watermark`
+- **Installation**:
+  ```bash
+  npm install @ohnrshyp/watermark
+  ```
+- **Code Usage**:
+  ```javascript
+  const watermark = require('@ohnrshyp/watermark');
+  
+  // Embed 5-byte payload hash into audio buffer
+  const { outputPath, sdr } = await watermark.embed(audioBuffer, payloadHash);
+  
+  // Extract payload hash from audio buffer
+  const { detected, payloadHash: extractedHash, confidence } = await watermark.extract(watermarkedAudioBuffer);
+  ```
+
+### 4. @ohnrshyp/ledger
+Manages local state, Merkle proof hashing, Ed25519 signing, and database synchronization.
+- **NPM Package**: `@ohnrshyp/ledger`
+- **Installation**:
+  ```bash
+  npm install @ohnrshyp/ledger
+  ```
+- **Code Usage**:
+  ```javascript
+  const ledger = require('@ohnrshyp/ledger');
+  const { Pool } = require('pg');
+  
+  // Initialize dynamic database connection pool
+  ledger.setPool(new Pool({ connectionString: process.env.DATABASE_URL }));
+  
+  // Verify platform signatures
+  const isValid = ledger.crypto.verifySignature(message, signature, publicKey);
+  ```
+
+### 5. @ohnrshyp/metadata
+Unified AI extraction pipeline. Automatically routes to wav2vec2, PANNs, and CLAP.
+- **NPM Package**: `@ohnrshyp/metadata`
+- **Installation**:
+  ```bash
+  npm install @ohnrshyp/metadata
+  ```
+- **Code Usage**:
+  ```javascript
+  const metadata = require('@ohnrshyp/metadata');
+  
+  const result = await metadata.extractMetadata(audioBuffer, {
+    includeEmbedding: true // generates 2048-dim PANNs audio vector
+  });
+  ```
+
+---
+
+## ⚡ Integration SDK Quickstart
+To connect your platform to an existing ORBIT registry instance, install the official SDK:
+```bash
+npm install @ohnrshyp/orbit-sdk
+```
+
+```javascript
+const { OrbitClient } = require('@ohnrshyp/orbit-sdk');
+const fs = require('fs');
+
+const orbit = new OrbitClient({
+  apiUrl: 'https://orbit.ohnrshyp.com',
+  platformId: 'your-platform-id',
+  privateKey: Buffer.from(process.env.ORBIT_PRIVATE_KEY, 'base64')
+});
+
+// Verify audio
+const verification = await orbit.verify(fs.readFileSync('track.mp3'));
+if (verification.verified) {
+  console.log(`Verified title: ${verification.metadata.title}`);
+}
+```
+
+---
+
+## 🌐 API Routes Reference
+
+### V1 - Provenance and Verification
+- `POST /orbit/v1/register`: Register audio metadata. Returns watermarked audio file + unique payload signature.
+- `POST /orbit/v1/verify`: Identify registration status by extracting watermark and searching Chromaprint database.
+- `POST /orbit/v1/transfer`: Initiate a signed platform-to-platform (B2B) rights transfer.
+- `POST /orbit/v1/accept`: Finalize rights transfer. Re-watermarks the audio file to extend the chain-of-custody.
+- `GET /orbit/v1/chain/:fingerprint`: Get the complete list of registrations and transfers for a track.
+
+### V2 - Neural AI Capabilities
+- `POST /orbit/v2/similar`: Find similar sounding registered tracks using cosine distance on pgvector embeddings.
+- `POST /orbit/v2/analyze`: Perform standalone zero-shot tag classification without registering the file.
+
+---
+
+## 📚 Advanced Guides
+For detailed documentation on specific components:
+- [SDK Quickstart Guide](docs/SDK_QUICKSTART.md): Step-by-step developer tutorial.
+- [Technical FAQ](docs/TECHNICAL_FAQ.md): Common architectural and operational questions.
+- [Content ID Integration](docs/CONTENT_ID_GUIDE.md): Implementing copyright validation and duplicate checks.
+- [Chain of Custody Specification](docs/SOPHON_HANDOFF.md): In-depth details on cryptographic handoffs.

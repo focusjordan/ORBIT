@@ -3,7 +3,7 @@
  * Spread spectrum audio watermarking implementation
  * 
  * This v1 implementation uses spread spectrum and will become a fallback
- * when neural watermarking (SilentCipher/WMCodec) is added in Sessions 22-23.
+ * when neural watermarking (SilentCipher/WMCodec) is added.
  * 
  * Key features:
  * - Loudness-aware embedding (imperceptible in quiet audio)
@@ -290,7 +290,7 @@ class OrbitWatermark {
   }
   
   // ============================================
-  // EXTRACTION METHODS (Session 7)
+  // EXTRACTION METHODS
   // ============================================
   
   /**

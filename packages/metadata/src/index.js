@@ -1,8 +1,6 @@
 /**
  * ORBIT Metadata Extractor
  * 
- * Session 21 - Unified AI metadata extraction pipeline
- * 
  * This module combines all ML/signal analysis capabilities into a single
  * extraction pipeline that auto-populates the `ai_metadata` field during
  * registration.
@@ -26,7 +24,8 @@ const fs = require('fs');
 const clap = require('./clap');
 const panns = require('./panns');
 const genreClassifier = require('./genre-classifier');
-// MERT DISABLED - CC BY-NC 4.0 license incompatible with commercial use
+// MERT integration is disabled by default due to CC BY-NC 4.0 license restrictions.
+// To enable, ensure compliance with commercial licensing terms.
 // const mert = require('./mert');
 const audioAnalysis = require('./audio-analysis');
 const demucs = require('./demucs');
@@ -113,7 +112,7 @@ async function extractMetadata(input, options = {}) {
   const startTime = Date.now();
   
   if (verbose) {
-    console.log('🎵 MetadataExtractor: Starting full extraction...');
+    console.log('[MetadataExtractor] Starting full extraction...');
   }
   
   // Track extraction status for each component
@@ -126,7 +125,7 @@ async function extractMetadata(input, options = {}) {
     embedding: 'pending',
   };
   
-  // Results container
+  // Initialize extraction results structure
   const result = {
     genre: null,
     mood: null,
@@ -160,7 +159,7 @@ async function extractMetadata(input, options = {}) {
   if (cfg.enableGenreClassifier) {
     try {
       if (verbose) {
-        console.log('   → GenreClassifier: Classifying top genres...');
+        console.log('   -> GenreClassifier: Classifying top genres...');
       }
       
       result.genre = await genreClassifier.classify(input, {
@@ -175,7 +174,7 @@ async function extractMetadata(input, options = {}) {
       extractionStatus.genreClassifier = `error: ${error.message}`;
       
       if (verbose) {
-        console.log(`   ✗ GenreClassifier: Failed - ${error.message}`);
+        console.log(`   [FAIL] GenreClassifier: Failed - ${error.message}`);
       }
     }
   } else {
@@ -188,7 +187,7 @@ async function extractMetadata(input, options = {}) {
   if (cfg.enablePanns) {
     try {
       if (verbose) {
-        console.log('   → PANNs: Extracting music tags...');
+        console.log('   -> PANNs: Extracting music tags...');
       }
       
       const tags = await panns.tag(input, {
@@ -217,14 +216,14 @@ async function extractMetadata(input, options = {}) {
       extractionStatus.panns = 'success';
       
       if (verbose) {
-        console.log(`   ✓ PANNs: Complete (${tags.length} tags, ${instrumentTags.length} instruments)`);
+        console.log(`   [OK] PANNs: Complete (${tags.length} tags, ${instrumentTags.length} instruments)`);
       }
       
     } catch (error) {
       extractionStatus.panns = `error: ${error.message}`;
       
       if (verbose) {
-        console.log(`   ✗ PANNs: Failed - ${error.message}`);
+        console.log(`   [FAIL] PANNs: Failed - ${error.message}`);
       }
     }
   } else {
@@ -237,7 +236,7 @@ async function extractMetadata(input, options = {}) {
   if (cfg.enableClap) {
     try {
       if (verbose) {
-        console.log('   → CLAP: Extracting mood/vocals (+ fallbacks)...');
+        console.log('   -> CLAP: Extracting mood/vocals (+ fallbacks)...');
       }
       
       result.mood = await clap.classifyMood(input, {
@@ -280,14 +279,14 @@ async function extractMetadata(input, options = {}) {
           shouldUseClapGenreFallback ? 'genre fallback used' : 'genre from wav2vec2',
           shouldUseClapInstrumentFallback ? 'instruments fallback used' : 'instruments from PANNs',
         ].join(', ');
-        console.log(`   ✓ CLAP: Complete (${fallbackInfo})`);
+        console.log(`   [OK] CLAP: Complete (${fallbackInfo})`);
       }
       
     } catch (error) {
       extractionStatus.clap = `error: ${error.message}`;
       
       if (verbose) {
-        console.log(`   ✗ CLAP: Failed - ${error.message}`);
+        console.log(`   [FAIL] CLAP: Failed - ${error.message}`);
       }
       
       if (cfg.failOnError) {
@@ -312,7 +311,7 @@ async function extractMetadata(input, options = {}) {
     } else if (cfg.enableDemucs) {
       try {
         if (verbose) {
-          console.log('   → Demucs: Separating stems for stem-aware analysis...');
+          console.log('   -> Demucs: Separating stems for stem-aware analysis...');
         }
         demucsResult = await demucs.separate(input, { verbose: false });
         stemsDir = demucsResult.outputDir;
@@ -321,7 +320,7 @@ async function extractMetadata(input, options = {}) {
       } catch (error) {
         extractionStatus.demucs = `error: ${error.message}`;
         if (verbose) {
-          console.log(`   ✗ Demucs: Failed - ${error.message}`);
+          console.log(`   [FAIL] Demucs: Failed - ${error.message}`);
         }
       }
     } else {
@@ -337,7 +336,7 @@ async function extractMetadata(input, options = {}) {
   if (cfg.enableAudioAnalysis) {
     try {
       if (verbose) {
-        console.log('   → AudioAnalysis: Extracting BPM, key, energy...');
+        console.log('   -> AudioAnalysis: Extracting BPM, key, energy...');
       }
       
       const analysisResult = await audioAnalysis.analyze(input, {
@@ -373,14 +372,14 @@ async function extractMetadata(input, options = {}) {
       extractionStatus.audioAnalysis = 'success';
       
       if (verbose) {
-        console.log(`   ✓ AudioAnalysis: Complete (${analysisResult.processingTimeMs}ms)`);
+        console.log(`   [OK] AudioAnalysis: Complete (${analysisResult.processingTimeMs}ms)`);
       }
       
     } catch (error) {
       extractionStatus.audioAnalysis = `error: ${error.message}`;
       
       if (verbose) {
-        console.log(`   ✗ AudioAnalysis: Failed - ${error.message}`);
+        console.log(`   [FAIL] AudioAnalysis: Failed - ${error.message}`);
       }
       
       if (cfg.failOnError) {
@@ -403,7 +402,7 @@ async function extractMetadata(input, options = {}) {
   if (cfg.enablePannsEmbedding && cfg.enablePanns) {
     try {
       if (verbose) {
-        console.log('   → PANNs: Generating audio embedding...');
+        console.log('   -> PANNs: Generating audio embedding...');
       }
       
       const embeddingResult = await panns.getEmbedding(input, {
@@ -415,14 +414,14 @@ async function extractMetadata(input, options = {}) {
       extractionStatus.embedding = 'success';
       
       if (verbose) {
-        console.log(`   ✓ PANNs Embedding: Complete (${audioEmbedding.length}-dim)`);
+        console.log(`   [OK] PANNs Embedding: Complete (${audioEmbedding.length}-dim)`);
       }
       
     } catch (error) {
       extractionStatus.embedding = `error: ${error.message}`;
       
       if (verbose) {
-        console.log(`   ✗ PANNs Embedding: Failed - ${error.message}`);
+        console.log(`   [FAIL] PANNs Embedding: Failed - ${error.message}`);
       }
       
       if (cfg.failOnError) {
@@ -448,7 +447,7 @@ async function extractMetadata(input, options = {}) {
   }
   
   if (verbose) {
-    console.log(`✅ MetadataExtractor: Complete in ${(totalTime / 1000).toFixed(1)}s`);
+    console.log(`[MetadataExtractor] Complete in ${(totalTime / 1000).toFixed(1)}s`);
     console.log(
       `   Status: CLAP=${extractionStatus.clap}, PANNs=${extractionStatus.panns}, `
       + `GenreClassifier=${extractionStatus.genreClassifier}, `

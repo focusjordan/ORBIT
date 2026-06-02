@@ -13,6 +13,39 @@ const fs = require('fs');
 const os = require('os');
 
 /**
+ * Resolve python command path for SilentCipher by traversing parent directories to find virtual environments.
+ */
+function resolvePythonCommand() {
+  if (process.env.ORBIT_SILENTCIPHER_PYTHON) {
+    return process.env.ORBIT_SILENTCIPHER_PYTHON;
+  }
+  let currentDir = __dirname;
+  for (let i = 0; i < 4; i++) {
+    const watermarkVenv = path.join(currentDir, '.venv-watermark/bin/python3');
+    if (fs.existsSync(watermarkVenv)) {
+      return watermarkVenv;
+    }
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) break;
+    currentDir = parentDir;
+  }
+  if (process.env.ORBIT_PYTHON_PATH) {
+    return process.env.ORBIT_PYTHON_PATH;
+  }
+  currentDir = __dirname;
+  for (let i = 0; i < 4; i++) {
+    const standardVenv = path.join(currentDir, '.venv/bin/python3');
+    if (fs.existsSync(standardVenv)) {
+      return standardVenv;
+    }
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) break;
+    currentDir = parentDir;
+  }
+  return 'python3';
+}
+
+/**
  * SilentCipher Configuration
  */
 const SILENTCIPHER_CONFIG = {
@@ -26,17 +59,7 @@ const SILENTCIPHER_CONFIG = {
   sampleRate: 44100,
   
   // Python command - SilentCipher needs separate venv due to torch<=2.0.0 requirement
-  pythonCommand: process.env.ORBIT_SILENTCIPHER_PYTHON || 
-    (fs.existsSync(path.join(__dirname, '../../.venv-watermark/bin/python3')) 
-      ? path.join(__dirname, '../../.venv-watermark/bin/python3')
-      : fs.existsSync(path.join(__dirname, '../../../.venv-watermark/bin/python3')) // Root level when in node_modules
-        ? path.join(__dirname, '../../../.venv-watermark/bin/python3')
-        : process.env.ORBIT_PYTHON_PATH || 
-          (fs.existsSync(path.join(__dirname, '../../.venv/bin/python3')) 
-            ? path.join(__dirname, '../../.venv/bin/python3')
-            : fs.existsSync(path.join(__dirname, '../../../.venv/bin/python3'))
-              ? path.join(__dirname, '../../../.venv/bin/python3')
-              : 'python3')),
+  pythonCommand: resolvePythonCommand(),
   
   // Timeout for operations (ms)
   embedTimeout: 180000,  // 3 minutes (model download + embed)
@@ -201,7 +224,7 @@ async function embed(input, payloadHash, options = {}) {
   
   try {
     if (verbose) {
-      console.log(`🔐 SilentCipher: Embedding watermark into ${audioPath}`);
+      console.log(`[SilentCipher] Embedding watermark into ${audioPath}`);
       console.log(`   Message: [${messageStr}]`);
     }
     
@@ -246,7 +269,7 @@ async function embed(input, payloadHash, options = {}) {
         try {
           const result = JSON.parse(stdout);
           if (verbose) {
-            console.log(`✅ SilentCipher: Embedded in ${(elapsed / 1000).toFixed(1)}s (SDR: ${result.sdr?.toFixed(1)}dB)`);
+            console.log(`[SilentCipher] Embedded in ${(elapsed / 1000).toFixed(1)}s (SDR: ${result.sdr?.toFixed(1)}dB)`);
           }
           
           resolve({
@@ -310,7 +333,7 @@ async function extract(input, options = {}) {
   
   try {
     if (verbose) {
-      console.log(`🔍 SilentCipher: Extracting watermark from ${audioPath}`);
+      console.log(`[SilentCipher] Extracting watermark from ${audioPath}`);
     }
     
     return await new Promise((resolve, reject) => {
@@ -367,9 +390,9 @@ async function extract(input, options = {}) {
           
           if (verbose) {
             if (detected) {
-              console.log(`✅ SilentCipher: Detected watermark (confidence: ${(result.confidence * 100).toFixed(1)}%)`);
+              console.log(`[SilentCipher] Detected watermark (confidence: ${(result.confidence * 100).toFixed(1)}%)`);
             } else {
-              console.log(`❌ SilentCipher: No watermark detected`);
+              console.log(`[SilentCipher] No watermark detected`);
             }
           }
           

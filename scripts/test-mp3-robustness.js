@@ -2,7 +2,7 @@
 /**
  * ORBIT SilentCipher MP3 Robustness Test
  * 
- * Session 22 - Tests watermark survival through MP3 compression
+ * Tests watermark survival through MP3 compression
  * 
  * This script validates that neural watermarks survive MP3 compression:
  * 1. Embed watermark into WAV audio
@@ -64,42 +64,42 @@ function convertToMp3(inputPath, outputPath, bitrate = '128k') {
  */
 async function runRobustnessTest() {
   console.log('='.repeat(60));
-  console.log('🧪 ORBIT SilentCipher MP3 Robustness Test');
+  console.log('[TEST] ORBIT SilentCipher MP3 Robustness Test');
   console.log('='.repeat(60));
   console.log();
 
   // Check prerequisites
-  console.log('📋 Checking prerequisites...');
+  console.log('[CHECK] Checking prerequisites...');
   
   // Check ffmpeg
   if (!checkFfmpeg()) {
-    console.error('❌ ffmpeg not found. Install with: brew install ffmpeg');
+    console.error('[FAIL] ffmpeg not found. Install with: brew install ffmpeg');
     process.exit(1);
   }
-  console.log('   ✅ ffmpeg available');
+  console.log('   ffmpeg available: OK');
 
   // Check SilentCipher
   const envCheck = await silentcipher.checkPythonEnvironment();
   if (!envCheck.available) {
-    console.error(`❌ SilentCipher not available: ${envCheck.message}`);
+    console.error(`[FAIL] SilentCipher not available: ${envCheck.message}`);
     console.error('   Install in .venv-watermark:');
     console.error('   source .venv-watermark/bin/activate && pip install silentcipher librosa soundfile numpy');
     process.exit(1);
   }
-  console.log('   ✅ SilentCipher available');
-
+  console.log('   SilentCipher available: OK');
+ 
   // Check test audio
   if (!fs.existsSync(TEST_AUDIO_PATH)) {
-    console.error(`❌ Test audio not found: ${TEST_AUDIO_PATH}`);
+    console.error(`[FAIL] Test audio not found: ${TEST_AUDIO_PATH}`);
     process.exit(1);
   }
-  console.log(`   ✅ Test audio: ${path.basename(TEST_AUDIO_PATH)}`);
+  console.log(`   Test audio: ${path.basename(TEST_AUDIO_PATH)}: OK`);
   console.log();
 
   // Generate test payload
   const testPayloadHash = crypto.createHash('sha256').update('ORBIT MP3 Robustness Test').digest();
   const expectedMessage = silentcipher.hashToMessage(testPayloadHash);
-  console.log(`📝 Test payload (first 5 bytes): [${expectedMessage.join(', ')}]`);
+  console.log(`[INFO] Test payload (first 5 bytes): [${expectedMessage.join(', ')}]`);
   console.log();
 
   // Define temp file paths
@@ -111,7 +111,7 @@ async function runRobustnessTest() {
     // ========================================
     // STEP 1: Embed watermark into WAV
     // ========================================
-    console.log('🔐 Step 1: Embedding watermark into WAV...');
+    console.log('[EMBED] Step 1: Embedding watermark into WAV...');
     const embedStart = Date.now();
     
     const embedResult = await silentcipher.embed(TEST_AUDIO_PATH, testPayloadHash, {
@@ -120,29 +120,29 @@ async function runRobustnessTest() {
     });
     
     const embedTime = Date.now() - embedStart;
-    console.log(`   ✅ Embedded in ${(embedTime / 1000).toFixed(1)}s`);
-    console.log(`   📊 SDR: ${embedResult.sdr?.toFixed(1)}dB (higher = better quality)`);
-    console.log(`   💾 Output: ${path.basename(watermarkedWavPath)}`);
+    console.log(`   Embedded in ${(embedTime / 1000).toFixed(1)}s: OK`);
+    console.log(`   [INFO] SDR: ${embedResult.sdr?.toFixed(1)}dB (higher = better quality)`);
+    console.log(`   [INFO] Output: ${path.basename(watermarkedWavPath)}`);
     console.log();
 
     // ========================================
     // STEP 2: Compress to MP3 128kbps
     // ========================================
-    console.log('📦 Step 2: Compressing to MP3 128kbps...');
+    console.log('[COMPRESS] Step 2: Compressing to MP3 128kbps...');
     const compressStart = Date.now();
     
     convertToMp3(watermarkedWavPath, compressedMp3Path, '128k');
     
     const compressTime = Date.now() - compressStart;
     const mp3Size = fs.statSync(compressedMp3Path).size;
-    console.log(`   ✅ Compressed in ${(compressTime / 1000).toFixed(1)}s`);
-    console.log(`   📊 MP3 size: ${(mp3Size / 1024).toFixed(1)}KB`);
+    console.log(`   Compressed in ${(compressTime / 1000).toFixed(1)}s: OK`);
+    console.log(`   [INFO] MP3 size: ${(mp3Size / 1024).toFixed(1)}KB`);
     console.log();
 
     // ========================================
     // STEP 3: Extract watermark from MP3
     // ========================================
-    console.log('🔍 Step 3: Extracting watermark from MP3...');
+    console.log('[EXTRACT] Step 3: Extracting watermark from MP3...');
     const extractStart = Date.now();
     
     const extractResult = await silentcipher.extract(compressedMp3Path, {
@@ -151,19 +151,19 @@ async function runRobustnessTest() {
     });
     
     const extractTime = Date.now() - extractStart;
-    console.log(`   ⏱️  Extracted in ${(extractTime / 1000).toFixed(1)}s`);
-    console.log(`   📊 Confidence: ${(extractResult.confidence * 100).toFixed(1)}%`);
-    console.log(`   📊 Detected: ${extractResult.detected ? 'YES' : 'NO'}`);
+    console.log(`   [INFO] Extracted in ${(extractTime / 1000).toFixed(1)}s`);
+    console.log(`   [INFO] Confidence: ${(extractResult.confidence * 100).toFixed(1)}%`);
+    console.log(`   [INFO] Detected: ${extractResult.detected ? 'YES' : 'NO'}`);
     
     if (extractResult.message) {
-      console.log(`   📝 Extracted message: [${extractResult.message.join(', ')}]`);
+      console.log(`   [INFO] Extracted message: [${extractResult.message.join(', ')}]`);
     }
     console.log();
 
     // ========================================
     // STEP 4: Verify payload matches
     // ========================================
-    console.log('✅ Step 4: Verifying payload...');
+    console.log('[VERIFY] Step 4: Verifying payload...');
     
     let success = false;
     
@@ -171,10 +171,10 @@ async function runRobustnessTest() {
       const matches = extractResult.message.every((val, idx) => val === expectedMessage[idx]);
       
       if (matches) {
-        console.log('   ✅ PAYLOAD MATCHES EXACTLY!');
+        console.log('   PAYLOAD MATCHES EXACTLY: PASS');
         success = true;
       } else {
-        console.log('   ⚠️  Payload mismatch:');
+        console.log('   [WARN] Payload mismatch:');
         console.log(`      Expected: [${expectedMessage.join(', ')}]`);
         console.log(`      Got:      [${extractResult.message.join(', ')}]`);
         
@@ -184,7 +184,7 @@ async function runRobustnessTest() {
         console.log(`      Matching bytes: ${matchCount}/5`);
       }
     } else {
-      console.log('   ❌ No watermark detected after MP3 compression');
+      console.log('   [FAIL] No watermark detected after MP3 compression');
     }
     console.log();
 
@@ -192,23 +192,23 @@ async function runRobustnessTest() {
     // SUMMARY
     // ========================================
     console.log('='.repeat(60));
-    console.log('📊 TEST SUMMARY');
+    console.log('[SUMMARY] TEST SUMMARY');
     console.log('='.repeat(60));
-    console.log(`   Watermark Detection: ${extractResult.detected ? '✅ YES' : '❌ NO'}`);
+    console.log(`   Watermark Detection: ${extractResult.detected ? 'YES' : 'NO'}`);
     console.log(`   Confidence: ${(extractResult.confidence * 100).toFixed(1)}%`);
-    console.log(`   Payload Match: ${success ? '✅ EXACT' : '❌ MISMATCH'}`);
+    console.log(`   Payload Match: ${success ? 'EXACT' : 'MISMATCH'}`);
     console.log(`   SDR (Quality): ${embedResult.sdr?.toFixed(1)}dB`);
     console.log(`   Total Time: ${((Date.now() - embedStart) / 1000).toFixed(1)}s`);
     console.log();
     
     if (success && extractResult.confidence >= 0.5) {
-      console.log('🎉 MP3 ROBUSTNESS TEST PASSED!');
+      console.log('[PASS] MP3 ROBUSTNESS TEST PASSED!');
       console.log('   Neural watermark survives 128kbps MP3 compression.');
     } else if (extractResult.detected) {
-      console.log('⚠️  MP3 ROBUSTNESS TEST PARTIAL PASS');
+      console.log('[WARN] MP3 ROBUSTNESS TEST PARTIAL PASS');
       console.log('   Watermark detected but payload may not match exactly.');
     } else {
-      console.log('❌ MP3 ROBUSTNESS TEST FAILED');
+      console.log('[FAIL] MP3 ROBUSTNESS TEST FAILED');
       console.log('   Watermark did not survive MP3 compression.');
     }
     console.log();
@@ -220,7 +220,7 @@ async function runRobustnessTest() {
     process.exit(success ? 0 : 1);
 
   } catch (error) {
-    console.error('❌ Test failed with error:', error.message);
+    console.error('[FAIL] Test failed with error:', error.message);
     console.error(error.stack);
     
     // Cleanup on error

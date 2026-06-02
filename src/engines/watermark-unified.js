@@ -1,7 +1,7 @@
 /**
  * ORBIT Unified Watermark Engine
  * 
- * Session 22 - Unified interface for neural (SilentCipher) and spread spectrum watermarking
+ * Unified interface for neural (SilentCipher) and spread spectrum watermarking
  * 
  * This module provides a single interface that:
  * 1. Tries SilentCipher (neural) first for superior robustness
@@ -168,7 +168,7 @@ class UnifiedWatermark {
           }
           // Auto mode: fall through to spread spectrum
           if (verbose) {
-            console.log(`⚠️  SilentCipher not available, falling back to spread spectrum`);
+            console.log(`[WARN] SilentCipher not available, falling back to spread spectrum`);
           }
         } else {
           // SilentCipher embeds a 5-byte hash prefix (40 bits)
@@ -208,7 +208,7 @@ class UnifiedWatermark {
         
         // Auto mode: log and fall through to spread spectrum
         if (verbose) {
-          console.log(`⚠️  SilentCipher embed failed: ${error.message}`);
+          console.log(`[WARN] SilentCipher embed failed: ${error.message}`);
           console.log(`   Falling back to spread spectrum...`);
         }
         
@@ -222,7 +222,7 @@ class UnifiedWatermark {
     // Try spread spectrum (fallback or primary based on config)
     if (shouldTrySpread) {
       try {
-        // Session 25b: Load audio WITH stereo preservation
+        // Load audio WITH stereo preservation
         const audioData = await AudioUtils.decodeAudioToSamples(audioBuffer, { preserveStereo: true });
         const { channels, channelCount } = audioData;
         
@@ -230,7 +230,7 @@ class UnifiedWatermark {
           console.log(`   Audio format: ${channelCount} channel(s) - ${channelCount === 2 ? 'STEREO' : 'MONO'}`);
         }
         
-        // Session 25b: Embed watermark on ALL channels (L+R for stereo)
+        // Embed watermark on ALL channels (L+R for stereo)
         // This ensures watermark survives even if one channel is isolated
         const watermarkedChannels = [];
         for (let ch = 0; ch < channelCount; ch++) {
@@ -239,7 +239,7 @@ class UnifiedWatermark {
           watermarkedChannels.push(watermarkedChannel);
         }
         
-        // Session 25b: Encode back to WAV preserving original channel count
+        // Encode back to WAV preserving original channel count
         // CRITICAL: stereo in = stereo out, mono in = mono out
         const watermarkedAudio = await AudioUtils.encodeSamplesToWav(watermarkedChannels, 44100);
         
@@ -248,7 +248,7 @@ class UnifiedWatermark {
           watermarkedAudio,
           method: 'spread',
           watermarkPayload,
-          channelCount,  // Session 25b: Report preserved channel count
+          channelCount,  // Report preserved channel count
           fallbackUsed: shouldTryNeural, // True if we tried neural first
           fallbackReason: shouldTryNeural ? 'neural_failed' : undefined,
           processingTimeMs: Date.now() - startTime
@@ -326,7 +326,7 @@ class UnifiedWatermark {
         }
         
         if (verbose) {
-          console.log(`⚠️  SilentCipher extract failed: ${error.message}`);
+          console.log(`[WARN] SilentCipher extract failed: ${error.message}`);
         }
       }
     }
@@ -334,14 +334,14 @@ class UnifiedWatermark {
     // Try spread spectrum (fallback or primary based on config)
     if (shouldTrySpread) {
       try {
-        // Session 25b: Load audio with stereo preservation
+        // Load audio with stereo preservation
         const audioData = await AudioUtils.decodeAudioToSamples(audioBuffer, { preserveStereo: true });
         const { channels, channelCount } = audioData;
         
         // Debug: Log extraction attempt details
         console.log(`   [WM Extract] Channels: ${channelCount}, Samples/ch: ${channels?.[0]?.length || 'N/A'}`);
         
-        // Session 25b: Try extraction from all channels, use best result
+        // Try extraction from all channels, use best result
         // For stereo, the watermark should be on both channels
         let bestResult = null;
         
@@ -380,7 +380,7 @@ class UnifiedWatermark {
         }
       } catch (error) {
         if (verbose) {
-          console.log(`⚠️  Spread spectrum extract failed: ${error.message}`);
+          console.log(`[WARN] Spread spectrum extract failed: ${error.message}`);
         }
       }
     }

@@ -2,6 +2,8 @@
 
 **Origin-Based Identity & Rights Transfer Protocol**
 
+> 🤖 **LLM & Agent Friendly Repo**: We maintain a machine-readable directory and integration guide of this project in [llms.txt](llms.txt) to help AI assistants install our packages and leverage our systems easily.
+
 A next-generation audio provenance system that embeds identity, ownership, and AI-extracted metadata directly into audio files — enabling cryptographic proof of origin across any platform.
 
 ---

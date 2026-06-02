@@ -2,7 +2,7 @@
 """
 ORBIT SilentCipher Watermarking Script
 
-Session 22 - Neural audio watermarking with SilentCipher (Sony AI)
+Neural audio watermarking with SilentCipher (Sony AI)
 
 This script provides embed and extract functionality for neural watermarking
 using the SilentCipher model from Sony AI.

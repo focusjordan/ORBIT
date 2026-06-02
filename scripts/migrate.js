@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS orbit_api_usage (
 
 CREATE INDEX IF NOT EXISTS idx_orbit_usage_platform_month ON orbit_api_usage(platform_id, timestamp);
 
--- Vector indexes for similarity search (Session 24)
+-- Vector indexes for similarity search
 -- Using IVFFlat for approximate nearest neighbor search
 -- Note: For best performance, rebuild after loading initial data:
 --   REINDEX INDEX idx_orbit_mert_embedding;

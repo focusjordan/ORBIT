@@ -4,11 +4,6 @@
  * Main entry point for the ORBIT API server.
  * 
  * The audio file IS the message.
- * 
- * Session 32: Security Hardening
- * - helmet.js for security headers
- * - CORS for landing page access
- * - Rate limiting for GPU-intensive endpoints
  */
 
 const express = require('express');
@@ -23,7 +18,7 @@ const orbitV2Routes = require('./api/v2/routes');
 const app = express();
 
 // ============================================================================
-// Security Middleware (Session 32)
+// Security Middleware
 // ============================================================================
 
 // Helmet: Standard security headers (CSP, HSTS, X-Frame-Options, etc.)
@@ -151,13 +146,13 @@ app.get('/health', (req, res) => {
 app.use('/orbit/v1', orbitRoutes);
 
 // ============================================================================
-// ORBIT API v2 Routes (Session 26)
+// ORBIT API v2 Routes
 // ============================================================================
 
 app.use('/orbit/v2', orbitV2Routes);
 
 // ============================================================================
-// Error Handling (Session 32: Enhanced security)
+// Error Handling
 // ============================================================================
 
 // 404 handler
@@ -170,7 +165,7 @@ app.use((req, res) => {
 });
 
 // Global error handler
-// Session 32: Sanitize error messages in production to prevent information disclosure
+// Sanitize error messages in production to prevent information disclosure
 app.use((err, req, res, next) => {
   // Always log the full error server-side
   console.error('Unhandled error:', err);
@@ -202,7 +197,7 @@ function startServer() {
   
   app.listen(port, () => {
     console.log('');
-    console.log('🛰️  ORBIT - Origin-Based Identity & Rights Transfer Protocol');
+    console.log('ORBIT - Origin-Based Identity & Rights Transfer Protocol');
     console.log('   ═══════════════════════════════════════════════════════');
     console.log(`   Version:     ${config.orbit.version}`);
     console.log(`   Environment: ${env}`);

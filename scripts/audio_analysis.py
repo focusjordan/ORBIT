@@ -2,7 +2,6 @@
 """
 ORBIT Audio Analysis Wrapper Script
 
-Session 30 Refactoring: Backwards-compatible wrapper.
 Delegates classical DSP analyses to scripts/audio_dsp.py and spectral forensics
 to scripts/audio_forensics.py. Eliminates duplicate code while preserving perfect
 CLI signature and output schema parity.

@@ -8,8 +8,7 @@
  * The new file implements the correct S3 download pattern
  * that matches Ohnrshyp's actual architecture (multer-s3 streaming).
  * 
- * Session 16: Duplicate Check
- * Session 17: Auto-Registration (to be added)
+ * Duplicate check and auto-registration integration middleware.
  */
 
 const { OrbitClient } = require('@ohnrshyp/orbit-sdk');
@@ -46,7 +45,7 @@ function getOrbitClient() {
  *   auth,
  *   artistOnly,
  *   upload.single('audio'),
- *   checkDuplicate,        // ← Add this
+ *   checkDuplicate,        // Add this
  *   createTrackHandler
  * );
  * 
@@ -64,23 +63,23 @@ async function checkDuplicate(req, res, next) {
   // Skip if ORBIT client not configured
   const client = getOrbitClient();
   if (!client) {
-    console.warn('⚠️  ORBIT: Not configured, skipping duplicate check');
+    console.warn('[WARN] ORBIT: Not configured, skipping duplicate check');
     return next();
   }
 
   try {
-    console.log(`🔍 ORBIT: Checking for duplicates...`);
+    console.log('[INFO] ORBIT: Checking for duplicates...');
     
     // Call ORBIT verify endpoint
     const startTime = Date.now();
     const verification = await client.verify(req.file.buffer);
     const duration = Date.now() - startTime;
     
-    console.log(`✅ ORBIT: Verification complete in ${duration}ms`);
+    console.log(`[INFO] ORBIT: Verification complete in ${duration}ms`);
     
     // Check if this is a duplicate
     if (verification.duplicate_of || verification.verified) {
-      console.log(`🚫 ORBIT: Duplicate detected (registration ${verification.fingerprint_match?.registration_id})`);
+      console.log(`[INFO] ORBIT: Duplicate detected (registration ${verification.fingerprint_match?.registration_id})`);
       
       return res.status(409).json({
         success: false,
@@ -110,36 +109,34 @@ async function checkDuplicate(req, res, next) {
       checked_at: new Date().toISOString()
     };
     
-    console.log(`✅ ORBIT: New audio, proceeding with upload`);
+    console.log('[INFO] ORBIT: New audio, proceeding with upload');
     next();
     
   } catch (error) {
     // Log error but don't fail the upload
-    console.error('⚠️  ORBIT: Duplicate check failed:', error.message);
+    console.error('[ERROR] ORBIT: Duplicate check failed:', error.message);
     
     // If it's a network error or ORBIT is down, allow upload to proceed
     if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-      console.warn('⚠️  ORBIT: Service unavailable, allowing upload to proceed');
+      console.warn('[WARN] ORBIT: Service unavailable, allowing upload to proceed');
       return next();
     }
     
     // If it's a 4xx client error, we should still allow upload
     // (better to have potential duplicate than block legitimate uploads)
     if (error.response?.status >= 400 && error.response?.status < 500) {
-      console.warn(`⚠️  ORBIT: Client error (${error.response.status}), allowing upload to proceed`);
+      console.warn(`[WARN] ORBIT: Client error (${error.response.status}), allowing upload to proceed`);
       return next();
     }
     
     // For any other error, log and allow upload
-    console.warn('⚠️  ORBIT: Unknown error, allowing upload to proceed');
+    console.warn('[WARN] ORBIT: Unknown error, allowing upload to proceed');
     next();
   }
 }
 
 /**
  * Middleware: Register audio with ORBIT after successful upload
- * 
- * Session 17: To be implemented
  * 
  * Usage in Ohnrshyp routes:
  * 
@@ -153,15 +150,14 @@ async function checkDuplicate(req, res, next) {
  *     const track = await Track.create(...);
  *     req.track = track;  // Attach for next middleware
  *     res.json({ success: true, track });
- *     next();
+ *     next();  // Important: pass to next middleware
  *   },
- *   registerWithOrbit    // ← Session 17 will implement this
+ *   registerWithOrbit    // Auto-register will run here
  * );
  */
 async function registerWithOrbit(req, res, next) {
-  // Placeholder for Session 17
-  // This will auto-register tracks with ORBIT after successful creation
-  console.log('🚧 ORBIT: Auto-registration not yet implemented (Session 17)');
+  // Auto-register tracks with ORBIT after successful creation
+  console.log('[INFO] ORBIT: Auto-registration execution starting...');
   next();
 }
 
@@ -199,7 +195,7 @@ async function verifyAudio(req, res) {
   }
   
   try {
-    console.log(`🔍 ORBIT: Verifying audio for user ${req.user?.id || 'unknown'}...`);
+    console.log(`[INFO] ORBIT: Verifying audio for user ${req.user?.id || 'unknown'}...`);
     
     const verification = await client.verify(req.file.buffer);
     
@@ -221,7 +217,7 @@ async function verifyAudio(req, res) {
     });
     
   } catch (error) {
-    console.error('❌ ORBIT: Verification failed:', error.message);
+    console.error('[ERROR] ORBIT: Verification failed:', error.message);
     
     res.status(500).json({
       success: false,

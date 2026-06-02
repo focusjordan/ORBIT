@@ -1,7 +1,7 @@
 /**
  * ORBIT Content Relationship Detection
  * 
- * Session 24 - Detects covers, remixes, and similar works using CLAP embeddings
+ * Detects covers, remixes, and similar works using CLAP embeddings
  * 
  * This module analyzes content relationships between audio files by:
  * 1. Computing CLAP embeddings (512-dim, Apache 2.0 licensed)
@@ -174,7 +174,7 @@ async function findRelatedContent(input, options = {}) {
   const startTime = Date.now();
   
   if (verbose) {
-    console.log(`📊 ContentAnalysis: Starting content relationship detection...`);
+    console.log(`[ContentAnalysis] Starting content relationship detection...`);
   }
   
   // Step 1: Extract CLAP embedding from input audio
@@ -195,7 +195,7 @@ async function findRelatedContent(input, options = {}) {
   const { embedding } = embeddingResult;
   
   if (verbose) {
-    console.log(`📊 ContentAnalysis: Embedding extracted (${embedding.length}-dim)`);
+    console.log(`[ContentAnalysis] Embedding extracted (${embedding.length}-dim)`);
   }
   
   // Step 2: Convert embedding to PostgreSQL format
@@ -211,7 +211,7 @@ async function findRelatedContent(input, options = {}) {
     });
     
     if (verbose) {
-      console.log(`📊 ContentAnalysis: Found ${similarResults.length} similar registrations`);
+      console.log(`[ContentAnalysis] Found ${similarResults.length} similar registrations`);
     }
   } catch (error) {
     console.error(`[ContentAnalysis] Database query failed: ${error.message}`);
@@ -258,7 +258,7 @@ async function findRelatedContent(input, options = {}) {
   const processingTime = Date.now() - startTime;
   
   if (verbose) {
-    console.log(`📊 ContentAnalysis: Complete in ${processingTime}ms, is_derivative=${isDerivative}`);
+    console.log(`[ContentAnalysis] Complete in ${processingTime}ms, is_derivative=${isDerivative}`);
   }
   
   return {
@@ -286,7 +286,7 @@ async function compareAudioFiles(audio1, audio2, options = {}) {
   const startTime = Date.now();
   
   if (verbose) {
-    console.log(`📊 ContentAnalysis: Comparing two audio files...`);
+    console.log(`[ContentAnalysis] Comparing two audio files...`);
   }
   
   // Extract embeddings for both files
@@ -331,7 +331,7 @@ async function findRelatedFromEmbedding(embedding, options = {}) {
   const startTime = Date.now();
   
   if (verbose) {
-    console.log(`📊 ContentAnalysis: Finding related content from pre-computed embedding...`);
+    console.log(`[ContentAnalysis] Finding related content from pre-computed embedding...`);
   }
   
   // Convert embedding to PostgreSQL format

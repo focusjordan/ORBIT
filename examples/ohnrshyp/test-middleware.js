@@ -61,7 +61,7 @@ const mockCreateTrack = async (req, res, next) => {
 app.post('/api/tracks',
   mockAuth,
   upload.single('audio'),
-  checkDuplicate,           // Session 16 middleware
+  checkDuplicate,           // Duplicate check middleware
   mockCreateTrack
 );
 
@@ -82,17 +82,17 @@ app.get('/health', (req, res) => {
 // Start server
 const PORT = process.env.TEST_PORT || 3001;
 const server = app.listen(PORT, () => {
-  console.log(`\n🧪 Test server running on http://localhost:${PORT}\n`);
+  console.log(`\n[INFO] Test server running on http://localhost:${PORT}\n`);
   
   // Check ORBIT configuration
   const client = getOrbitClient();
   if (!client) {
-    console.warn('⚠️  ORBIT not configured. Set these environment variables:');
+    console.warn('[WARN] ORBIT not configured. Set these environment variables:');
     console.warn('   ORBIT_API_URL');
     console.warn('   ORBIT_PLATFORM_ID');
     console.warn('   ORBIT_PRIVATE_KEY\n');
   } else {
-    console.log('✅ ORBIT client configured\n');
+    console.log('[INFO] ORBIT client configured\n');
   }
   
   runTests();
@@ -100,12 +100,12 @@ const server = app.listen(PORT, () => {
 
 // Automated tests
 async function runTests() {
-  console.log('📋 Running automated tests...\n');
+  console.log('[INFO] Running automated tests...\n');
   
   const testAudioPath = path.join(__dirname, '../../tests/fixtures/test-audio.mp3');
   
   if (!fs.existsSync(testAudioPath)) {
-    console.warn('⚠️  Test audio not found at:', testAudioPath);
+    console.warn('[WARN] Test audio not found at:', testAudioPath);
     console.log('   Skipping automated tests\n');
     printManualTests();
     return;
@@ -126,10 +126,10 @@ async function runTests() {
     });
     
     if (response1.status === 200) {
-      console.log('   ✅ First upload succeeded\n');
+      console.log('   [PASS] First upload succeeded\n');
     }
   } catch (error) {
-    console.log('   ⚠️  First upload failed:', error.response?.status || error.message);
+    console.log('   [WARN] First upload failed:', error.response?.status || error.message);
     console.log('      (Expected if ORBIT not configured or not running)\n');
   }
   
@@ -144,14 +144,14 @@ async function runTests() {
       headers: form2.getHeaders()
     });
     
-    console.log('   ⚠️  Second upload succeeded (should have been rejected)');
+    console.log('   [WARN] Second upload succeeded (should have been rejected)');
     console.log('      This means duplicate detection is not working\n');
   } catch (error) {
     if (error.response?.status === 409) {
-      console.log('   ✅ Duplicate correctly detected!');
+      console.log('   [PASS] Duplicate correctly detected!');
       console.log('   Response:', JSON.stringify(error.response.data, null, 2).substring(0, 200), '...\n');
     } else {
-      console.log('   ⚠️  Unexpected error:', error.response?.status || error.message, '\n');
+      console.log('   [WARN] Unexpected error:', error.response?.status || error.message, '\n');
     }
   }
   
@@ -166,22 +166,22 @@ async function runTests() {
     });
     
     if (response3.data.success && response3.data.verified) {
-      console.log('   ✅ Verification succeeded');
+      console.log('   [PASS] Verification succeeded');
       console.log('   Audio is registered:', response3.data.provenance.is_registered);
       console.log('   Registration ID:', response3.data.provenance.registration_id, '\n');
     } else {
-      console.log('   ℹ️  Audio not registered (expected for first run)\n');
+      console.log('   [INFO] Audio not registered (expected for first run)\n');
     }
   } catch (error) {
-    console.log('   ⚠️  Verification failed:', error.response?.status || error.message, '\n');
+    console.log('   [WARN] Verification failed:', error.response?.status || error.message, '\n');
   }
   
-  console.log('📋 Automated tests complete\n');
+  console.log('[INFO] Automated tests complete\n');
   printManualTests();
 }
 
 function printManualTests() {
-  console.log('🧪 Manual Testing Commands:\n');
+  console.log('[INFO] Manual Testing Commands:\n');
   console.log('1. Upload new audio:');
   console.log(`   curl -X POST http://localhost:${PORT}/api/tracks \\`);
   console.log('     -F "audio=@path/to/audio.mp3" \\');
@@ -204,7 +204,7 @@ function printManualTests() {
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\n\n👋 Shutting down test server...');
+  console.log('\n\n[INFO] Shutting down test server...');
   server.close(() => {
     console.log('Server stopped');
     process.exit(0);

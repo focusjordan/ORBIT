@@ -191,7 +191,7 @@ function cborResponseHelper(req, res, next) {
   
   /**
    * Send error response
-   * Session 32: Sanitizes error messages for 500 errors in production
+   * Sanitizes error messages for 500 errors in production
    * 
    * @param {string} error - Error type
    * @param {string} message - Error message

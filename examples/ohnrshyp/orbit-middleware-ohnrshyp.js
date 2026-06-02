@@ -212,13 +212,13 @@ async function orbitDuplicateCheck(req, res, next) {
   // Skip if ORBIT not configured
   const client = getOrbitClient();
   if (!client) {
-    console.warn('⚠️  ORBIT: Not configured, skipping duplicate check');
+    console.warn('[WARN] ORBIT: Not configured, skipping duplicate check');
     return next();
   }
   
   // Skip if no audio uploaded
   if (!req.files?.audio?.[0]) {
-    console.warn('⚠️  ORBIT: No audio file in request, skipping');
+    console.warn('[WARN] ORBIT: No audio file in request, skipping');
     return next();
   }
   
@@ -226,7 +226,7 @@ async function orbitDuplicateCheck(req, res, next) {
   const startTime = Date.now();
   
   try {
-    console.log(`🔍 ORBIT: Checking for duplicates...`);
+    console.log('[INFO] ORBIT: Checking for duplicates...');
     console.log(`   S3 Key: ${audioFile.key}`);
     console.log(`   Size: ${(audioFile.size / 1024 / 1024).toFixed(2)} MB`);
     
@@ -243,11 +243,11 @@ async function orbitDuplicateCheck(req, res, next) {
       audioFile.bucket,
       audioFile.key
     );
-    console.log(`   ✅ Downloaded from S3 (${(audioBuffer.length / 1024).toFixed(0)} KB)`);
+    console.log(`   [OK] Downloaded from S3 (${(audioBuffer.length / 1024).toFixed(0)} KB)`);
     
     // Step 2: Extract technical metadata
     const technicalMetadata = await extractAudioMetadata(audioBuffer);
-    console.log(`   ✅ Extracted metadata (duration: ${technicalMetadata.duration_ms}ms)`);
+    console.log(`   [OK] Extracted metadata (duration: ${technicalMetadata.duration_ms}ms)`);
     
     // Step 3: Map Ohnrshyp metadata to ORBIT schema
     const orbitMetadata = mapOhnrshypToOrbit(req, technicalMetadata);
@@ -256,13 +256,13 @@ async function orbitDuplicateCheck(req, res, next) {
     const verification = await client.verify(audioBuffer);
     const duration = Date.now() - startTime;
     
-    console.log(`   ✅ ORBIT verification complete (${duration}ms)`);
+    console.log(`   [OK] ORBIT verification complete (${duration}ms)`);
     
     // Step 5: Check for duplicate
     if (verification.verified || verification.duplicate_of) {
       const registrationId = verification.fingerprint_match?.registration_id || verification.duplicate_of;
       
-      console.log(`   🚫 DUPLICATE detected (registration ${registrationId})`);
+      console.log(`   [INFO] DUPLICATE detected (registration ${registrationId})`);
       
       return res.status(409).json({
         success: false,
@@ -291,7 +291,7 @@ async function orbitDuplicateCheck(req, res, next) {
     }
     
     // Step 6: Not a duplicate - attach data for potential use
-    console.log(`   ✅ New audio, proceeding with upload`);
+    console.log('   [OK] New audio, proceeding with upload');
     
     req.orbit = {
       verified: false,
@@ -306,17 +306,17 @@ async function orbitDuplicateCheck(req, res, next) {
     
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`⚠️  ORBIT: Duplicate check failed (${duration}ms):`, error.message);
+    console.error(`[ERROR] ORBIT: Duplicate check failed (${duration}ms):`, error.message);
     
     // Graceful degradation - allow upload to proceed
     if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-      console.warn('⚠️  ORBIT: Service unavailable, allowing upload to proceed');
+      console.warn('[WARN] ORBIT: Service unavailable, allowing upload to proceed');
     } else if (error.response?.status >= 400 && error.response?.status < 500) {
-      console.warn(`⚠️  ORBIT: Client error (${error.response.status}), allowing upload to proceed`);
+      console.warn(`[WARN] ORBIT: Client error (${error.response.status}), allowing upload to proceed`);
     } else if (error.message.includes('S3')) {
-      console.error('⚠️  ORBIT: S3 download failed, allowing upload to proceed');
+      console.error('[ERROR] ORBIT: S3 download failed, allowing upload to proceed');
     } else {
-      console.warn('⚠️  ORBIT: Unknown error, allowing upload to proceed');
+      console.warn('[WARN] ORBIT: Unknown error, allowing upload to proceed');
     }
     
     // Continue without ORBIT verification
@@ -372,26 +372,26 @@ async function registerWithOrbit(req, res, next) {
   // Skip if ORBIT not configured
   const client = getOrbitClient();
   if (!client) {
-    console.log('⚠️  ORBIT: Auto-registration skipped (not configured)');
+    console.log('[WARN] ORBIT: Auto-registration skipped (not configured)');
     return next ? next() : undefined;
   }
   
   // Skip if no track was created
   if (!req.track) {
-    console.log('⚠️  ORBIT: Auto-registration skipped (no track in request)');
+    console.log('[WARN] ORBIT: Auto-registration skipped (no track in request)');
     return next ? next() : undefined;
   }
   
   // Skip if track already has ORBIT registration
   // Note: Using camelCase to match Ohnrshyp's Track model convention
   if (req.track.orbit?.registrationId) {
-    console.log(`⚠️  ORBIT: Track ${req.track._id} already registered (ID: ${req.track.orbit.registrationId})`);
+    console.log(`[WARN] ORBIT: Track ${req.track._id} already registered (ID: ${req.track.orbit.registrationId})`);
     return next ? next() : undefined;
   }
   
   // Skip if auto-registration is disabled for this track
   if (req.track.orbit?.autoRegister === false) {
-    console.log(`⚠️  ORBIT: Auto-registration disabled for track ${req.track._id}`);
+    console.log(`[WARN] ORBIT: Auto-registration disabled for track ${req.track._id}`);
     return next ? next() : undefined;
   }
   
@@ -399,7 +399,7 @@ async function registerWithOrbit(req, res, next) {
   const trackId = req.track._id;
   
   try {
-    console.log(`🔄 ORBIT: Auto-registering track ${trackId}...`);
+    console.log(`[INFO] ORBIT: Auto-registering track ${trackId}...`);
     
     // Step 1: Get Track model (need it to update after registration)
     // In Ohnrshyp, this would be imported at top of file
@@ -414,7 +414,7 @@ async function registerWithOrbit(req, res, next) {
     
     // Try to reuse data from duplicate check (more efficient)
     if (req.orbit?.metadata && req.files?.audio?.[0]) {
-      console.log('   ℹ️  Reusing metadata from duplicate check');
+      console.log('   [INFO] Reusing metadata from duplicate check');
       orbitMetadata = req.orbit.metadata;
       
       // Download audio from S3
@@ -431,10 +431,10 @@ async function registerWithOrbit(req, res, next) {
         audioFile.key
       );
       
-      console.log(`   ✅ Downloaded from S3 (${(audioBuffer.length / 1024).toFixed(0)} KB)`);
+      console.log(`   [OK] Downloaded from S3 (${(audioBuffer.length / 1024).toFixed(0)} KB)`);
     } else {
       // Need to fetch from track's audioUrl and extract metadata
-      console.log('   ℹ️  Fetching audio and extracting metadata');
+      console.log('   [INFO] Fetching audio and extracting metadata');
       
       // Parse S3 URL to get bucket and key
       // Ohnrshyp audioUrl format: https://bucket.s3.region.amazonaws.com/key
@@ -448,18 +448,18 @@ async function registerWithOrbit(req, res, next) {
       }
       
       audioBuffer = await downloadAudioFromS3(s3Client, bucket, key);
-      console.log(`   ✅ Downloaded from S3 (${(audioBuffer.length / 1024).toFixed(0)} KB)`);
+      console.log(`   [OK] Downloaded from S3 (${(audioBuffer.length / 1024).toFixed(0)} KB)`);
       
       // Extract technical metadata
       const technicalMetadata = await extractAudioMetadata(audioBuffer);
-      console.log(`   ✅ Extracted metadata (duration: ${technicalMetadata.duration_ms}ms)`);
+      console.log(`   [OK] Extracted metadata (duration: ${technicalMetadata.duration_ms}ms)`);
       
       // Map to ORBIT schema
       orbitMetadata = mapOhnrshypToOrbit(req, technicalMetadata);
     }
     
     // Step 3: Register with ORBIT
-    console.log('   📤 Registering with ORBIT...');
+    console.log('   [INFO] Registering with ORBIT...');
     
     const ownerId = req.user?._id?.toString() || req.track.artist?.toString();
     if (!ownerId) {
@@ -469,7 +469,7 @@ async function registerWithOrbit(req, res, next) {
     const result = await client.register(audioBuffer, orbitMetadata, ownerId);
     
     const duration = Date.now() - startTime;
-    console.log(`   ✅ ORBIT registration complete (${duration}ms)`);
+    console.log(`   [OK] ORBIT registration complete (${duration}ms)`);
     console.log(`      Registration ID: ${result.registration_id}`);
     
     // Step 4: Update Track document with ORBIT data
@@ -485,15 +485,15 @@ async function registerWithOrbit(req, res, next) {
     
     await Track.findByIdAndUpdate(trackId, updateData);
     
-    console.log(`   ✅ Track ${trackId} updated with ORBIT data`);
-    console.log(`   🎉 Auto-registration successful!`);
+    console.log(`   [OK] Track ${trackId} updated with ORBIT data`);
+    console.log('   [OK] Auto-registration successful!');
     
     // Success - continue to next middleware if present
     if (next) next();
     
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ ORBIT: Auto-registration failed for track ${trackId} (${duration}ms)`);
+    console.error(`[ERROR] ORBIT: Auto-registration failed for track ${trackId} (${duration}ms)`);
     console.error(`   Error: ${error.message}`);
     
     // Log different error types for debugging
@@ -512,8 +512,8 @@ async function registerWithOrbit(req, res, next) {
     // Important: Don't throw - track upload already succeeded
     // User doesn't need to know registration failed
     // Track can be registered later via manual endpoint
-    console.log(`   ℹ️  Track ${trackId} created successfully but not registered with ORBIT`);
-    console.log('   ℹ️  Can be registered later via manual registration endpoint');
+    console.log(`   [INFO] Track ${trackId} created successfully but not registered with ORBIT`);
+    console.log('   [INFO] Can be registered later via manual registration endpoint');
     
     // Continue to next middleware if present
     if (next) next();

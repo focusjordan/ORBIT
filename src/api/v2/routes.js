@@ -1,9 +1,6 @@
 /**
  * ORBIT API v2 Routes
  * 
- * Session 26 - V2 Search & Analysis Endpoints
- * Session 32 - Security Hardening (GPU-intensive rate limits)
- * 
  * New endpoints for v2:
  * - POST /orbit/v2/similar  - Find similar-sounding tracks via CLAP embeddings
  * - POST /orbit/v2/analyze  - Standalone audio analysis without registration
@@ -350,7 +347,7 @@ async function analyzeHandler(req, res) {
     
     const verbose = process.env.ORBIT_ML_VERBOSE === 'true';
     
-    log(`🔍 Processing audio: ${audioBuffer.length} bytes, include=[${[...includeSet].join(', ')}]`);
+    log(`Processing audio: ${audioBuffer.length} bytes, include=[${[...includeSet].join(', ')}]`);
     
     // ========================================================================
     // 2. BUILD CONFIG BASED ON INCLUDES
@@ -372,7 +369,7 @@ async function analyzeHandler(req, res) {
     
     if (needsClap || needsAudioAnalysis || needsEmbedding) {
       try {
-        log('🧠 Running metadata extraction pipeline...');
+        log('Running metadata extraction pipeline...');
         metadataResult = await metadataExtractor.extractMetadata(audioBuffer, {
           includeEmbedding: needsEmbedding,
           verbose,
@@ -391,7 +388,7 @@ async function analyzeHandler(req, res) {
           },
         });
         
-        log(`✅ Metadata extraction complete: ${metadataResult.processingTimeMs}ms`);
+        log(`Metadata extraction complete: ${metadataResult.processingTimeMs}ms`);
         
       } catch (error) {
         console.error(`[Analyze] Metadata extraction failed: ${error.message}`);
@@ -411,11 +408,11 @@ async function analyzeHandler(req, res) {
     
     if (needsFingerprint) {
       try {
-        log('🔍 Generating Chromaprint fingerprint...');
+        log('Generating Chromaprint fingerprint...');
         fingerprintData = await OrbitFingerprint.generate(audioBuffer);
-        log(`✅ Fingerprint generated: ${fingerprintData.hash.toString('hex').slice(0, 16)}...`);
+        log(`Fingerprint generated: ${fingerprintData.hash.toString('hex').slice(0, 16)}...`);
       } catch (error) {
-        log(`⚠️  Fingerprint generation failed: ${error.message}`);
+        log(`Fingerprint generation failed: ${error.message}`);
       }
     }
     
@@ -427,7 +424,7 @@ async function analyzeHandler(req, res) {
     
     if (needsCatalogCheck && fingerprintData) {
       try {
-        log('🔎 Running catalog check (AcoustID + ACRCloud + MusicBrainz)...');
+        log('Running catalog check (AcoustID + ACRCloud + MusicBrainz)...');
         const submittedMeta = req.body.metadata || {};
         catalogResult = await catalogCheck.check({
           fingerprintRaw: fingerprintData.raw,
@@ -442,14 +439,14 @@ async function analyzeHandler(req, res) {
         });
         
         if (catalogResult.status === 'no_match') {
-          log('✅ Catalog check: no known-work match');
+          log('Catalog check: no known-work match');
         } else if (catalogResult.status === 'verified_known_work') {
           const src = catalogResult.acrcloud?.matched ? 'ACRCloud' : 'AcoustID';
           const t = catalogResult.acrcloud?.title || catalogResult.musicbrainz?.title;
           const a = catalogResult.acrcloud?.artist || catalogResult.musicbrainz?.artist;
-          log(`✅ Catalog check: verified known work via ${src} — "${t}" by ${a}`);
+          log(`Catalog check: verified known work via ${src} — "${t}" by ${a}`);
         } else if (catalogResult.status === 'known_work_unverified') {
-          log(`⚠️  Catalog check: KNOWN WORK but metadata mismatch`);
+          log(`Catalog check: KNOWN WORK but metadata mismatch`);
           if (catalogResult.acrcloud?.matched) {
             log(`   ACRCloud matched: "${catalogResult.acrcloud.title}" by ${catalogResult.acrcloud.artist}`);
           }
@@ -458,7 +455,7 @@ async function analyzeHandler(req, res) {
           }
         }
       } catch (catErr) {
-        log(`⚠️  Catalog check failed (non-fatal): ${catErr.message}`);
+        log(`Catalog check failed (non-fatal): ${catErr.message}`);
         catalogResult = { status: 'unavailable', error: catErr.message };
       }
     }
@@ -471,7 +468,7 @@ async function analyzeHandler(req, res) {
     
     if (needsAiDetection) {
       try {
-        log('🤖 Running AI music detection...');
+        log('Running AI music detection...');
         aiDetectionResult = await aiDetection.detectAI(audioBuffer, {
           metadata: req.body.metadata || {},
           analysisResult: metadataResult,
@@ -488,14 +485,14 @@ async function analyzeHandler(req, res) {
           verbose,
         });
         
-        log(`✅ AI Detection: score=${(aiDetectionResult.score * 100).toFixed(1)}%, recommendation=${aiDetectionResult.recommendation}`);
+        log(`AI Detection: score=${(aiDetectionResult.score * 100).toFixed(1)}%, recommendation=${aiDetectionResult.recommendation}`);
         
         const allFlags = aiDetection.getAllFlags(aiDetectionResult);
         if (allFlags.length > 0) {
           log(`   Flags: ${allFlags.join(', ')}`);
         }
       } catch (aiError) {
-        log(`⚠️  AI detection failed (non-fatal): ${aiError.message}`);
+        log(`AI detection failed (non-fatal): ${aiError.message}`);
         aiDetectionResult = {
           score: null,
           recommendation: 'DETECTION_ERROR',
@@ -623,7 +620,7 @@ async function analyzeHandler(req, res) {
       response.catalog_check = catalogResult;
     }
     
-    log(`⏱️  Analysis complete in ${response.processing_time_ms}ms`);
+    log(`Analysis complete in ${response.processing_time_ms}ms`);
     
     response.processing_log = processingLog;
     
@@ -685,7 +682,7 @@ router.get('/info', (req, res) => {
  * POST /orbit/v2/similar
  * Find similar-sounding tracks via CLAP embeddings
  * Auth: Optional (public query, platform context may influence results)
- * Session 32: GPU-intensive rate limit (10/min)
+ * Security: GPU-intensive rate limit (10/min)
  */
 router.post('/similar', 
   (req, res, next) => getGpuLimiter(req)(req, res, next), // GPU rate limit
@@ -697,7 +694,7 @@ router.post('/similar',
  * POST /orbit/v2/analyze
  * Standalone audio analysis without registration
  * Auth: Optional (public analysis, platform context may influence limits)
- * Session 32: GPU-intensive rate limit (10/min)
+ * Security: GPU-intensive rate limit (10/min)
  */
 router.post('/analyze', 
   (req, res, next) => getGpuLimiter(req)(req, res, next), // GPU rate limit

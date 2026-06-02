@@ -2,7 +2,7 @@
  * ORBIT Audio Utilities
  * Load and save audio files as Float32Array samples
  * 
- * Session 25b: Updated to preserve stereo audio throughout the pipeline.
+ * Updated to preserve stereo audio throughout the pipeline.
  * ORBIT must be lossless - what user uploads is what they get back.
  */
 
@@ -68,7 +68,7 @@ class AudioUtils {
     
     try {
       // Convert to WAV if needed (using execFileSync to avoid command injection)
-      // IMPORTANT: Preserve original channel count! (Session 25b fix)
+      // IMPORTANT: Preserve original channel count!
       if (shouldConvert) {
         convertedFile = path.join(os.tmpdir(), `orbit-${Date.now()}-converted.wav`);
         
@@ -101,7 +101,7 @@ class AudioUtils {
       
       const channelCount = audioData.channelData.length;
       
-      // Session 25b: Preserve all channels! Return both mono-mixed (for fingerprinting)
+      // Preserve all channels: return both mono-mixed (for fingerprinting)
       // AND individual channels (for stereo watermarking)
       let samples;
       if (channelCount === 1 || forceMono) {
@@ -197,7 +197,7 @@ class AudioUtils {
       '-ar', String(sampleRate),
     ];
     
-    // Only specify channel count if explicitly requested (Session 25b: preserve by default)
+    // Only specify channel count if explicitly requested (preserve by default)
     if (channels !== null) {
       ffmpegArgs.push('-ac', String(channels));
     }
@@ -238,7 +238,7 @@ class AudioUtils {
   }
   
   /**
-   * Get detailed audio file info including channel count (Session 25b)
+   * Get detailed audio file info including channel count
    * @param {string} filePath
    * @returns {{duration: number, format: string, bitrate: number, size: number, channels: number, sampleRate: number}}
    */

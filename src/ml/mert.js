@@ -1,7 +1,7 @@
 /**
  * ORBIT MERT Semantic Fingerprinting
  * 
- * Session 19 - Neural fingerprinting with MERT
+ * Neural fingerprinting with MERT
  * 
  * ╔══════════════════════════════════════════════════════════════════════════╗
  * ║  ⚠️  LICENSE WARNING: MERT IS NON-COMMERCIAL USE ONLY (CC BY-NC 4.0)     ║
@@ -31,7 +31,7 @@
  * - Embeddings are L2-normalized for cosine similarity
  * 
  * Dual Fingerprint Strategy (see ORBIT_ENHANCEMENTS.md Section 2):
- * 1. Chromaprint (Session 3-4): Fast exact-match detection (95% of cases)
+ * 1. Chromaprint: Fast exact-match detection (95% of cases)
  * 2. MERT/CLAP (this module or clap.js): Semantic similarity for edge cases
  * 
  * @see ORBIT_SPECIFICATION.md Section 12 (Zero-Shot ML Enhancements)
@@ -190,7 +190,7 @@ async function getEmbedding(input, options = {}) {
   
   try {
     if (verbose) {
-      console.log(`🎵 MERT: Processing ${audioPath}`);
+      console.log(`[MERT] Processing ${audioPath}`);
     }
     
     return await new Promise((resolve, reject) => {
@@ -273,7 +273,7 @@ async function getEmbedding(input, options = {}) {
           const embedding = new Float32Array(result.embedding);
           
           if (verbose) {
-            console.log(`✅ MERT: Generated ${embedding.length}-dim embedding in ${(elapsed / 1000).toFixed(1)}s`);
+            console.log(`[MERT] Generated ${embedding.length}-dim embedding in ${(elapsed / 1000).toFixed(1)}s`);
           }
           
           resolve({

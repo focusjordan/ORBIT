@@ -2,7 +2,7 @@
 """
 ORBIT MERT Embedding Script
 
-Session 19 - Semantic audio fingerprinting with MERT
+Semantic audio fingerprinting with MERT
 
 This script generates 768-dimensional embeddings for audio files using
 the MERT (Music Embedding Representation Transformer) model.

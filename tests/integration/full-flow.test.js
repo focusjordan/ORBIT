@@ -36,7 +36,7 @@ const TEST_AUDIO_PATH = path.join(__dirname, '../fixtures/test-audio-short.mp3')
 const PLATFORM_PRIVATE_KEY = process.env.TEST_PLATFORM_PRIVATE_KEY;
 
 if (!PLATFORM_PRIVATE_KEY) {
-  console.error('❌ TEST_PLATFORM_PRIVATE_KEY not set');
+  console.error('[ERROR] TEST_PLATFORM_PRIVATE_KEY not set');
   console.error('   Run: npm run test:setup');
   process.exit(1);
 }
@@ -62,8 +62,8 @@ const results = {
  * Log a test step result
  */
 function logStep(name, passed, details = '') {
-  const icon = passed ? '✅' : '❌';
-  console.log(`${icon} ${name}`);
+  const label = passed ? 'PASS:' : 'FAIL:';
+  console.log(`${label} ${name}`);
   if (details) {
     console.log(`   ${details}`);
   }
@@ -76,7 +76,7 @@ function logStep(name, passed, details = '') {
  * Step 1: Register Audio
  */
 async function stepRegister() {
-  console.log('\n📝 STEP 1: Register Audio');
+  console.log('\nSTEP 1: Register Audio');
   console.log('─'.repeat(50));
   
   // Check test audio exists
@@ -155,7 +155,7 @@ async function stepRegister() {
  * Step 2: Verify Watermarked Audio
  */
 async function stepVerify() {
-  console.log('\n🔍 STEP 2: Verify Watermarked Audio');
+  console.log('\nSTEP 2: Verify Watermarked Audio');
   console.log('─'.repeat(50));
   
   if (!state.watermarkedAudio) {
@@ -217,10 +217,10 @@ async function stepVerify() {
 }
 
 /**
- * Step 3: Query Chain
+ * Step 3: Query Custody Chain
  */
 async function stepChain() {
-  console.log('\n🔗 STEP 3: Query Custody Chain');
+  console.log('\nSTEP 3: Query Custody Chain');
   console.log('─'.repeat(50));
   
   if (!state.fingerprintHash) {
@@ -289,23 +289,23 @@ async function main() {
   console.log('\n' + '═'.repeat(60));
   console.log('   TEST SUMMARY');
   console.log('═'.repeat(60));
-  console.log(`\n   ✅ Passed: ${results.passed}`);
-  console.log(`   ❌ Failed: ${results.failed}`);
-  console.log(`   ⏱️  Total time: ${(totalTime / 1000).toFixed(1)}s`);
+  console.log(`\n   Passed: ${results.passed}`);
+  console.log(`   Failed: ${results.failed}`);
+  console.log(`   Total time: ${(totalTime / 1000).toFixed(1)}s`);
   console.log('');
   
   if (results.failed === 0) {
-    console.log('🎉 All tests passed! ORBIT is working correctly.\n');
+    console.log('[PASS] All tests passed! ORBIT is working correctly.\n');
     process.exit(0);
   } else {
-    console.log('⚠️  Some tests failed. Check output above.\n');
+    console.log('[FAIL] Some tests failed. Check output above.\n');
     process.exit(1);
   }
 }
 
 // Run
 main().catch(error => {
-  console.error('\n💥 Test crashed:', error);
+  console.error('\n[CRASH] Test crashed:', error);
   process.exit(1);
 });
 

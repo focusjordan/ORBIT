@@ -5,9 +5,8 @@
  * Implements singleton pattern - models are loaded once on first use,
  * then cached for subsequent requests.
  * 
- * Session 18 Implementation - Phase 4: Neural Enhancements
- * Session 22 Update - MERT disabled (CC BY-NC 4.0 incompatible with commercial use)
- *                     CLAP now provides both classification AND embeddings
+ * Implementation of neural models and enhancements. MERT disabled (CC BY-NC 4.0 incompatible with commercial use)
+ * CLAP now provides both classification AND embeddings.
  * 
  * @see ORBIT_ENHANCEMENTS.md Section 8 (Model Loading Strategy)
  * @see ORBIT_SPECIFICATION.md Section 12 (Zero-Shot ML Enhancements)
@@ -90,7 +89,7 @@ const MODEL_CONFIGS = {
     available: true,
   },
   
-  // SilentCipher for neural watermarking (future - Session 22)
+  // SilentCipher for neural watermarking
   silentCipher: {
     id: 'silentcipher/model',  // Placeholder - actual ID TBD
     task: 'audio-watermarking',
@@ -100,7 +99,7 @@ const MODEL_CONFIGS = {
     custom: true,
   },
   
-  // WMCodec for codec-aware watermarking fallback (future - Session 23)
+  // WMCodec for codec-aware watermarking fallback
   wmCodec: {
     id: 'wmcodec/model',  // Placeholder - actual ID TBD
     task: 'audio-watermarking',
@@ -158,7 +157,7 @@ class ModelManager {
     if (!fs.existsSync(this.config.cacheDir)) {
       fs.mkdirSync(this.config.cacheDir, { recursive: true });
       if (this.config.verbose) {
-        console.log(`📁 Created model cache directory: ${this.config.cacheDir}`);
+        console.log(`[ModelManager] Created model cache directory: ${this.config.cacheDir}`);
       }
     }
   }
@@ -170,7 +169,7 @@ class ModelManager {
   async _getTransformers() {
     if (!this._transformers) {
       if (this.config.verbose) {
-        console.log('📦 Loading @xenova/transformers library...');
+        console.log('[ModelManager] Loading @xenova/transformers library...');
       }
       
       // Dynamic import for ESM compatibility
@@ -189,7 +188,7 @@ class ModelManager {
       // Enable verbose logging if configured
       if (this.config.verbose) {
         env.allowLocalModels = true;
-        console.log(`✅ Transformers library loaded`);
+        console.log(`[ModelManager] Transformers library loaded`);
         console.log(`   Cache directory: ${env.cacheDir}`);
         console.log(`   Device preference: ${this.config.device}`);
       }
@@ -207,7 +206,7 @@ class ModelManager {
   _logProgress(modelName, status, details = '') {
     if (this.config.verbose) {
       const timestamp = new Date().toISOString();
-      console.log(`[${timestamp}] 🤖 ${modelName}: ${status}${details ? ` - ${details}` : ''}`);
+      console.log(`[${timestamp}] [ModelManager] ${modelName}: ${status}${details ? ` - ${details}` : ''}`);
     }
   }
   
@@ -226,10 +225,10 @@ class ModelManager {
     
     // Check if model requires custom loading
     if (modelConfig.custom) {
-      this._logProgress(modelKey, 'requires custom loading', 'will be implemented in later session');
+      this._logProgress(modelKey, 'requires custom loading', 'will be implemented in a future update');
       throw new Error(
         `Model '${modelKey}' requires custom loading (not available in @xenova/transformers). ` +
-        `This will be implemented in a later session. See ORBIT_ENHANCEMENTS.md for details.`
+        `This will be implemented in a future update. See ORBIT_ENHANCEMENTS.md for details.`
       );
     }
     
@@ -334,10 +333,10 @@ class ModelManager {
    * 
    * Used for: Primary neural watermarking (99%+ extraction accuracy)
    * 
-   * NOTE: Requires custom loading - will be implemented in Session 22
+   * NOTE: Requires custom loading - will be implemented in a future update
    * 
    * @returns {Promise<Object>} Watermarking model
-   * @throws {Error} Until Session 22 implementation
+   * @throws {Error} Until implemented
    */
   async getSilentCipher() {
     return this._loadModel('silentCipher');
@@ -348,10 +347,10 @@ class ModelManager {
    * 
    * Used for: Fallback watermarking when SilentCipher fails
    * 
-   * NOTE: Requires custom loading - will be implemented in Session 23
+   * NOTE: Requires custom loading - will be implemented in a future update
    * 
    * @returns {Promise<Object>} Watermarking model
-   * @throws {Error} Until Session 23 implementation
+   * @throws {Error} Until implemented
    */
   async getWmCodec() {
     return this._loadModel('wmCodec');

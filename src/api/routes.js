@@ -2,7 +2,6 @@
  * ORBIT API Routes
  * 
  * Route definitions for the ORBIT protocol endpoints.
- * Core handlers will be implemented in Sessions 11-14.
  * 
  * Per ORBIT_SPECIFICATION.md Section 8:
  * - POST /orbit/v1/register   - Register new audio
@@ -11,7 +10,7 @@
  * - POST /orbit/v1/accept     - Accept incoming transfer
  * - GET  /orbit/v1/chain/:fp  - Get full custody chain
  * 
- * Session 32: Security Hardening
+ * Security Hardening:
  * - GPU-intensive endpoints have stricter rate limits
  * - Input sanitization validates field lengths
  */
@@ -60,7 +59,7 @@ router.get('/info', (req, res) => {
 });
 
 // ============================================================================
-// Authentication Test Endpoint (Session 10)
+// Authentication Test Endpoint
 // ============================================================================
 
 /**
@@ -78,20 +77,19 @@ router.post('/auth-test', platformAuth, (req, res) => {
 });
 
 // ============================================================================
-// Placeholder Routes - Handlers to be implemented in Sessions 11-14
+// Core Protocol Routes
 // ============================================================================
 
 /**
  * POST /orbit/v1/register
  * Register new audio with ORBIT
- * Handler: Session 11 ✅
  * Auth: Required (platformAuth)
  * Format: multipart/form-data (metadata as CBOR + audio as binary)
  * 
  * Note: Uses multipart instead of pure CBOR due to cbor library
  * limitations with payloads >200KB. Metadata still uses CBOR.
  * 
- * Session 32: GPU-intensive rate limit (10/min) + input sanitization
+ * Security: GPU-intensive rate limit (10/min) + input sanitization
  * 
  * Middleware order:
  * 1. GPU rate limiter: Protect against abuse
@@ -113,10 +111,9 @@ router.post('/register',
 /**
  * POST /orbit/v1/verify
  * Verify audio provenance and extract metadata
- * Handler: Session 12 ✅
  * Auth: Optional (verification works for anyone, platform context optional)
  * 
- * Session 32: GPU-intensive rate limit (10/min)
+ * Security: GPU-intensive rate limit (10/min)
  * 
  * Request: CBOR/JSON with base64-encoded audio
  * Response: Complete provenance information including fingerprint match,
@@ -146,7 +143,6 @@ router.post('/watermarkmatch',
 /**
  * POST /orbit/v1/transfer
  * Initiate B2B transfer to another platform
- * Handler: Session 13 ✅
  * Auth: Required (sender must be authenticated)
  * 
  * Request (CBOR/JSON):
@@ -162,7 +158,6 @@ router.post('/transfer', platformAuth, transferHandlers.initiateTransfer);
 /**
  * POST /orbit/v1/accept
  * Accept incoming transfer from another platform
- * Handler: Session 13 ✅
  * Auth: Required (recipient must be authenticated)
  * 
  * Request (CBOR/JSON):
@@ -177,7 +172,6 @@ router.post('/accept', platformAuth, transferHandlers.acceptTransfer);
 /**
  * GET /orbit/v1/chain/:fingerprint
  * Get full custody chain for a fingerprint
- * Handler: Session 14 ✅
  * Auth: Optional (public lookup, but platform context may show more details)
  * 
  * URL Parameter:

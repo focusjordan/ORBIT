@@ -1,7 +1,6 @@
 /**
  * ORBIT Input Sanitization Middleware
- * 
- * Session 32: Security Hardening
+ * Security Hardening
  * 
  * Validates field lengths to prevent storage attacks.
  * Runs AFTER multipart/CBOR parsing, BEFORE authentication.

@@ -9,7 +9,7 @@
  *   X-ORBIT-Signature: <ed25519_signature_of_request_body>
  *   X-ORBIT-API-Key: <api_key>  (required for secure authentication)
  * 
- * Session 32: Security Hardening
+ * Security Hardening
  * - Added API key validation (two-factor: signature + API key)
  * - API key is hashed and compared against stored hash
  * - Provides defense in depth: attacker needs both private key AND API key
@@ -64,7 +64,7 @@ async function platformAuth(req, res, next) {
     );
   }
   
-  // Session 32: API key is required for secure authentication
+  // API key is required for secure platform verification
   if (!apiKeyHeader) {
     return res.orbitError(
       'missing_api_key',
@@ -94,7 +94,7 @@ async function platformAuth(req, res, next) {
     }
     
     // ========================================================================
-    // SESSION 32: API Key Validation (Two-Factor Authentication)
+    // API Key Validation (Two-Factor Authentication)
     // ========================================================================
     
     // Verify API key by hashing and comparing to stored hash
@@ -182,7 +182,7 @@ async function platformAuth(req, res, next) {
       name: platform.name,
       tier: platform.tier,
       publicKey: platform.public_key,
-      apiKeyValid: true, // Session 32: Track that API key was validated
+      apiKeyValid: true, // Track that API key was validated
     };
     
     // Continue to route handler
@@ -203,7 +203,7 @@ async function platformAuth(req, res, next) {
  * Attempts to authenticate but doesn't require it
  * Use for endpoints that have different behavior for authenticated vs anonymous
  * 
- * Session 32: If all auth headers are provided, full validation is required.
+ * If all auth headers are provided, full validation is required.
  * If partial headers, continue as anonymous.
  */
 async function optionalAuth(req, res, next) {

@@ -7,7 +7,7 @@
  * Flow:
  * 1. Validate input (audio + required metadata)
  * 2. Embed watermark into audio
- * 3. Generate fingerprint from WATERMARKED audio (Session 25b fix)
+ * 3. Generate fingerprint from watermarked audio
  * 4. Check for duplicates
  * 5. Build CBOR payload with all metadata
  * 6. Sign payload with platform key
@@ -15,13 +15,9 @@
  * 8. Optionally compute audio embedding for similarity search
  * 9. Return registration ID, fingerprint, and watermarked audio
  * 
- * Session 19: Added optional semantic fingerprinting
- * Session 22: Switched from MERT (CC BY-NC 4.0) to CLAP embeddings (Apache 2.0)
  * - Set ORBIT_ENABLE_EMBEDDING_ON_REGISTER=true to auto-compute embeddings
  * - Or pass include_embedding: true in metadata for per-request control
- * Session 25b: Fingerprint now generated from WATERMARKED audio, not original.
- * - This ensures the fingerprint represents the distributed content
- * - Fixes fingerprint mismatch after watermarking
+ * - Fingerprint is generated from watermarked audio to ensure it represents the distributed content.
  */
 
 const OrbitFingerprint = require('../../engines/fingerprint');
@@ -119,11 +115,11 @@ async function registerHandler(req, res) {
     // This allows clients to skip local metadata extraction (which may fail
     // on certain formats). ORBIT uses FFmpeg which handles all formats.
     
-    log(`📁 Received ${audioBuffer.length} bytes of audio`);
+    log(`Received ${audioBuffer.length} bytes of audio`);
     
     const timestamp = Date.now();
     
-    log('🔍 Loading audio and extracting technical metadata...');
+    log('Loading audio and extracting technical metadata...');
     
     // Create unified watermark instance (handles neural + spread spectrum)
     const watermark = new UnifiedWatermark(config.orbit.secretKey);
@@ -136,7 +132,7 @@ async function registerHandler(req, res) {
     // Inject duration_ms if not provided by client (ORBIT calculates from audio)
     if (!metadata.duration_ms) {
       metadata.duration_ms = Math.round(audioInfo.duration * 1000);
-      log(`   ✅ Extracted duration_ms: ${metadata.duration_ms}ms`);
+      log(`   Extracted duration_ms: ${metadata.duration_ms}ms`);
     }
     
     // Inject channel count and sample rate if not provided
@@ -160,11 +156,10 @@ async function registerHandler(req, res) {
       );
     }
     
-    // ========================================================================
-    // 4. EMBED WATERMARK INTO AUDIO (Session 25b: watermark FIRST)
+    // 4. EMBED WATERMARK INTO AUDIO (Watermark first)
     // ========================================================================
     
-    log('💧 Creating watermark...');
+    log('Creating watermark...');
     log(`   Method: ${getWatermarkMethod()} (ORBIT_WATERMARK_METHOD)`);
     
     // For spread spectrum fallback, check minimum duration
@@ -190,7 +185,7 @@ async function registerHandler(req, res) {
       payloadHash: preliminaryPayloadHash
     };
     
-    log('💧 Embedding watermark...');
+    log('Embedding watermark...');
     const embedResult = await watermark.embed(audioBuffer, watermarkData, {
       verbose: process.env.ORBIT_ML_VERBOSE === 'true'
     });
@@ -207,31 +202,30 @@ async function registerHandler(req, res) {
     const watermarkPayload = embedResult.watermarkPayload;
     const watermarkMethod = embedResult.method;
     
-    log(`✅ Watermark embedded using ${watermarkMethod}`);
+    log(`Watermark embedded using ${watermarkMethod}`);
     log(`   Watermarked audio size: ${watermarkedAudio.length} bytes`);
     if (embedResult.sdr) {
       log(`   SDR: ${embedResult.sdr.toFixed(1)}dB`);
     }
     if (embedResult.fallbackUsed) {
-      log(`   ⚠️  Fallback used: ${embedResult.fallbackReason}`);
+      log(`   Fallback used: ${embedResult.fallbackReason}`);
     }
     
     // ========================================================================
-    // 5. GENERATE FINGERPRINT FROM WATERMARKED AUDIO (Session 25b fix)
+    // 5. GENERATE FINGERPRINT FROM WATERMARKED AUDIO (Generate from watermarked content)
     // ========================================================================
     
-    // Session 25b: Fingerprint the WATERMARKED audio, not the original!
-    // This ensures the fingerprint represents what will actually be distributed.
-    log('🔍 Generating fingerprint from WATERMARKED audio...');
+    // Fingerprint the watermarked audio, not the original, to ensure representation matches distributed content.
+    log('Generating fingerprint from watermarked audio...');
     const fingerprint = await OrbitFingerprint.generate(watermarkedAudio);
-    log(`✅ Fingerprint generated: ${fingerprint.hash.toString('hex').slice(0, 16)}...`);
+    log(`Fingerprint generated: ${fingerprint.hash.toString('hex').slice(0, 16)}...`);
     log(`   Track length: ${fingerprint.duration}s`);
     
     // ========================================================================
     // 6. CHECK FOR DUPLICATES
     // ========================================================================
     
-    log('🔎 Checking for duplicates...');
+    log('Checking for duplicates...');
     const existingRegistrations = await OrbitFingerprint.findMatches(fingerprint.hash, queries);
     
     if (existingRegistrations.length > 0) {
@@ -255,7 +249,7 @@ async function registerHandler(req, res) {
       }
       
       // Different platform registered it - log warning but allow (multi-platform allowed)
-      log(`⚠️  Audio already registered by ${existingRegistrations[0].origin_platform}, allowing multi-platform registration`);
+      log(`[WARN] Audio already registered by ${existingRegistrations[0].origin_platform}, allowing multi-platform registration`);
     }
     
     // ========================================================================
@@ -268,7 +262,7 @@ async function registerHandler(req, res) {
     let catalogResult = null;
     
     try {
-      log('🔎 Running catalog check (AcoustID + ACRCloud + MusicBrainz)...');
+      log('Running catalog check (AcoustID + ACRCloud + MusicBrainz)...');
       catalogResult = await catalogCheck.check({
         fingerprintRaw: fingerprint.raw,
         duration: fingerprint.duration,
@@ -282,15 +276,15 @@ async function registerHandler(req, res) {
       });
       
       if (catalogResult.status === 'no_match') {
-        log('✅ Catalog check: no known-work match (likely original)');
+        log('Catalog check: no known-work match (likely original)');
       } else if (catalogResult.status === 'verified_known_work') {
         const matchSource = catalogResult.acrcloud?.matched ? 'ACRCloud' : 'AcoustID';
         const matchTitle = catalogResult.acrcloud?.title || catalogResult.musicbrainz?.title;
         const matchArtist = catalogResult.acrcloud?.artist || catalogResult.musicbrainz?.artist;
-        log(`✅ Catalog check: verified known work via ${matchSource} — "${matchTitle}" by ${matchArtist}`);
+        log(`Catalog check: verified known work via ${matchSource} — "${matchTitle}" by ${matchArtist}`);
         log(`   Corroboration score: ${catalogResult.corroboration?.score}`);
       } else if (catalogResult.status === 'known_work_unverified') {
-        log(`⚠️  Catalog check: KNOWN WORK but metadata does not corroborate`);
+        log(`Catalog check: KNOWN WORK but metadata does not corroborate`);
         if (catalogResult.acrcloud?.matched) {
           log(`   ACRCloud matched: "${catalogResult.acrcloud.title}" by ${catalogResult.acrcloud.artist} (score: ${catalogResult.acrcloud.score})`);
         }
@@ -299,10 +293,10 @@ async function registerHandler(req, res) {
         }
         log(`   Corroboration score: ${catalogResult.corroboration?.score}`);
       } else if (catalogResult.status === 'unavailable') {
-        log(`⚠️  Catalog check unavailable: ${catalogResult.error}`);
+        log(`Catalog check unavailable: ${catalogResult.error}`);
       }
     } catch (catalogError) {
-      log(`⚠️  Catalog check failed (non-fatal): ${catalogError.message}`);
+      log(`Catalog check failed (non-fatal): ${catalogError.message}`);
       catalogResult = { status: 'unavailable', error: catalogError.message };
     }
     
@@ -310,10 +304,10 @@ async function registerHandler(req, res) {
     // 7. BUILD CBOR PAYLOAD WITH FULL METADATA
     // ========================================================================
     
-    log('📦 Building CBOR payload...');
+    log('Building CBOR payload...');
     
     // Build complete metadata object for CBOR payload
-    // V2 extensibility: This structure can be extended with ai_metadata in Session 21
+    // Metadata structure can be extended with ai_metadata if enabled
     const payloadData = {
       _v: 1, // Protocol version
       _t: 'registration', // Message type
@@ -385,7 +379,7 @@ async function registerHandler(req, res) {
     // 8. SIGN PAYLOAD
     // ========================================================================
     
-    log('🔏 Signing payload...');
+    log('Signing payload...');
     
     // Get this ORBIT node's private key
     const nodePrivateKey = config.orbit.privateKey;
@@ -410,7 +404,7 @@ async function registerHandler(req, res) {
     // 9. CREATE ENTRY HASH & INSERT INTO DATABASE
     // ========================================================================
     
-    log('💾 Calculating entry hash...');
+    log('Calculating entry hash...');
     const entryHash = OrbitCrypto.createEntryHash(
       {
         fingerprint_hash: fingerprint.hash,
@@ -421,7 +415,7 @@ async function registerHandler(req, res) {
       null // prev_entry_hash - null for now, will implement chain in future
     );
     
-    log('💾 Inserting registration into database...');
+    log('Inserting registration into database...');
     const registration = await queries.insertRegistration({
       // Fingerprint
       fingerprint_hash: fingerprint.hash,
@@ -483,10 +477,10 @@ async function registerHandler(req, res) {
       prev_entry_hash: null // For now, will implement full chain later
     });
     
-    log(`✅ Registration complete! ID: ${registration.id}`);
+    log(`Registration complete! ID: ${registration.id}`);
     
     // ========================================================================
-    // 10. OPTIONAL: COMPUTE AUDIO EMBEDDING (Session 22 - CLAP)
+    // 10. OPTIONAL: COMPUTE AUDIO EMBEDDING
     // Uses CLAP embeddings (Apache 2.0) instead of MERT (non-commercial).
     // NOTE: metadata-extractor may emit PANNs 2048-dim embeddings for analysis
     // responses, but registration similarity search remains CLAP 512-dim until
@@ -502,7 +496,7 @@ async function registerHandler(req, res) {
     
     if (enableEmbedding) {
       try {
-        log('🧠 Computing CLAP audio embedding...');
+        log('Computing CLAP audio embedding...');
         const embeddingResult = await clap.getAudioEmbedding(audioBuffer, { verbose: true });
         
         // Convert to PostgreSQL vector format
@@ -510,7 +504,7 @@ async function registerHandler(req, res) {
         
         // Update registration with embedding
         await queries.updateAudioEmbedding(registration.id, pgVector);
-        log(`✅ Audio embedding stored (${embeddingResult.embedding.length} dims)`);
+        log(`Audio embedding stored (${embeddingResult.embedding.length} dims)`);
         
         // Find similar tracks
         similarTracks = await queries.findSimilarByEmbedding(pgVector, {
@@ -520,7 +514,7 @@ async function registerHandler(req, res) {
         });
         
         if (similarTracks.length > 0) {
-          log(`🔍 Found ${similarTracks.length} similar tracks:`);
+          log(`Found ${similarTracks.length} similar tracks:`);
           similarTracks.forEach(s => {
             const rel = clap.classifyRelationship(s.similarity);
             log(`   - "${s.title}" by ${s.artist}: ${(s.similarity * 100).toFixed(1)}% (${rel.relationship})`);
@@ -534,7 +528,7 @@ async function registerHandler(req, res) {
         };
         
       } catch (embeddingError) {
-        log(`⚠️  Audio embedding failed (non-fatal): ${embeddingError.message}`);
+        log(`Audio embedding failed (non-fatal): ${embeddingError.message}`);
         audioEmbedding = { computed: false, error: embeddingError.message };
       }
     }
@@ -552,9 +546,9 @@ async function registerHandler(req, res) {
     
     const skipAiDetection = metadata.skip_ai_detection || req.headers['x-skip-ai-detection'] === 'true';
     if (skipAiDetection) {
-      log('⏭️  AI detection skipped (caller handles separately)');
+      log('AI detection skipped (caller handles separately)');
     } else try {
-      log('🤖 Running AI music detection...');
+      log('Running AI music detection...');
 
       if (config.ai.registerAnalysisEnabled) {
         try {
@@ -570,7 +564,7 @@ async function registerHandler(req, res) {
             },
           });
         } catch (analysisError) {
-          log(`   ⚠️  Register audio analysis unavailable (fail-open): ${analysisError.message}`);
+          log(`   Register audio analysis unavailable (fail-open): ${analysisError.message}`);
           aiAnalysisResult = null;
         }
       }
@@ -582,7 +576,7 @@ async function registerHandler(req, res) {
         verbose: process.env.ORBIT_ML_VERBOSE === 'true',
       });
       
-      log(`✅ AI Detection: score=${(aiDetectionResult.score * 100).toFixed(1)}%, recommendation=${aiDetectionResult.recommendation}`);
+      log(`AI Detection: score=${(aiDetectionResult.score * 100).toFixed(1)}%, recommendation=${aiDetectionResult.recommendation}`);
       
       const allFlags = aiDetection.getAllFlags(aiDetectionResult);
       if (allFlags.length > 0) {
@@ -594,7 +588,7 @@ async function registerHandler(req, res) {
       }
       
     } catch (aiDetectionError) {
-      log(`⚠️  AI detection failed (non-fatal): ${aiDetectionError.message}`);
+      log(`AI detection failed (non-fatal): ${aiDetectionError.message}`);
       aiDetectionResult = {
         score: null,
         recommendation: 'DETECTION_ERROR',
@@ -607,7 +601,7 @@ async function registerHandler(req, res) {
     // ========================================================================
     
     const responseTime = Date.now() - startTime;
-    log(`⏱️  Total registration time: ${responseTime}ms`);
+    log(`Total registration time: ${responseTime}ms`);
     
     const response = {
       success: true,
@@ -686,7 +680,7 @@ async function registerHandler(req, res) {
     res.orbit(response);
     
   } catch (error) {
-    console.error('❌ Registration failed:', error);
+    console.error('Registration failed:', error);
     console.error(error.stack);
     
     res.orbitError(

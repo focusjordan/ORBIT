@@ -31,20 +31,33 @@ function detectAudioExtension(buffer) {
 }
 
 /**
+ * Resolve python command path by checking up to parent directories for a virtual environment.
+ */
+function resolvePythonCommand() {
+  if (process.env.ORBIT_PYTHON_PATH) {
+    return process.env.ORBIT_PYTHON_PATH;
+  }
+  let currentDir = __dirname;
+  for (let i = 0; i < 4; i++) {
+    const venvPath = path.join(currentDir, '.venv/bin/python3');
+    if (fs.existsSync(venvPath)) {
+      return venvPath;
+    }
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) break;
+    currentDir = parentDir;
+  }
+  return 'python3';
+}
+
+/**
  * Classical DSP Configuration (Self-contained)
  */
 const DSP_CONFIG = {
   // Script is relative to this file inside the installed packages directory
   scriptPath: path.join(__dirname, '../scripts/audio_dsp.py'),
   maxLengthSeconds: 120,
-  pythonCommand: process.env.ORBIT_PYTHON_PATH || 
-    (fs.existsSync(path.join(__dirname, '../../.venv/bin/python3')) 
-      ? path.join(__dirname, '../../.venv/bin/python3')
-      : fs.existsSync(path.join(__dirname, '../../../.venv/bin/python3'))
-        ? path.join(__dirname, '../../../.venv/bin/python3')
-        : fs.existsSync(path.join(__dirname, '../../../../.venv/bin/python3'))
-          ? path.join(__dirname, '../../../../.venv/bin/python3')
-          : 'python3'),
+  pythonCommand: resolvePythonCommand(),
   timeout: 30000, 
   env: {
     ...process.env,
@@ -150,7 +163,7 @@ async function analyze(input, options = {}) {
   
   try {
     if (verbose) {
-      console.log(`🎵 AudioDSP: Processing ${audioPath}`);
+      console.log(`[AudioDSP] Processing ${audioPath}`);
     }
     
     return await new Promise((resolve, reject) => {

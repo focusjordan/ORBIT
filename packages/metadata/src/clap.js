@@ -1,8 +1,6 @@
 /**
  * ORBIT CLAP Zero-Shot Classification
  * 
- * Session 20 - Zero-shot genre/mood/instrument classification using LAION-CLAP
- * 
  * CLAP (Contrastive Language-Audio Pretraining) enables zero-shot classification
  * by comparing audio embeddings against text prompt embeddings. This allows
  * classification without any training on the specific labels.
@@ -168,7 +166,7 @@ async function _getClapPipeline() {
     const verbose = process.env.ORBIT_ML_VERBOSE === 'true';
     
     if (verbose) {
-      console.log(`📦 CLAP: Loading ${CLAP_CONFIG.model}...`);
+      console.log(`[CLAP] Loading ${CLAP_CONFIG.model}...`);
     }
     
     // Dynamic import for ESM compatibility
@@ -181,7 +179,7 @@ async function _getClapPipeline() {
     );
     
     if (verbose) {
-      console.log(`✅ CLAP: Model loaded`);
+      console.log(`[CLAP] Model loaded`);
     }
     
     _pipeline = classifier;
@@ -203,7 +201,7 @@ async function _loadAudioForClap(input, options = {}) {
   const { verbose = false } = options;
   
   if (verbose) {
-    console.log(`🎵 CLAP: Loading audio...`);
+    console.log(`[CLAP] Loading audio...`);
   }
   
   // Use AudioUtils to load and convert audio
@@ -213,7 +211,7 @@ async function _loadAudioForClap(input, options = {}) {
   
   if (verbose) {
     const duration = samples.length / sampleRate;
-    console.log(`✅ CLAP: Loaded ${duration.toFixed(1)}s audio at ${sampleRate}Hz`);
+    console.log(`[CLAP] Loaded ${duration.toFixed(1)}s audio at ${sampleRate}Hz`);
   }
   
   return samples;
@@ -240,7 +238,7 @@ async function _loadClapModel() {
     const verbose = process.env.ORBIT_ML_VERBOSE === 'true';
     
     if (verbose) {
-      console.log(`📦 CLAP: Loading model for embedding extraction...`);
+      console.log(`[CLAP] Loading model for embedding extraction...`);
     }
     
     const { ClapModel, AutoProcessor, AutoTokenizer } = await import('@xenova/transformers');
@@ -250,7 +248,7 @@ async function _loadClapModel() {
     _clapTokenizer = await AutoTokenizer.from_pretrained(CLAP_CONFIG.model);
     
     if (verbose) {
-      console.log(`✅ CLAP: Model loaded for embeddings`);
+      console.log(`[CLAP] Model loaded for embeddings`);
     }
     
     return { model: _clapModel, processor: _clapProcessor, tokenizer: _clapTokenizer };
@@ -293,7 +291,7 @@ async function getAudioEmbedding(input, options = {}) {
   const startTime = Date.now();
   
   if (verbose) {
-    console.log(`🎵 CLAP: Extracting audio embedding...`);
+    console.log(`[CLAP] Extracting audio embedding...`);
   }
   
   // Load audio samples at CLAP's expected sample rate (48kHz)
@@ -335,7 +333,7 @@ async function getAudioEmbedding(input, options = {}) {
   const elapsed = Date.now() - startTime;
   
   if (verbose) {
-    console.log(`✅ CLAP: Extracted ${embedding.length}-dim embedding in ${(elapsed / 1000).toFixed(1)}s`);
+    console.log(`[CLAP] Extracted ${embedding.length}-dim embedding in ${(elapsed / 1000).toFixed(1)}s`);
   }
   
   return {
@@ -394,7 +392,7 @@ async function classifyWithLabels(input, candidateLabels, options = {}) {
   const { verbose = process.env.ORBIT_ML_VERBOSE === 'true' } = options;
   
   if (verbose) {
-    console.log(`🎵 CLAP: Classifying against ${candidateLabels.length} labels`);
+    console.log(`[CLAP] Classifying against ${candidateLabels.length} labels`);
   }
   
   const startTime = Date.now();
@@ -412,7 +410,7 @@ async function classifyWithLabels(input, candidateLabels, options = {}) {
   const elapsed = Date.now() - startTime;
   
   if (verbose) {
-    console.log(`✅ CLAP: Classification completed in ${(elapsed / 1000).toFixed(1)}s`);
+    console.log(`[CLAP] Classification completed in ${(elapsed / 1000).toFixed(1)}s`);
   }
   
   // Results are already sorted by score in descending order
@@ -662,7 +660,7 @@ async function analyzeAudio(input, options = {}) {
   const startTime = Date.now();
   
   if (verbose) {
-    console.log('🎵 CLAP: Starting full audio analysis...');
+    console.log('[CLAP] Starting full audio analysis...');
   }
   
   // Run classifications sequentially to manage memory
@@ -675,7 +673,7 @@ async function analyzeAudio(input, options = {}) {
   const totalTime = Date.now() - startTime;
   
   if (verbose) {
-    console.log(`✅ CLAP: Full analysis completed in ${(totalTime / 1000).toFixed(1)}s`);
+    console.log(`[CLAP] Full analysis completed in ${(totalTime / 1000).toFixed(1)}s`);
   }
   
   return {

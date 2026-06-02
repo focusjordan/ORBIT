@@ -1,7 +1,7 @@
 /**
  * ORBIT Audio Analysis Module Wrapper
  * 
- * Session 30 Refactoring: Backwards-compatible wrapper.
+ * Backwards-compatible wrapper.
  * Delegates classical DSP features to src/ml/audio-dsp.js and deep forensics
  * checks to src/ml/audio-forensics.js. Eliminates duplicate code while
  * maintaining 100% parameter and function signature parity for existing code
@@ -76,7 +76,7 @@ async function analyze(input, options = {}) {
 
   const startTime = Date.now();
   if (verbose) {
-    console.log(`🎵 AudioAnalysis (Wrapper): Running DSP analysis pass...`);
+    console.log(`[AudioAnalysis] Wrapper: Running DSP analysis pass...`);
   }
 
   // 1. Run classical DSP pass
@@ -93,7 +93,7 @@ async function analyze(input, options = {}) {
   // 2. Run forensics pass only if requested
   if (aiForensics) {
     if (verbose) {
-      console.log(`🤖 AudioAnalysis (Wrapper): Running AI spectral forensics pass...`);
+      console.log(`[AudioAnalysis] Wrapper: Running AI spectral forensics pass...`);
     }
     try {
       const forensicsResult = await audioForensics.analyze(input, {
@@ -106,7 +106,7 @@ async function analyze(input, options = {}) {
       result.ai_forensics.dynamic_range_db = dspResult.dynamic_range_db;
     } catch (forensicsError) {
       if (verbose) {
-        console.error(`⚠️ AudioAnalysis (Wrapper) forensics pass failed: ${forensicsError.message}`);
+        console.error(`[WARN] AudioAnalysis (Wrapper) forensics pass failed: ${forensicsError.message}`);
       }
       throw forensicsError;
     }

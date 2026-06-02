@@ -4,23 +4,16 @@
  * This file shows how to integrate ORBIT middleware into your existing routes.
  * Copy the relevant patterns into your actual routes file.
  */
-
-/**
- * ORBIT Integration Examples for Ohnrshyp Routes
  * 
- * This file shows how to integrate ORBIT middleware into your existing routes.
- * Copy the relevant patterns into your actual routes file.
- * 
- * Session 16: orbitDuplicateCheck (duplicate detection)
- * Session 17: registerWithOrbit (auto-registration after track creation)
+ * Includes duplicate check (orbitDuplicateCheck) and auto-registration (registerWithOrbit).
  */
 
 const express = require('express');
 const router = express.Router();
 const { 
-  orbitDuplicateCheck,      // Session 16: Check for duplicates before track creation
-  registerWithOrbit          // Session 17: Auto-register after track creation
-} = require('./orbit-middleware-ohnrshyp');  // ← Use the S3-aware version
+  orbitDuplicateCheck,      // Check for duplicates before track creation
+  registerWithOrbit          // Auto-register after track creation
+} = require('./orbit-middleware-ohnrshyp');  // Use the S3-aware version
 
 // Your existing Ohnrshyp middleware (adjust paths as needed)
 const auth = require('../../middleware/auth.middleware');
@@ -34,18 +27,18 @@ const Track = require('../../models/track.model');
 /**
  * Pattern 1: Upload with Duplicate Check + Auto-Registration
  * 
- * ⭐ RECOMMENDED PATTERN for Ohnrshyp's main upload endpoint
+ * RECOMMENDED PATTERN for Ohnrshyp's main upload endpoint
  * 
  * Flow:
  * 1. uploadToS3 - Streams audio directly to S3 (Ohnrshyp's existing middleware)
  * 2. fileSecurityValidation - Downloads from S3, validates file (existing)
- * 3. orbitDuplicateCheck - Downloads from S3, checks for duplicates (Session 16)
- *    ✅ If new: Continues to track creation
- *    🚫 If duplicate: Returns 409, stops here
+ * 3. orbitDuplicateCheck - Downloads from S3, checks for duplicates
+ *    - If new: Continues to track creation
+ *    - If duplicate: Returns 409, stops here
  * 4. contentModerationMiddleware - Existing Ohnrshyp middleware
  * 5. Track created in MongoDB
  * 6. Response sent to user
- * 7. registerWithOrbit - Auto-registers with ORBIT in background (Session 17)
+ * 7. registerWithOrbit - Auto-registers with ORBIT in background
  * 
  * Key Points:
  * - Response sent BEFORE ORBIT registration (non-blocking)
@@ -58,7 +51,7 @@ router.post('/api/music',
   isMusician,
   // uploadToS3,                 // Your existing S3 streaming upload
   // fileSecurityValidation,     // Your existing security validation
-  orbitDuplicateCheck,           // ← Session 16: ORBIT duplicate detection
+  orbitDuplicateCheck,           // ORBIT duplicate detection
   // contentModerationMiddleware, // Your existing moderation
   async (req, res, next) => {
     try {
@@ -94,10 +87,10 @@ router.post('/api/music',
         }
       });
       
-      // ✅ CRITICAL: Attach track to request for registerWithOrbit middleware
+      // CRITICAL: Attach track to request for registerWithOrbit middleware
       req.track = track;
       
-      // ✅ Send response immediately (don't wait for ORBIT)
+      // Send response immediately (don't wait for ORBIT)
       res.status(201).json({
         success: true,
         message: 'Track uploaded successfully',
@@ -114,7 +107,7 @@ router.post('/api/music',
         }
       });
       
-      // ✅ Continue to next middleware (ORBIT registration happens in background)
+      // Continue to next middleware (ORBIT registration happens in background)
       next();
       
     } catch (error) {
@@ -126,7 +119,7 @@ router.post('/api/music',
       });
     }
   },
-  registerWithOrbit              // ← Session 17: Auto-register with ORBIT (non-blocking)
+  registerWithOrbit              // Auto-register with ORBIT (non-blocking)
 );
 
 /**

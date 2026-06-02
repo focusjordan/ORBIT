@@ -6,8 +6,7 @@
  * - Audio Embedding: Vector similarity via pgvector - semantic path
  * - Multi-platform duplicates allowed: same hash, different platforms = valid
  * 
- * Session 19: Added embedding update and similarity queries
- * Session 22: Switched from MERT (non-commercial) to CLAP embeddings (Apache 2.0)
+ * Added embedding update and similarity queries. Switched from MERT (non-commercial) to CLAP embeddings (Apache 2.0)
  *             Similarity search now uses `audio_embedding` (vector(512)).
  *             Note: legacy `mert_embedding` may still exist in older schemas.
  */
@@ -16,7 +15,7 @@ const { pool } = require('../config/database');
 
 const queries = {
   // ============================================================================
-  // Platform Queries (Session 10)
+  // Platform Queries
   // ============================================================================
   
   /**
@@ -226,7 +225,7 @@ const queries = {
   },
   
   // ============================================================================
-  // Transfer Queries (Session 13)
+  // Transfer Queries
   // ============================================================================
   
   /**
@@ -350,7 +349,7 @@ const queries = {
   },
   
   // ============================================================================
-  // Audio Embedding Queries (Session 19, updated Session 22)
+  // Audio Embedding Queries (updated to CLAP)
   // Uses CLAP embeddings (512-dim, Apache 2.0 licensed)
   // Stored in `audio_embedding` (vector(512)).
   // ============================================================================

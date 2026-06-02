@@ -1,7 +1,7 @@
 /**
  * ORBIT SilentCipher Neural Watermarking
  * 
- * Session 22 - Neural watermarking with SilentCipher (Sony AI)
+ * Neural watermarking with SilentCipher (Sony AI)
  * 
  * ╔══════════════════════════════════════════════════════════════════════════╗
  * ║  ✅ LICENSE: MIT (Commercially Licensable)                               ║
@@ -270,7 +270,7 @@ async function embed(input, payloadHash, options = {}) {
   
   try {
     if (verbose) {
-      console.log(`🔐 SilentCipher: Embedding watermark into ${audioPath}`);
+      console.log(`[SilentCipher] Embedding watermark into ${audioPath}`);
       console.log(`   Message: [${messageStr}]`);
     }
     
@@ -322,7 +322,7 @@ async function embed(input, payloadHash, options = {}) {
           const result = JSON.parse(stdout);
           
           if (verbose) {
-            console.log(`✅ SilentCipher: Embedded in ${(elapsed / 1000).toFixed(1)}s (SDR: ${result.sdr?.toFixed(1)}dB)`);
+            console.log(`[SilentCipher] Embedded in ${(elapsed / 1000).toFixed(1)}s (SDR: ${result.sdr?.toFixed(1)}dB)`);
           }
           
           resolve({
@@ -400,7 +400,7 @@ async function extract(input, options = {}) {
   
   try {
     if (verbose) {
-      console.log(`🔍 SilentCipher: Extracting watermark from ${audioPath}`);
+      console.log(`[SilentCipher] Extracting watermark from ${audioPath}`);
     }
     
     return await new Promise((resolve, reject) => {
@@ -465,9 +465,9 @@ async function extract(input, options = {}) {
           
           if (verbose) {
             if (detected) {
-              console.log(`✅ SilentCipher: Detected watermark (confidence: ${(result.confidence * 100).toFixed(1)}%)`);
+              console.log(`[SilentCipher] Detected watermark (confidence: ${(result.confidence * 100).toFixed(1)}%)`);
             } else {
-              console.log(`❌ SilentCipher: No watermark detected`);
+              console.log(`[SilentCipher] No watermark detected`);
             }
           }
           

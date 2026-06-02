@@ -77,3 +77,9 @@ DEPLOYMENT_HANDOFF.md
 SESSION_*_COMPLETE.md
 SESSION_*_HANDOFF.md
 ohnrshyp_explanation.md
+
+# Python build and packaging artifacts
+*.egg-info/
+build/
+dist/
+__pycache__/

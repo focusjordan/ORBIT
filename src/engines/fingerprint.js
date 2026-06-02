@@ -4,7 +4,7 @@
  * 
  * DESIGN NOTES:
  * - This provides EXACT-MATCH detection only (no similarity scoring)
- * - MERT semantic fingerprinting will be added in Session 19 for pitch/speed invariance
+ * - Semantic fingerprinting can be added optionally for pitch/speed invariance
  * - Keep this simple: Chromaprint → SHA-256 hash → exact comparison
  */
 

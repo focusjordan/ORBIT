@@ -11,7 +11,7 @@
  * 6. Building comprehensive provenance response
  * 7. Flagging duplicates from different owners
  * 
- * Session 25: Enhanced V2 Verification Response
+ * Enhanced V2 Verification Response
  * - Added `identity` section with dual fingerprints (Chromaprint + CLAP embedding)
  * - Added `ai_extracted_metadata` section with ML-derived metadata
  * - Enhanced `watermark` section with method and confidence
@@ -28,7 +28,7 @@ const { queries } = require('@ohnrshyp/ledger');
 const config = require('../../config');
 const AudioUtils = require('../../utils/audio');
 
-// ML modules for v2 enhancements (Session 20-24)
+// ML modules for v2 enhancements
 const contentAnalysis = require('../../ml/content-analysis');
 const metadataExtractor = require('@ohnrshyp/metadata');
 const clap = require('../../ml/clap');
@@ -328,7 +328,7 @@ async function verifyHandler(req, res) {
     }
     
     // ========================================================================
-    // 5. EXTRACT AI METADATA (Session 25 - v2 enhancement)
+    // 5. EXTRACT AI METADATA (v2 enhancement)
     // ========================================================================
     
     let aiMetadata = null;
@@ -403,7 +403,7 @@ async function verifyHandler(req, res) {
       // v2: AI-extracted metadata
       ai_extracted_metadata: aiMetadata,
       
-      // v2/v1: Content analysis (already added in Session 24)
+      // v2/v1: Content analysis
       content_analysis: null,
       
       // v2/v1: Provenance

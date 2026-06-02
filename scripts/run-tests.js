@@ -37,10 +37,10 @@ const skipMLFlag = args.includes('--skip-ml');
 // Set test audio mode (default to fast for better developer experience)
 if (isFullMode) {
   process.env.TEST_AUDIO_MODE = 'full';
-  console.log('🐢 Running in FULL mode (30-second audio) - thorough but slow\n');
+  console.log('[INFO] Running in FULL mode (30-second audio) - thorough but slow\n');
 } else {
   process.env.TEST_AUDIO_MODE = 'fast';
-  console.log('⚡ Running in FAST mode (5-second audio) - quick development iteration\n');
+  console.log('[INFO] Running in FAST mode (5-second audio) - quick development iteration\n');
 }
 
 if (skipMLFlag) {
@@ -63,7 +63,7 @@ if (fs.existsSync(credentialsPath) && !process.env.TEST_PLATFORM_PRIVATE_KEY) {
     const creds = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
     process.env.TEST_PLATFORM_PRIVATE_KEY = creds.private_key;
     process.env.TEST_PLATFORM_API_KEY = creds.api_key;
-    console.log('📁 Loaded credentials from .test-platform-credentials.json');
+    console.log('[INFO] Loaded credentials from .test-platform-credentials.json');
   } catch (e) {
     // Ignore, will be handled by prerequisite check
   }
@@ -148,7 +148,7 @@ async function runTest(testPath, name) {
   const fullPath = path.join(process.cwd(), testPath);
   
   if (!fs.existsSync(fullPath)) {
-    log(colors.yellow, `  ⚠️  ${name}: File not found (${testPath})`);
+    log(colors.yellow, `  [WARN] ${name}: File not found (${testPath})`);
     return { status: 'skipped', reason: 'file not found' };
   }
   
@@ -169,10 +169,10 @@ async function runTest(testPath, name) {
       const duration = Date.now() - startTime;
       
       if (code === 0) {
-        log(colors.green, `  ✅ ${name} (${duration}ms)`);
+        log(colors.green, `  PASS ${name} (${duration}ms)`);
         resolve({ status: 'passed', duration });
       } else {
-        log(colors.red, `  ❌ ${name} (exit code ${code})`);
+        log(colors.red, `  FAIL ${name} (exit code ${code})`);
         if (!process.env.VERBOSE && output) {
           // Show last few lines of output on failure
           const lines = output.trim().split('\n').slice(-10);
@@ -184,7 +184,7 @@ async function runTest(testPath, name) {
     });
     
     child.on('error', (err) => {
-      log(colors.red, `  ❌ ${name}: ${err.message}`);
+      log(colors.red, `  ERROR ${name}: ${err.message}`);
       resolve({ status: 'error', error: err.message });
     });
   });
@@ -192,14 +192,14 @@ async function runTest(testPath, name) {
 
 // Run a suite of tests
 async function runSuite(suiteName, tests, options = {}) {
-  log(colors.cyan, `\n📦 ${suiteName}`);
+  log(colors.cyan, `\n[SUITE] ${suiteName}`);
   log(colors.cyan, '─'.repeat(50));
   
   const results = { passed: 0, failed: 0, skipped: 0 };
   
   for (const test of tests) {
     if (test.skip || options.skip) {
-      log(colors.yellow, `  ⏭️  ${test.name} (skipped: ${test.reason || options.skipReason || 'user request'})`);
+      log(colors.yellow, `  SKIP ${test.name} (skipped: ${test.reason || options.skipReason || 'user request'})`);
       results.skipped++;
       continue;
     }
@@ -277,14 +277,14 @@ async function main() {
   console.log(colors.reset);
   
   // Check prerequisites
-  log(colors.cyan, '🔍 Checking prerequisites...');
+  log(colors.cyan, '[CHECK] Checking prerequisites...');
   const prereqs = await checkPrerequisites();
   
-  console.log(`   fpcalc (Chromaprint): ${prereqs.fpcalc ? '✅' : '❌'}`);
-  console.log(`   ffmpeg:               ${prereqs.ffmpeg ? '✅' : '❌'}`);
-  console.log(`   PostgreSQL:           ${prereqs.postgres ? '✅' : '❌'}`);
-  console.log(`   Server (localhost):   ${prereqs.server ? '✅' : '❌'}`);
-  console.log(`   Test audio files:     ${prereqs.testAudio ? '✅' : '❌'}`);
+  console.log(`   fpcalc (Chromaprint): ${prereqs.fpcalc ? 'OK' : 'NOT FOUND'}`);
+  console.log(`   ffmpeg:               ${prereqs.ffmpeg ? 'OK' : 'NOT FOUND'}`);
+  console.log(`   PostgreSQL:           ${prereqs.postgres ? 'OK' : 'NOT FOUND'}`);
+  console.log(`   Server (localhost):   ${prereqs.server ? 'OK' : 'NOT FOUND'}`);
+  console.log(`   Test audio files:     ${prereqs.testAudio ? 'OK' : 'NOT FOUND'}`);
   
   const totals = { passed: 0, failed: 0, skipped: 0 };
   
@@ -346,7 +346,7 @@ async function main() {
   
   // Always report skipped tests
   if (mode === 'all') {
-    log(colors.yellow, '\n⏭️  Skipped Test Suites:');
+    log(colors.yellow, '\nSkipped Test Suites:');
     for (const test of [...TEST_SUITES['v2:db-dependent'], ...TEST_SUITES['skip:gpu'], ...TEST_SUITES['skip:disabled']]) {
       log(colors.yellow, `   - ${test.name}: ${test.reason}`);
     }
@@ -364,10 +364,10 @@ async function main() {
   console.log('─'.repeat(60));
   
   if (totals.failed > 0) {
-    log(colors.red, '\n❌ Some tests failed!');
+    log(colors.red, '\n[FAIL] Some tests failed!');
     process.exit(1);
   } else {
-    log(colors.green, '\n✅ All tests passed!');
+    log(colors.green, '\n[PASS] All tests passed!');
     process.exit(0);
   }
 }
