@@ -123,7 +123,6 @@ const TEST_SUITES = {
     { name: 'ML Models Manager', file: 'tests/ml/models.test.js' },
     { name: 'CLAP Classification', file: 'tests/ml/clap.test.js' },
     { name: 'Audio Analysis (BPM/Key)', file: 'tests/ml/audio-analysis.test.js' },
-    { name: 'Metadata Extractor', file: 'tests/ml/metadata-extractor.test.js' },
   ],
   
   // V2 Tests that need DB state - Skip in automated runs
@@ -135,6 +134,7 @@ const TEST_SUITES = {
   // Tests that require special environment - Always skip in CI
   'skip:gpu': [
     { name: 'SilentCipher', file: 'tests/ml/silentcipher.test.js', skip: true, reason: 'Requires GPU' },
+    { name: 'Metadata Extractor', file: 'tests/ml/metadata-extractor.test.js', skip: true, reason: 'Requires GPU (heavy neural models)' },
   ],
   
   // Disabled tests
