@@ -9,7 +9,7 @@
     "url": "https://github.com/focusjordan/ORBIT/issues"
   },
   "name": "@ohnrshyp/metadata",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Unified AI-assisted descriptive audio metadata extraction pipeline (Mood, Genre, Instruments, Vocals, Embeddings)",
   "main": "src/index.js",
   "scripts": {
