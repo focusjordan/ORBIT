@@ -1,4 +1,13 @@
 {
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/focusjordan/ORBIT.git",
+    "directory": "packages/dsp"
+  },
+  "homepage": "https://github.com/focusjordan/ORBIT/tree/main/packages/dsp#readme",
+  "bugs": {
+    "url": "https://github.com/focusjordan/ORBIT/issues"
+  },
   "name": "@ohnrshyp/dsp",
   "version": "1.0.1",
   "description": "Ultra-fast, CPU-only classical audio feature extraction (BPM, Key, Loudness, Energy, Duration)",

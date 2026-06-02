@@ -1,4 +1,13 @@
 {
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/focusjordan/ORBIT.git",
+    "directory": "packages/metadata"
+  },
+  "homepage": "https://github.com/focusjordan/ORBIT/tree/main/packages/metadata#readme",
+  "bugs": {
+    "url": "https://github.com/focusjordan/ORBIT/issues"
+  },
   "name": "@ohnrshyp/metadata",
   "version": "1.0.1",
   "description": "Unified AI-assisted descriptive audio metadata extraction pipeline (Mood, Genre, Instruments, Vocals, Embeddings)",

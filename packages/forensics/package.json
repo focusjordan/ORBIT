@@ -1,4 +1,13 @@
 {
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/focusjordan/ORBIT.git",
+    "directory": "packages/forensics"
+  },
+  "homepage": "https://github.com/focusjordan/ORBIT/tree/main/packages/forensics#readme",
+  "bugs": {
+    "url": "https://github.com/focusjordan/ORBIT/issues"
+  },
   "name": "@ohnrshyp/forensics",
   "version": "1.0.1",
   "description": "High-fidelity AI audio forensics and spectral anomaly detection (Phase Entropy, 16kHz cutoffs, Cepstral Vocoder check)",

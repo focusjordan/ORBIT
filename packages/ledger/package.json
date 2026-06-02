@@ -1,4 +1,13 @@
 {
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/focusjordan/ORBIT.git",
+    "directory": "packages/ledger"
+  },
+  "homepage": "https://github.com/focusjordan/ORBIT/tree/main/packages/ledger#readme",
+  "bugs": {
+    "url": "https://github.com/focusjordan/ORBIT/issues"
+  },
   "name": "@ohnrshyp/ledger",
   "version": "1.0.1",
   "description": "Cryptographic ledger and database query engine for ORBIT (Ed25519, CBOR, pgvector similarities)",
