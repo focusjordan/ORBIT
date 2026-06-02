@@ -1,6 +1,6 @@
 {
   "name": "@ohnrshyp/forensics",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "High-fidelity AI audio forensics and spectral anomaly detection (Phase Entropy, 16kHz cutoffs, Cepstral Vocoder check)",
   "main": "src/index.js",
   "scripts": {

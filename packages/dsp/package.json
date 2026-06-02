@@ -1,6 +1,6 @@
 {
   "name": "@ohnrshyp/dsp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Ultra-fast, CPU-only classical audio feature extraction (BPM, Key, Loudness, Energy, Duration)",
   "main": "src/index.js",
   "scripts": {
