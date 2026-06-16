@@ -76,6 +76,41 @@ const queries = {
     return result.rows[0];
   },
   
+  /**
+   * Update a platform's API key hash
+   * @param {string} platformId - Platform ID
+   * @param {Buffer} apiKeyHash - New API key hash
+   * @returns {Promise<Object>} Updated platform metadata
+   */
+  updatePlatformApiKey: async (platformId, apiKeyHash) => {
+    const result = await pool.query(
+      `UPDATE orbit_platforms
+       SET api_key_hash = $2
+       WHERE id = $1
+       RETURNING id, name, tier, is_active, created_at`,
+      [platformId, apiKeyHash]
+    );
+    return result.rows[0];
+  },
+
+  /**
+   * Update a platform's Ed25519 public key
+   * @param {string} platformId - Platform ID
+   * @param {Buffer} publicKey - New Ed25519 public key
+   * @returns {Promise<Object>} Updated platform metadata
+   */
+  updatePlatformPublicKey: async (platformId, publicKey) => {
+    const result = await pool.query(
+      `UPDATE orbit_platforms
+       SET public_key = $2
+       WHERE id = $1
+       RETURNING id, name, tier, is_active, created_at`,
+      [platformId, publicKey]
+    );
+    return result.rows[0];
+  },
+
+  
   // ============================================================================
   // Registration Queries
   // ============================================================================

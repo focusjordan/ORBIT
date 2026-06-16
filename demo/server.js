@@ -140,6 +140,20 @@ if (testPlatformId && testPlatformKey) {
   console.warn('  Platform B not configured (set TEST_PLATFORM_ID + TEST_PLATFORM_PRIVATE_KEY for transfer demo)');
 }
 
+function getClientForRequest(req) {
+  const platformOverride = req.get('x-orbit-platform-override');
+  const privateKeyOverride = req.get('x-orbit-private-key-override');
+  const apiKeyOverride = req.get('x-orbit-api-key-override');
+  if (platformOverride && privateKeyOverride) {
+    try {
+      return buildClient(platformOverride, privateKeyOverride, 'Override Platform', apiKeyOverride || null);
+    } catch (err) {
+      console.warn(`[Proxy] Failed to build override client: ${err.message}`);
+    }
+  }
+  return client;
+}
+
 // ---------------------------------------------------------------------------
 // Express Setup
 // ---------------------------------------------------------------------------
@@ -148,6 +162,7 @@ const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/dashboard', express.static(path.join(__dirname, '../dashboard')));
 app.use(express.json());
 
 // ---------------------------------------------------------------------------
@@ -202,10 +217,10 @@ app.get('/api/demo-tracks/:filename', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/status
-// ---------------------------------------------------------------------------
+let lastKnownStatus = null;
+let lastStatusErrorLogged = false;
 
-app.get('/api/status', async (_req, res) => {
+app.get('/api/status', async (req, res) => {
   const apiUrl = process.env.ORBIT_API_URL;
   try {
     const healthRes = await fetch(`${apiUrl}/health`, { signal: AbortSignal.timeout(10000) });
@@ -217,20 +232,50 @@ app.get('/api/status', async (_req, res) => {
       info = await infoRes.json();
     } catch (_) { /* info endpoint is optional */ }
 
-    res.json({
+    const activeClient = getClientForRequest(req);
+    lastKnownStatus = {
       connected: true,
       server: apiUrl,
       health,
       info: info ? (info.data || info) : null,
-      platformA: process.env.ORBIT_PLATFORM_ID,
+      platformA: activeClient.platformId,
+      platformB: testPlatformId || null,
+      platformBAvailable: !!clientB,
+    };
+    lastStatusErrorLogged = false; // Reset error log flag on success
+    res.json(lastKnownStatus);
+  } catch (err) {
+    if (!lastStatusErrorLogged) {
+      console.warn('  [status] ORBIT server unreachable. Serving offline mode:', err.message);
+      lastStatusErrorLogged = true;
+    }
+    const activeClient = getClientForRequest(req);
+    res.json({
+      connected: false,
+      server: apiUrl,
+      health: lastKnownStatus?.health || { status: 'offline' },
+      info: lastKnownStatus?.info || null,
+      platformA: activeClient.platformId,
       platformB: testPlatformId || null,
       platformBAvailable: !!clientB,
     });
-  } catch (err) {
-    console.error('  Status check failed:', err.message);
-    res.status(502).json({ error: `Cannot reach ORBIT server: ${err.message}` });
   }
 });
+
+// ---------------------------------------------------------------------------
+// GET /api/catalog
+// ---------------------------------------------------------------------------
+app.get('/api/catalog', async (req, res) => {
+  try {
+    const activeClient = getClientForRequest(req);
+    const result = await activeClient.listRegistrations({ limit: 100 });
+    res.json(result);
+  } catch (err) {
+    // Log once or warnings, return empty catalog gracefully
+    res.json({ platform: req.get('x-orbit-platform-override') || 'sandbox', total: 0, registrations: [] });
+  }
+});
+
 
 // ---------------------------------------------------------------------------
 // POST /api/analyze  (with AI detection support)
@@ -264,9 +309,21 @@ app.post('/api/analyze', upload.single('audio'), async (req, res) => {
     const audio64 = req.file.buffer.toString('base64');
     const stemsDir = isKnownDemoTrack ? resolvePrecomputedStemsDir(safeFilename) : null;
 
+    const activeClient = getClientForRequest(req);
+    const headers = { 'Content-Type': 'application/json' };
+    headers['X-ORBIT-Platform'] = activeClient.platformId;
+    if (activeClient.apiKey) {
+      headers['X-ORBIT-API-Key'] = activeClient.apiKey;
+    }
+    const platformOverride = req.get('x-orbit-platform-override');
+    const signatureOverride = req.get('x-orbit-signature-override');
+    if (platformOverride && signatureOverride) {
+      headers['X-ORBIT-Signature'] = signatureOverride;
+    }
+
     const orbitRes = await fetch(`${apiUrl}/orbit/v2/analyze`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         audio: audio64,
         include: ['genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 'fingerprint', 'ai_detection', 'catalog_check'],
@@ -358,8 +415,9 @@ app.post('/api/register', upload.single('audio'), async (req, res) => {
       }
     }
 
-    const ownerId = client.platformId;
-    const result = await client.register(req.file.buffer, metadata, ownerId);
+    const activeClient = getClientForRequest(req);
+    const ownerId = activeClient.platformId;
+    const result = await activeClient.register(req.file.buffer, metadata, ownerId);
     const data = result.data || result;
 
     const response = {
@@ -403,7 +461,7 @@ app.post('/api/verify', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
 
-    const result = await client.verify(req.file.buffer);
+    const result = await getClientForRequest(req).verify(req.file.buffer);
     const data = result.data || result;
 
     res.json({
@@ -489,12 +547,13 @@ app.post('/api/transfer', express.json(), async (req, res) => {
       return res.status(400).json({ error: 'Platform B not configured. Set TEST_PLATFORM_ID and TEST_PLATFORM_PRIVATE_KEY.' });
     }
 
-    const { registration_id } = req.body;
+    const { registration_id, to_platform } = req.body;
     if (!registration_id) {
       return res.status(400).json({ error: 'registration_id is required' });
     }
 
-    const result = await client.transfer(Number(registration_id), testPlatformId);
+    const activeClient = getClientForRequest(req);
+    const result = await activeClient.transfer(Number(registration_id), to_platform || testPlatformId);
     const data = result.data || result;
 
     res.json({
@@ -518,16 +577,13 @@ app.post('/api/transfer', express.json(), async (req, res) => {
 
 app.post('/api/accept-transfer', express.json(), async (req, res) => {
   try {
-    if (!clientB) {
-      return res.status(400).json({ error: 'Platform B not configured.' });
-    }
-
     const { transfer_id } = req.body;
     if (!transfer_id) {
       return res.status(400).json({ error: 'transfer_id is required' });
     }
 
-    const result = await clientB.acceptTransfer(Number(transfer_id));
+    const activeClient = getClientForRequest(req);
+    const result = await activeClient.acceptTransfer(Number(transfer_id));
     const data = result.data || result;
 
     res.json({
@@ -552,13 +608,165 @@ app.post('/api/accept-transfer', express.json(), async (req, res) => {
 
 app.get('/api/chain/:fingerprint_hash', async (req, res) => {
   try {
-    const result = await client.getChain(req.params.fingerprint_hash);
+    const result = await getClientForRequest(req).getChain(req.params.fingerprint_hash);
     const data = result.data || result;
     res.json(data);
   } catch (err) {
     const status = err.status || 500;
     res.status(status).json({ error: err.message, details: err.details || null });
   }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/stems/:trackName/:stemName
+// ---------------------------------------------------------------------------
+app.get('/api/stems/:trackName/:stemName', (req, res) => {
+  const trackName = path.basename(req.params.trackName);
+  const stemName = path.basename(req.params.stemName);
+  const filePath = path.join(DEMO_AUDIO_DIR, 'stems', trackName, stemName);
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).json({ error: 'Stem not found' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/similar
+// ---------------------------------------------------------------------------
+app.post('/api/similar', upload.single('audio'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
+    const threshold = req.body.threshold ? Number(req.body.threshold) : 0.5;
+    const limit = req.body.limit ? Number(req.body.limit) : 20;
+    
+    const activeClient = getClientForRequest(req);
+    const result = await activeClient.similar(req.file.buffer, { threshold, limit });
+    res.json(result);
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message, details: err.details || null });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/login
+// ---------------------------------------------------------------------------
+app.post('/api/login', express.json(), async (req, res) => {
+  const { platform_id, api_key, private_key } = req.body || {};
+  if (!platform_id || !private_key) {
+    return res.status(400).json({ error: 'platform_id and private_key are required' });
+  }
+  
+  try {
+    const tempClient = buildClient(platform_id, private_key, 'Login Test', api_key || null);
+    
+    const body = {};
+    const cbor = require('cbor');
+    const nacl = require('tweetnacl');
+    const dataBuffer = cbor.encode(body);
+    const signature = nacl.sign.detached(new Uint8Array(dataBuffer), new Uint8Array(tempClient.privateKey));
+    
+    const headers = {
+      'X-ORBIT-Platform': tempClient.platformId,
+      'X-ORBIT-Signature': Buffer.from(signature).toString('base64'),
+      'Content-Type': 'application/cbor'
+    };
+    if (tempClient.apiKey) {
+      headers['X-ORBIT-API-Key'] = tempClient.apiKey;
+    }
+    
+    const response = await fetch(`${process.env.ORBIT_API_URL}/orbit/v1/auth-test`, {
+      method: 'POST',
+      headers,
+      body: dataBuffer
+    });
+    
+    const responseData = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json({ error: responseData.error?.message || responseData.message || 'Authentication failed' });
+    }
+    
+    res.json({
+      success: true,
+      platform: responseData.platform || { id: platform_id, name: 'Custom Platform' }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Platform Administration Proxy Routes
+// ---------------------------------------------------------------------------
+
+// POST /api/platforms/register
+app.post('/api/platforms/register', express.json(), async (req, res) => {
+  try {
+    const response = await fetch(`${process.env.ORBIT_API_URL}/orbit/v1/platforms/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    return res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Helper to proxy authenticated platform requests
+async function proxyAuthPlatformRequest(req, res, pathSuffix) {
+  const platformOverride = req.get('x-orbit-platform-override');
+  const signatureOverride = req.get('x-orbit-signature-override');
+  const apiKeyOverride = req.get('x-orbit-api-key-override');
+  
+  if (!platformOverride || !signatureOverride) {
+    return res.status(401).json({ error: 'Authentication headers required' });
+  }
+  
+  const headers = {
+    'X-ORBIT-Platform': platformOverride,
+    'X-ORBIT-Signature': signatureOverride,
+    'Content-Type': 'application/cbor'
+  };
+  if (apiKeyOverride) {
+    headers['X-ORBIT-API-Key'] = apiKeyOverride;
+  }
+  
+  try {
+    const cbor = require('cbor');
+    const encodedBody = cbor.encode(req.body || {});
+    
+    const response = await fetch(`${process.env.ORBIT_API_URL}/orbit/v1/platforms/${pathSuffix}`, {
+      method: 'POST',
+      headers,
+      body: encodedBody
+    });
+    
+    let responseData;
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/cbor')) {
+      const responseBuffer = await response.arrayBuffer();
+      responseData = cbor.decode(Buffer.from(responseBuffer));
+    } else {
+      responseData = await response.json();
+    }
+    
+    return res.status(response.status).json(responseData);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// POST /api/platforms/rotate-api-key
+app.post('/api/platforms/rotate-api-key', express.json(), (req, res) => {
+  return proxyAuthPlatformRequest(req, res, 'rotate-api-key');
+});
+
+// POST /api/platforms/rotate-keypair
+app.post('/api/platforms/rotate-keypair', express.json(), (req, res) => {
+  return proxyAuthPlatformRequest(req, res, 'rotate-keypair');
 });
 
 // ---------------------------------------------------------------------------

@@ -29,6 +29,7 @@ const chainHandler = require('./handlers/chain');
 const listRegistrationsHandler = require('./handlers/list');
 const pendingTransfersHandler = require('./handlers/pending');
 const watermarkmatchHandler = require('./handlers/watermarkmatch');
+const platformHandlers = require('./handlers/platform');
 
 const router = express.Router();
 
@@ -197,5 +198,10 @@ router.get('/registrations', platformAuth, listRegistrationsHandler);
  * Auth: Required (only returns transfers where caller is recipient)
  */
 router.get('/transfers/pending', platformAuth, pendingTransfersHandler);
+
+// Platform Onboarding & Key Management
+router.post('/platforms/register', platformHandlers.registerPlatform);
+router.post('/platforms/rotate-api-key', platformAuth, platformHandlers.rotateApiKey);
+router.post('/platforms/rotate-keypair', platformAuth, platformHandlers.rotateKeypair);
 
 module.exports = router;
