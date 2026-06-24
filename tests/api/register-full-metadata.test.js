@@ -84,6 +84,7 @@ async function orbitRequest(endpoint, metadata, audioBuffer) {
       ...formHeaders,
       'X-ORBIT-Platform': TEST_PLATFORM_ID,
       'X-ORBIT-Signature': signature.toString('base64'),
+      'X-ORBIT-API-Key': apiKey,
     },
     body: formData.getBuffer(), // Use getBuffer() for synchronous FormData
     duplex: 'half', // Required for streaming bodies in fetch

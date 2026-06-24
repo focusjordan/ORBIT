@@ -37,9 +37,10 @@ const TEST_AUDIO_PATH = getTestAudioPath();
 
 // Load test platform credentials
 const PLATFORM_PRIVATE_KEY = process.env.TEST_PLATFORM_PRIVATE_KEY;
+const PLATFORM_API_KEY = process.env.TEST_PLATFORM_API_KEY;
 
-if (!PLATFORM_PRIVATE_KEY) {
-  console.error('❌ TEST_PLATFORM_PRIVATE_KEY environment variable not set');
+if (!PLATFORM_PRIVATE_KEY || !PLATFORM_API_KEY) {
+  console.error('❌ TEST_PLATFORM_PRIVATE_KEY or TEST_PLATFORM_API_KEY environment variable not set');
   console.error('   Run: npm run seed:platform first');
   process.exit(1);
 }
@@ -73,6 +74,7 @@ async function registerAudio(metadata, audioBuffer) {
       ...formHeaders,
       'X-ORBIT-Platform': TEST_PLATFORM_ID,
       'X-ORBIT-Signature': signature.toString('base64'),
+      'X-ORBIT-API-Key': PLATFORM_API_KEY,
     },
     body: formData.getBuffer(),
     duplex: 'half',
@@ -109,7 +111,9 @@ async function getChain(fingerprintHash) {
   const response = await fetch(url, {
     method: 'GET',
     headers: {
-      'Accept': 'application/json'
+      'Accept': 'application/json',
+      'X-ORBIT-Platform': TEST_PLATFORM_ID,
+      'X-ORBIT-API-Key': PLATFORM_API_KEY,
     }
   });
   
@@ -149,7 +153,8 @@ async function initiateTransfer(registrationId, toPlatform) {
     headers: {
       'Content-Type': 'application/cbor',
       'X-ORBIT-Platform': TEST_PLATFORM_ID,
-      'X-ORBIT-Signature': signature.toString('base64')
+      'X-ORBIT-Signature': signature.toString('base64'),
+      'X-ORBIT-API-Key': PLATFORM_API_KEY
     },
     body: requestBody
   });
