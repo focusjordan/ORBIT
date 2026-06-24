@@ -10,6 +10,7 @@
  */
 
 const cbor = require('cbor');
+const express = require('express');
 const config = require('../../config');
 
 const { contentTypes } = config.api;
@@ -65,11 +66,22 @@ function formatCborDiagnostic(data, indent = 0) {
   return String(data);
 }
 
+// Create raw parsers with strict byte limits
+const strictRawParser = express.raw({
+  type: [contentTypes.cbor, contentTypes.json],
+  limit: '100kb',
+});
+
+const authRawParser = express.raw({
+  type: [contentTypes.cbor, contentTypes.json],
+  limit: '5mb',
+});
+
 /**
- * CBOR body parser middleware
- * Parses incoming request bodies as CBOR or JSON
+ * Dynamic CBOR/JSON raw body parser
+ * Enforces byteguards before data is parsed
  */
-function cborBodyParser(req, res, next) {
+function dynamicRawParser(req, res, next) {
   const contentType = req.get('Content-Type') || '';
   
   // Skip if no body expected
@@ -77,79 +89,85 @@ function cborBodyParser(req, res, next) {
     return next();
   }
   
-  // Skip multipart requests (handled by multer middleware)
+  // Skip multipart requests
   if (contentType.includes('multipart/form-data')) {
     return next();
   }
   
-  // Collect raw body
-  const chunks = [];
+  // Apply larger limit if authenticated, else strict limit
+  const parser = req.headers.authorization ? authRawParser : strictRawParser;
   
-  req.on('data', chunk => {
-    chunks.push(chunk);
-  });
+  parser(req, res, next);
+}
+
+/**
+ * Express error-handling middleware specifically for payload too large
+ */
+function payloadTooLargeErrorHandler(err, req, res, next) {
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).json({
+      error: 'Payload Too Large',
+      message: 'Request body exceeds the maximum allowed size limit.',
+    });
+  }
   
-  req.on('end', async () => {
-    const rawBody = Buffer.concat(chunks);
-    
-    console.log(`[CBOR] Received body: ${rawBody.length} bytes, Content-Type: ${contentType}`);
-    
-    // Empty body is fine for some requests
-    if (rawBody.length === 0) {
+  // Handle other body-parser errors
+  if (err && err.status === 400) {
+    return res.status(400).json({
+      error: 'Bad Request',
+      message: err.message,
+    });
+  }
+  
+  next(err);
+}
+
+/**
+ * Safe CBOR/JSON parser
+ * Takes the buffered req.body and safely decodes it
+ */
+async function safePayloadParser(req, res, next) {
+  // If no body was collected (e.g., empty request)
+  if (!req.body || !Buffer.isBuffer(req.body) || req.body.length === 0) {
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'DELETE') {
       req.body = {};
-      return next();
     }
-    
-    try {
-      // Parse based on content type
-      if (contentType.includes(contentTypes.cbor)) {
-        // Parse CBOR with increased buffer size (highWaterMark) for large payloads
-        // Default is 16KB, but audio files can be 200KB+
-        console.log(`[CBOR] Attempting to decode ${rawBody.length} bytes as CBOR...`);
-        req.body = cbor.decodeFirstSync(rawBody, {
-          highWaterMark: 1024 * 1024 * 10 // 10MB buffer
-        });
-        console.log(`[CBOR] Successfully decoded CBOR`);
+    return next();
+  }
+  
+  const contentType = req.get('Content-Type') || '';
+  
+  try {
+    if (contentType.includes(contentTypes.cbor)) {
+      req.body = await cbor.decodeFirst(req.body);
+      req.bodyFormat = 'cbor';
+    } else if (contentType.includes(contentTypes.json)) {
+      req.body = JSON.parse(req.body.toString('utf8'));
+      req.bodyFormat = 'json';
+    } else {
+      // Default: try CBOR first, fall back to JSON
+      try {
+        req.body = await cbor.decodeFirst(req.body);
         req.bodyFormat = 'cbor';
-      } else if (contentType.includes(contentTypes.json)) {
-        // Parse JSON (for debugging/testing)
-        req.body = JSON.parse(rawBody.toString('utf8'));
-        req.bodyFormat = 'json';
-      } else {
-        // Default: try CBOR first, fall back to JSON
+      } catch {
         try {
-          req.body = cbor.decodeFirstSync(rawBody, {
-            highWaterMark: 1024 * 1024 * 10 // 10MB buffer
-          });
-          req.bodyFormat = 'cbor';
+          req.body = JSON.parse(req.body.toString('utf8'));
+          req.bodyFormat = 'json';
         } catch {
-          try {
-            req.body = JSON.parse(rawBody.toString('utf8'));
-            req.bodyFormat = 'json';
-          } catch {
-            return res.status(400).json({
-              error: 'Invalid request body',
-              message: 'Body must be valid CBOR or JSON',
-            });
-          }
+          return res.status(400).json({
+            error: 'Invalid request body',
+            message: 'Body must be valid CBOR or JSON',
+          });
         }
       }
-      
-      next();
-    } catch (error) {
-      return res.status(400).json({
-        error: 'Parse error',
-        message: error.message,
-      });
     }
-  });
-  
-  req.on('error', (error) => {
+    next();
+  } catch (error) {
     return res.status(400).json({
-      error: 'Request error',
-      message: error.message,
+      error: 'Parse error',
+      message: 'Malformed payload: ' + error.message,
     });
-  });
+  }
 }
 
 /**
@@ -241,14 +259,25 @@ function cborResponseHelper(req, res, next) {
  */
 function cborMiddleware(req, res, next) {
   // Add response helper first
-  cborResponseHelper(req, res, () => {
-    // Then parse body
-    cborBodyParser(req, res, next);
+  cborResponseHelper(req, res, (err) => {
+    if (err) return next(err);
+    
+    // Apply byteguards and parse raw body dynamically
+    dynamicRawParser(req, res, (err) => {
+      if (err) {
+        return payloadTooLargeErrorHandler(err, req, res, next);
+      }
+      
+      // Finally safely decode the CBOR/JSON buffer
+      safePayloadParser(req, res, next);
+    });
   });
 }
 
 module.exports = {
-  cborBodyParser,
+  dynamicRawParser,
+  payloadTooLargeErrorHandler,
+  safePayloadParser,
   cborResponseHelper,
   cborMiddleware,
 };

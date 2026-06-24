@@ -112,7 +112,7 @@ router.post('/register',
 /**
  * POST /orbit/v1/verify
  * Verify audio provenance and extract metadata
- * Auth: Optional (verification works for anyone, platform context optional)
+ * Auth: Required (platform context required for compute-intensive tasks)
  * 
  * Security: GPU-intensive rate limit (10/min)
  * 
@@ -122,7 +122,7 @@ router.post('/register',
  */
 router.post('/verify', 
   (req, res, next) => getGpuLimiter(req)(req, res, next), // GPU rate limit
-  optionalAuth, 
+  platformAuth, 
   verifyHandler
 );
 
@@ -130,14 +130,14 @@ router.post('/verify',
  * POST /orbit/v1/watermarkmatch
  * Watermark-only verification — extracts watermark from audio and looks up
  * the matching registration by hash prefix. No fingerprint, no AI metadata.
- * Auth: Optional
+ * Auth: Required
  *
  * Request: JSON with base64-encoded audio { "audio": "<base64>" }
  * Response: extracted watermark info + matching registration (if found)
  */
 router.post('/watermarkmatch',
   (req, res, next) => getGpuLimiter(req)(req, res, next),
-  optionalAuth,
+  platformAuth,
   watermarkmatchHandler
 );
 
@@ -173,7 +173,7 @@ router.post('/accept', platformAuth, transferHandlers.acceptTransfer);
 /**
  * GET /orbit/v1/chain/:fingerprint
  * Get full custody chain for a fingerprint
- * Auth: Optional (public lookup, but platform context may show more details)
+ * Auth: Required
  * 
  * URL Parameter:
  * - fingerprint: 64-character hex string (32-byte hash)
@@ -181,7 +181,7 @@ router.post('/accept', platformAuth, transferHandlers.acceptTransfer);
  * Response: Complete chain with all registrations and transfers,
  *           chronologically ordered, with signature validation status
  */
-router.get('/chain/:fingerprint', optionalAuth, chainHandler);
+router.get('/chain/:fingerprint', platformAuth, chainHandler);
 
 /**
  * GET /orbit/v1/registrations

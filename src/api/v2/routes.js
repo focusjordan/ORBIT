@@ -9,7 +9,7 @@
  */
 
 const express = require('express');
-const { optionalAuth } = require('../middleware/auth');
+const { platformAuth } = require('../middleware/auth');
 
 // Import ML modules
 const contentAnalysis = require('../../ml/content-analysis');
@@ -681,24 +681,24 @@ router.get('/info', (req, res) => {
 /**
  * POST /orbit/v2/similar
  * Find similar-sounding tracks via CLAP embeddings
- * Auth: Optional (public query, platform context may influence results)
+ * Auth: Required (platform context required)
  * Security: GPU-intensive rate limit (10/min)
  */
 router.post('/similar', 
   (req, res, next) => getGpuLimiter(req)(req, res, next), // GPU rate limit
-  optionalAuth, 
+  platformAuth, 
   similarHandler
 );
 
 /**
  * POST /orbit/v2/analyze
  * Standalone audio analysis without registration
- * Auth: Optional (public analysis, platform context may influence limits)
+ * Auth: Required (platform context required)
  * Security: GPU-intensive rate limit (10/min)
  */
 router.post('/analyze', 
   (req, res, next) => getGpuLimiter(req)(req, res, next), // GPU rate limit
-  optionalAuth, 
+  platformAuth, 
   analyzeHandler
 );
 
