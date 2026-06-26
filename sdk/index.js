@@ -391,6 +391,28 @@ class OrbitClient {
   }
 
   /**
+   * Watermark-only verification
+   * 
+   * Extracts watermark from audio and looks up the matching registration
+   * by hash prefix. No fingerprint, no AI metadata.
+   * 
+   * @param {Buffer} audioBuffer - Binary audio data to verify
+   * 
+   * @returns {Promise<Object>} Match result
+   */
+  async watermarkmatch(audioBuffer) {
+    if (!Buffer.isBuffer(audioBuffer)) {
+      throw new Error('audioBuffer must be a Buffer');
+    }
+
+    const body = {
+      audio: audioBuffer.toString('base64')
+    };
+
+    return this._request('POST', '/orbit/v1/watermarkmatch', body);
+  }
+
+  /**
    * Initiate B2B transfer
    * 
    * Transfers ownership of a registered audio file to another platform.
@@ -658,6 +680,62 @@ class OrbitClient {
     return responseData;
   }
 
+  /**
+   * Register a new platform
+   * @static
+   * @param {string} apiUrl - Base URL of ORBIT API
+   * @param {string} platformId - Desired platform ID (3-32 chars)
+   * @param {string} name - Platform name
+   * @param {string} [tier='basic'] - Platform tier
+   * @returns {Promise<Object>} Registration details including private_key
+   */
+  static async registerPlatform(apiUrl, platformId, name, tier = 'basic') {
+    const url = `${apiUrl.replace(/\/$/, '')}/orbit/v1/platforms/register`;
+    const body = { platform_id: platformId, name, tier };
+    
+    const requestBody = cbor.encode(body);
+    const headers = { 'Content-Type': 'application/cbor' };
+
+    const response = await fetch(url, { method: 'POST', headers, body: requestBody });
+    const contentType = response.headers.get('content-type') || '';
+    let responseData;
+    
+    if (contentType.includes('application/cbor')) {
+      const buf = await response.arrayBuffer();
+      responseData = cbor.decode(Buffer.from(buf));
+    } else if (contentType.includes('application/json')) {
+      responseData = await response.json();
+    } else {
+      const text = await response.text();
+      try { responseData = JSON.parse(text); } catch { throw new Error(`Unexpected response: ${text.slice(0, 200)}`); }
+    }
+
+    if (!response.ok) {
+      const error = new Error(responseData.message || responseData.error || `HTTP ${response.status}`);
+      error.status = response.status;
+      error.code = responseData.error;
+      throw error;
+    }
+
+    return responseData;
+  }
+
+  /**
+   * Rotate platform API key
+   * @returns {Promise<Object>} New API key details
+   */
+  async rotateApiKey() {
+    return this._request('POST', '/orbit/v1/platforms/rotate-api-key', {});
+  }
+
+  /**
+   * Rotate platform Ed25519 keypair
+   * @returns {Promise<Object>} New keypair details
+   */
+  async rotateKeypair() {
+    return this._request('POST', '/orbit/v1/platforms/rotate-keypair', {});
+  }
+
   // ============================================================================
   // V2 ENDPOINTS - AI-Powered Analysis
   // ============================================================================
@@ -717,8 +795,8 @@ class OrbitClient {
    * @param {Object} [options] - Analysis options
    * @param {Array<string>} [options.include] - Specific fields to include
    *   Valid values: 'genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 
-   *   'fingerprint', 'embedding'
-   *   Default: all except 'embedding'
+   *   'fingerprint', 'embedding', 'ai_detection', 'catalog_check'
+   *   Default: all except 'embedding', 'ai_detection', 'catalog_check'
    * 
    * @returns {Promise<Object>} Analysis results
    * @returns {Object} result.analysis - Analysis data
