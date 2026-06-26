@@ -21,23 +21,41 @@ class OrbitCrypto {
   }
   
   /**
+   * Internal helper: Prepares an object for Ed25519 signing/verification
+   * Implements the ORBIT Pre-Hash Protocol to prevent event-loop blocking
+   * @param {Buffer|Object} data 
+   * @returns {Buffer}
+   */
+  static _prepareForCrypto(data) {
+    if (Buffer.isBuffer(data)) {
+      return data;
+    } else if (typeof data === 'object' && data !== null) {
+      // Remove signature field if present
+      const { signature, ...unsigned } = data;
+      
+      // PRE-HASH PROTOCOL
+      // If a massive audio buffer is present, we hash it natively (C++) via SHA-256
+      // and sign the hash instead. This prevents the synchronous Ed25519 math 
+      // from blocking the Node.js event loop on massive payloads.
+      if (unsigned.audio && Buffer.isBuffer(unsigned.audio)) {
+        unsigned.audio_hash = this.hash(unsigned.audio);
+        delete unsigned.audio;
+      }
+      
+      return cbor.encode(unsigned);
+    } else {
+      throw new Error('Data must be Buffer or Object');
+    }
+  }
+
+  /**
    * Sign data with Ed25519 private key
    * @param {Buffer|Object} data - Data to sign (will be CBOR encoded if object)
    * @param {Buffer} privateKey - 64-byte Ed25519 private key
    * @returns {Buffer} 64-byte signature
    */
   static sign(data, privateKey) {
-    let dataBuffer;
-    
-    if (Buffer.isBuffer(data)) {
-      dataBuffer = data;
-    } else if (typeof data === 'object' && data !== null) {
-      // Remove signature field if present, then encode
-      const { signature, ...unsigned } = data;
-      dataBuffer = cbor.encode(unsigned);
-    } else {
-      throw new Error('Data must be Buffer or Object');
-    }
+    const dataBuffer = this._prepareForCrypto(data);
     
     const signature = nacl.sign.detached(
       new Uint8Array(dataBuffer),
@@ -55,16 +73,7 @@ class OrbitCrypto {
    * @returns {boolean}
    */
   static verify(data, signature, publicKey) {
-    let dataBuffer;
-    
-    if (Buffer.isBuffer(data)) {
-      dataBuffer = data;
-    } else if (typeof data === 'object' && data !== null) {
-      const { signature: _, ...unsigned } = data;
-      dataBuffer = cbor.encode(unsigned);
-    } else {
-      throw new Error('Data must be Buffer or Object');
-    }
+    const dataBuffer = this._prepareForCrypto(data);
     
     try {
       return nacl.sign.detached.verify(
