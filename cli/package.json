@@ -1,6 +1,6 @@
 {
   "name": "@ohnrshyp/orbit-cli",
-  "version": "1.0.1",
+  "version": "1.1.1",
   "description": "CLI for the ORBIT audio provenance protocol — register, verify, transfer, and analyze audio from the command line or via agents",
   "main": "lib/index.js",
   "bin": {
