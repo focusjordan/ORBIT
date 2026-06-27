@@ -1,4 +1,4 @@
-const { spawn, execSync } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -43,7 +43,7 @@ function extractJson(output) {
 async function checkEnvironment() {
   return new Promise((resolve) => {
     try {
-      const pythonVersion = execSync(`${DEMUCS_CONFIG.pythonCommand} --version`, {
+      const pythonVersion = execFileSync(DEMUCS_CONFIG.pythonCommand, ['--version'], {
         encoding: 'utf8',
         timeout: 5000,
       }).trim();

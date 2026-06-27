@@ -94,8 +94,13 @@ function dynamicRawParser(req, res, next) {
     return next();
   }
   
-  // Apply larger limit if authenticated, else strict limit
-  const parser = req.headers.authorization ? authRawParser : strictRawParser;
+  // Apply larger limit if authenticated (using standard Authorization or ORBIT custom headers)
+  const isPlatformAuth = 
+    req.headers.authorization || 
+    req.get('X-ORBIT-API-Key') || 
+    req.get('X-ORBIT-Platform');
+    
+  const parser = isPlatformAuth ? authRawParser : strictRawParser;
   
   parser(req, res, next);
 }

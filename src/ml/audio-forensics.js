@@ -12,7 +12,7 @@
  * Typically executed in asynchronous workers or deep screening pipelines.
  */
 
-const { spawn, execSync } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -39,8 +39,9 @@ function detectAudioExtension(buffer) {
 const FORENSICS_CONFIG = {
   scriptPath: path.join(__dirname, '../../scripts/audio_forensics.py'),
   maxLengthSeconds: 120,
-  pythonCommand: process.env.ORBIT_PYTHON_PATH || 
-    (fs.existsSync(path.join(__dirname, '../../.venv/bin/python3')) 
+  pythonCommand: process.env.ORBIT_FORENSICS_PYTHON ||
+    process.env.ORBIT_PYTHON_PATH ||
+    (fs.existsSync(path.join(__dirname, '../../.venv/bin/python3'))
       ? path.join(__dirname, '../../.venv/bin/python3')
       : 'python3'),
   timeout: 120000, // 2 minutes for heavy ML/spectral analysis
@@ -58,7 +59,7 @@ const FORENSICS_CONFIG = {
 async function checkPythonEnvironment() {
   return new Promise((resolve) => {
     try {
-      const pythonVersion = execSync(`${FORENSICS_CONFIG.pythonCommand} --version`, {
+      const pythonVersion = execFileSync(FORENSICS_CONFIG.pythonCommand, ['--version'], {
         encoding: 'utf8',
         timeout: 5000,
       }).trim();

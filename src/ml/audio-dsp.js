@@ -12,7 +12,7 @@
  * Runs entirely on CPU with zero ML library loading.
  */
 
-const { spawn, execSync } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -39,8 +39,9 @@ function detectAudioExtension(buffer) {
 const DSP_CONFIG = {
   scriptPath: path.join(__dirname, '../../scripts/audio_dsp.py'),
   maxLengthSeconds: 120,
-  pythonCommand: process.env.ORBIT_PYTHON_PATH || 
-    (fs.existsSync(path.join(__dirname, '../../.venv/bin/python3')) 
+  pythonCommand: process.env.ORBIT_DSP_PYTHON ||
+    process.env.ORBIT_PYTHON_PATH ||
+    (fs.existsSync(path.join(__dirname, '../../.venv/bin/python3'))
       ? path.join(__dirname, '../../.venv/bin/python3')
       : 'python3'),
   timeout: 30000, // Fast 30s timeout for CPU DSP
@@ -58,7 +59,7 @@ const DSP_CONFIG = {
 async function checkPythonEnvironment() {
   return new Promise((resolve) => {
     try {
-      const pythonVersion = execSync(`${DSP_CONFIG.pythonCommand} --version`, {
+      const pythonVersion = execFileSync(DSP_CONFIG.pythonCommand, ['--version'], {
         encoding: 'utf8',
         timeout: 5000,
       }).trim();

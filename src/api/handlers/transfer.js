@@ -22,6 +22,7 @@
 
 const OrbitCrypto = require('../../engines/crypto');
 const queries = require('../../ledger/queries');
+const { pool } = require('../../config/database');
 
 /**
  * POST /orbit/v1/transfer
@@ -81,7 +82,7 @@ async function initiateTransfer(req, res) {
       return res.orbitError(
         'not_found',
         `Registration ${registration_id} not found`,
-        404
+        84
       );
     }
     
@@ -105,7 +106,7 @@ async function initiateTransfer(req, res) {
       return res.orbitError(
         'invalid_platform',
         `Recipient platform ${to_platform} not found`,
-        404
+        108
       );
     }
     
@@ -171,6 +172,7 @@ async function initiateTransfer(req, res) {
  * }
  */
 async function acceptTransfer(req, res) {
+  const client = await pool.connect();
   try {
     const { transfer_id } = req.body;
     
@@ -186,9 +188,18 @@ async function acceptTransfer(req, res) {
     // Recipient is authenticated (done by platformAuth middleware)
     const to_platform = req.platform.id;
     
-    // Get transfer record
-    const transfer = await queries.getTransfer(transfer_id);
+    // Start database transaction
+    await client.query('BEGIN');
+    
+    // Retrieve and lock transfer record to prevent concurrent modifications
+    const transferRes = await client.query(
+      `SELECT * FROM orbit_transfers WHERE id = $1 FOR UPDATE`,
+      [transfer_id]
+    );
+    const transfer = transferRes.rows[0];
+    
     if (!transfer) {
+      await client.query('ROLLBACK');
       return res.orbitError(
         'not_found',
         `Transfer ${transfer_id} not found`,
@@ -198,6 +209,7 @@ async function acceptTransfer(req, res) {
     
     // Verify caller is the intended recipient
     if (transfer.to_platform !== to_platform) {
+      await client.query('ROLLBACK');
       return res.orbitError(
         'unauthorized',
         `Transfer ${transfer_id} is not addressed to platform ${to_platform}`,
@@ -207,6 +219,7 @@ async function acceptTransfer(req, res) {
     
     // Check transfer status
     if (transfer.status !== 'pending') {
+      await client.query('ROLLBACK');
       return res.orbitError(
         'invalid_status',
         `Transfer ${transfer_id} status is ${transfer.status}, expected 'pending'`,
@@ -217,11 +230,15 @@ async function acceptTransfer(req, res) {
     // Check if transfer has expired
     if (new Date(transfer.expires_at) < new Date()) {
       // Update status to expired
-      await queries.updateTransfer(transfer_id, {
-        status: 'expired',
-        to_signature: null,
-        new_registration_id: null
-      });
+      await client.query(
+        `UPDATE orbit_transfers
+         SET status = 'expired',
+             to_signature = null,
+             new_registration_id = null
+         WHERE id = $1`,
+        [transfer_id]
+      );
+      await client.query('COMMIT');
       
       return res.orbitError(
         'transfer_expired',
@@ -231,8 +248,14 @@ async function acceptTransfer(req, res) {
     }
     
     // Get original registration
-    const originalReg = await queries.getRegistration(transfer.registration_id);
+    const originalRegRes = await client.query(
+      `SELECT * FROM orbit_registrations WHERE id = $1`,
+      [transfer.registration_id]
+    );
+    const originalReg = originalRegRes.rows[0];
+    
     if (!originalReg) {
+      await client.query('ROLLBACK');
       return res.orbitError(
         'not_found',
         `Original registration ${transfer.registration_id} not found`,
@@ -316,73 +339,88 @@ async function acceptTransfer(req, res) {
       prevEntryHash
     );
     
-    // Create new registration for recipient
-    const newReg = await queries.insertRegistration({
-      fingerprint_hash: originalReg.fingerprint_hash,
-      fingerprint_raw: originalReg.fingerprint_raw,
-      watermark_hash: watermarkHash,
-      
-      // Core metadata
-      isrc: originalReg.isrc,
-      upc: originalReg.upc,
-      title: originalReg.title,
-      artist: originalReg.artist,
-      duration_ms: originalReg.duration_ms,
-      p_line: originalReg.p_line,
-      c_line: originalReg.c_line,
-      primary_genre: originalReg.primary_genre,
-      language: originalReg.language,
-      
-      // Technical metadata
-      bitrate: originalReg.bitrate,
-      sample_rate: originalReg.sample_rate,
-      channels: originalReg.channels,
-      format: originalReg.format,
-      
-      // Extended metadata
-      album_title: originalReg.album_title,
-      track_number: originalReg.track_number,
-      secondary_genre: originalReg.secondary_genre,
-      release_date: originalReg.release_date,
-      original_release_date: originalReg.original_release_date,
-      label: originalReg.label,
-      catalog_number: originalReg.catalog_number,
-      version: originalReg.version,
-      parental_advisory: originalReg.parental_advisory,
-      
-      // Contributors
-      featured_artists: originalReg.featured_artists,
-      composers: originalReg.composers,
-      lyricists: originalReg.lyricists,
-      writers: originalReg.writers,
-      producers: originalReg.producers,
-      remixer: originalReg.remixer,
-      recording_location: originalReg.recording_location,
-      recording_year: originalReg.recording_year,
-      
-      // Rights
-      iswc: originalReg.iswc,
-      territories: originalReg.territories,
-      preview_start_ms: originalReg.preview_start_ms,
-      
-      // Ownership - recipient is now the origin for this registration
-      owner_id: originalReg.owner_id,
-      origin_platform: to_platform,
-      origin_timestamp: new Date(),
-      origin_signature: to_signature,  // Recipient's signature on accept request
-      
-      // Payload and chain
-      payload_cbor: newPayloadCbor,
-      prev_entry_hash: prevEntryHash,
-      entry_hash: entryHash
-    });
+    // Create new registration for recipient within transaction
+    const insertRegRes = await client.query(
+      `INSERT INTO orbit_registrations (
+        fingerprint_hash, fingerprint_raw, watermark_hash,
+        isrc, upc, title, artist, duration_ms,
+        p_line, c_line, primary_genre, language,
+        bitrate, sample_rate, channels, format,
+        album_title, track_number, secondary_genre, release_date, original_release_date,
+        label, catalog_number, version, parental_advisory,
+        featured_artists, composers, lyricists, writers, producers,
+        remixer, recording_location, recording_year,
+        iswc, territories, preview_start_ms,
+        owner_id, origin_platform, origin_timestamp, origin_signature,
+        payload_cbor, prev_entry_hash, entry_hash
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+        $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+        $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
+        $41, $42, $43
+      )
+      RETURNING id, created_at`,
+      [
+        originalReg.fingerprint_hash,
+        originalReg.fingerprint_raw,
+        watermarkHash,
+        originalReg.isrc || null,
+        originalReg.upc || null,
+        originalReg.title,
+        originalReg.artist,
+        originalReg.duration_ms,
+        originalReg.p_line || null,
+        originalReg.c_line || null,
+        originalReg.primary_genre || null,
+        originalReg.language || null,
+        originalReg.bitrate || null,
+        originalReg.sample_rate || null,
+        originalReg.channels || null,
+        originalReg.format || null,
+        originalReg.album_title || null,
+        originalReg.track_number || null,
+        originalReg.secondary_genre || null,
+        originalReg.release_date || null,
+        originalReg.original_release_date || null,
+        originalReg.label || null,
+        originalReg.catalog_number || null,
+        originalReg.version || null,
+        originalReg.parental_advisory || null,
+        originalReg.featured_artists ? (typeof originalReg.featured_artists === 'string' ? originalReg.featured_artists : JSON.stringify(originalReg.featured_artists)) : null,
+        originalReg.composers ? (typeof originalReg.composers === 'string' ? originalReg.composers : JSON.stringify(originalReg.composers)) : null,
+        originalReg.lyricists ? (typeof originalReg.lyricists === 'string' ? originalReg.lyricists : JSON.stringify(originalReg.lyricists)) : null,
+        originalReg.writers ? (typeof originalReg.writers === 'string' ? originalReg.writers : JSON.stringify(originalReg.writers)) : null,
+        originalReg.producers ? (typeof originalReg.producers === 'string' ? originalReg.producers : JSON.stringify(originalReg.producers)) : null,
+        originalReg.remixer || null,
+        originalReg.recording_location || null,
+        originalReg.recording_year || null,
+        originalReg.iswc || null,
+        originalReg.territories ? (typeof originalReg.territories === 'string' ? originalReg.territories : JSON.stringify(originalReg.territories)) : null,
+        originalReg.preview_start_ms || null,
+        originalReg.owner_id,
+        to_platform,
+        new Date(),
+        to_signature,
+        newPayloadCbor,
+        prevEntryHash || null,
+        entryHash
+      ]
+    );
+    const newReg = insertRegRes.rows[0];
     
     // Update transfer status
-    await queries.updateTransfer(transfer_id, {
-      status: 'accepted',
-      to_signature,
-      new_registration_id: newReg.id
-    });
+    await client.query(
+      `UPDATE orbit_transfers
+       SET status = 'accepted',
+           to_signature = $2,
+           new_registration_id = $3,
+           accepted_at = NOW()
+       WHERE id = $1`,
+      [transfer_id, to_signature, newReg.id]
+    );
+    
+    await client.query('COMMIT');
     
     // Build full chain for response
     const fullChain = [
@@ -425,12 +463,15 @@ async function acceptTransfer(req, res) {
     });
     
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Transfer acceptance error:', error);
     res.orbitError(
       'internal_error',
       'Failed to accept transfer: ' + error.message,
       500
     );
+  } finally {
+    client.release();
   }
 }
 

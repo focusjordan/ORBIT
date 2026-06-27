@@ -4,7 +4,7 @@
  * Bridges Node.js to scripts/genre_classify.py.
  */
 
-const { spawn, execSync } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -130,7 +130,7 @@ async function classify(input, options = {}) {
 async function checkEnvironment() {
   return new Promise((resolve) => {
     try {
-      const pythonVersion = execSync(`${GENRE_CONFIG.pythonCommand} --version`, {
+      const pythonVersion = execFileSync(GENRE_CONFIG.pythonCommand, ['--version'], {
         encoding: 'utf8',
         timeout: 5000,
       }).trim();

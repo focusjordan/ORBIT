@@ -33,7 +33,7 @@
  * @see ORBIT_ENHANCEMENTS.md Section 1 (Neural Watermarking)
  */
 
-const { spawn, execSync } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -131,7 +131,7 @@ async function checkPythonEnvironment() {
   return new Promise((resolve) => {
     try {
       // Check Python is available
-      const pythonVersion = execSync(`${SILENTCIPHER_CONFIG.pythonCommand} --version`, {
+      const pythonVersion = execFileSync(SILENTCIPHER_CONFIG.pythonCommand, ['--version'], {
         encoding: 'utf8',
         timeout: 5000,
       }).trim();
