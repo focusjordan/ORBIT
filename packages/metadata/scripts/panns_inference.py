@@ -132,9 +132,11 @@ def ensure_panns_labels_csv():
         return
 
     labels_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"Downloading PANNs labels CSV from {LABELS_CSV_URL}...", flush=True)
     with urlopen(LABELS_CSV_URL, timeout=30) as resp:
         content = resp.read()
     labels_path.write_bytes(content)
+    print("Labels download completed successfully.", flush=True)
 
 
 def ensure_panns_checkpoint():
@@ -144,13 +146,40 @@ def ensure_panns_checkpoint():
         return str(checkpoint_path)
 
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"Downloading PANNs checkpoint from {CHECKPOINT_URL}...", flush=True)
     with urlopen(CHECKPOINT_URL, timeout=120) as resp:
+        total_size_hdr = resp.getheader("Content-Length")
+        total_size = int(total_size_hdr) if total_size_hdr else None
+        
+        if total_size:
+            print(f"Total size: {total_size / (1024 * 1024):.2f} MB", flush=True)
+        else:
+            print("Total size: unknown", flush=True)
+            
+        downloaded = 0
+        last_reported_percent = -1
+        last_reported_mb = 0
+        
         with checkpoint_path.open("wb") as out_file:
             while True:
                 chunk = resp.read(1024 * 1024)
                 if not chunk:
                     break
                 out_file.write(chunk)
+                downloaded += len(chunk)
+                
+                if total_size:
+                    percent = int((downloaded / total_size) * 100)
+                    if percent >= last_reported_percent + 5 or downloaded == total_size:
+                        print(f"Downloaded: {downloaded / (1024 * 1024):.2f} MB / {total_size / (1024 * 1024):.2f} MB ({percent}%)", flush=True)
+                        last_reported_percent = percent
+                else:
+                    downloaded_mb = downloaded / (1024 * 1024)
+                    if downloaded_mb >= last_reported_mb + 10:
+                        print(f"Downloaded: {downloaded_mb:.2f} MB", flush=True)
+                        last_reported_mb = downloaded_mb
+                        
+    print("Download completed successfully.", flush=True)
 
     if checkpoint_path.stat().st_size < 300_000_000:
         raise RuntimeError(

@@ -81,22 +81,6 @@ def check_dependencies():
         sys.exit(1)
 
 
-class SuppressStderr:
-    """Context manager to suppress stderr output during model operations."""
-    def __init__(self):
-        self._original_stderr = None
-        self._devnull = None
-    
-    def __enter__(self):
-        self._original_stderr = sys.stderr
-        self._devnull = open(os.devnull, 'w')
-        sys.stderr = self._devnull
-        return self
-    
-    def __exit__(self, *args):
-        sys.stderr = self._original_stderr
-        if self._devnull:
-            self._devnull.close()
 
 
 class CaptureOutput:
@@ -285,7 +269,7 @@ def extract_watermark(audio_path, target_sr=44100, phase_shift_decoding=True):
         del audio
         
         # Status can be True, 'success', or truthy value depending on version
-        status_ok = result.get('status') in (True, 'success', 'True') or result.get('status') == True
+        status_ok = result.get('status') in (True, 'success', 'True')
         
         if status_ok and result.get('messages'):
             # Get the first (and typically only) message
