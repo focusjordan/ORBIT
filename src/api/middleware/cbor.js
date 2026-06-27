@@ -74,7 +74,7 @@ const strictRawParser = express.raw({
 
 const authRawParser = express.raw({
   type: [contentTypes.cbor, contentTypes.json],
-  limit: '5mb',
+  limit: '100mb',
 });
 
 /**

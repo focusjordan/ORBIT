@@ -83,3 +83,7 @@ ohnrshyp_explanation.md
 build/
 dist/
 __pycache__/
+
+# PDF Exports
+export-pdf.html
+ORBIT Protocol Whitepaper Analysis.pdf
