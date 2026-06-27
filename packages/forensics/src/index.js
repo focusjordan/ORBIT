@@ -242,16 +242,16 @@ function calculateAiProbability(results) {
   
   const anomalyFlags = [
     results.spectral_cutoff?.has_16k_cutoff,
-    results.tempo_regularity?.metronomic,
+    typeof results.tempo_regularity?.stability === 'number' ? results.tempo_regularity.stability > 0.94 : undefined,
     results.pitch_jitter?.perfect_vibrato,
-    results.checkerboard?.has_checkerboard_artifacts,
-    results.phase_entropy?.unnatural_phase,
-    results.onset_regularity?.unnatural_onsets,
+    results.checkerboard?.has_artifacts,
+    results.phase_entropy?.low_entropy,
+    results.onset_regularity?.metronomic,
     results.noise_floor_structure?.structured_noise,
     results.pre_echo?.has_pre_echo,
     results.stem_forensics?.vocal_instrumental_bleed?.high_bleed,
-    results.hf_phase_incoherence?.incoherent_hf_phase,
-    results.harmonicity?.unnatural_harmonicity
+    results.hf_phase_incoherence?.hf_incoherent,
+    results.harmonicity?.hf_anomalous
   ];
   
   let validFlags = 0;

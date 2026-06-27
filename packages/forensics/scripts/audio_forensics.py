@@ -421,7 +421,6 @@ def measure_checkerboard_artifacts(y, sr, n_fft=2048):
         'available': True,
         'cepstral_peak_ratio': round(float(ratio), 4),
         'has_artifacts': has_artifacts,
-        'pow2_peak_ratio': round(float(ratio), 4),
     }
 
 
@@ -597,7 +596,6 @@ def measure_pitch_jitter(y, sr):
         'available': True,
         'mean_pitch_step': round(float(mean_diff), 4),
         'modulation_spectral_peak': round(float(ratio), 4),
-        'mean_modulation_slope': round(float(ratio), 4),
         'perfect_vibrato': ratio > 5.0,
     }
 
@@ -804,6 +802,23 @@ def run_forensics(audio_path, max_length_seconds=120, stems_dir=None):
             forensics['stem_forensics'] = stem_forensics
 
     return forensics
+
+
+def calculate_dynamic_range(y):
+    """Estimate dynamic range using frame RMS percentiles."""
+    import librosa
+    import numpy as np
+
+    rms = librosa.feature.rms(y=y)[0]
+    if len(rms) == 0:
+        return 0.0
+
+    high = np.percentile(rms, 95)
+    low = np.percentile(rms, 10)
+    high = max(high, 1e-10)
+    low = max(low, 1e-10)
+    dr = 20 * np.log10(high / low)
+    return round(float(max(0.0, dr)), 3)
 
 
 def main():
