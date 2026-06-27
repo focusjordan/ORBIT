@@ -1,4 +1,4 @@
-const { spawn, execSync } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -58,7 +58,7 @@ function extractJson(output) {
 async function checkEnvironment() {
   return new Promise((resolve) => {
     try {
-      const pythonVersion = execSync(`${DEMUCS_CONFIG.pythonCommand} --version`, {
+      const pythonVersion = execFileSync(DEMUCS_CONFIG.pythonCommand, ['--version'], {
         encoding: 'utf8',
         timeout: 5000,
       }).trim();
@@ -174,7 +174,20 @@ async function separate(input, options = {}) {
     throw new Error('Input must be a file path string or Buffer');
   }
 
-  const finalOutputDir = outputDir || fs.mkdtempSync(path.join(os.tmpdir(), 'orbit-demucs-'));
+  let finalOutputDir;
+  if (outputDir) {
+    const resolvedPath = path.resolve(outputDir);
+    const tmpRoot = path.resolve(os.tmpdir());
+    const cwdRoot = path.resolve(process.cwd());
+    
+    // Boundary check for path traversal mitigation
+    if (!resolvedPath.startsWith(tmpRoot) && !resolvedPath.startsWith(cwdRoot)) {
+      throw new Error('Path traversal restriction: outputDir must be within temporary directory or workspace root.');
+    }
+    finalOutputDir = resolvedPath;
+  } else {
+    finalOutputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbit-demucs-'));
+  }
 
   try {
     if (verbose) {

@@ -7,7 +7,7 @@
  * - Message capacity: 5 bytes (40 bits)
  */
 
-const { spawn, execSync } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -107,7 +107,7 @@ function messageToHash(message) {
 async function checkPythonEnvironment() {
   return new Promise((resolve) => {
     try {
-      const pythonVersion = execSync(`${SILENTCIPHER_CONFIG.pythonCommand} --version`, {
+      const pythonVersion = execFileSync(SILENTCIPHER_CONFIG.pythonCommand, ['--version'], {
         encoding: 'utf8',
         timeout: 5000,
       }).trim();

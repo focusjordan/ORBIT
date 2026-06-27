@@ -9,7 +9,7 @@
  * - Dynamic range
  */
 
-const { spawn, execSync } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -75,7 +75,7 @@ const DSP_CONFIG = {
 async function checkPythonEnvironment() {
   return new Promise((resolve) => {
     try {
-      const pythonVersion = execSync(`${DSP_CONFIG.pythonCommand} --version`, {
+      const pythonVersion = execFileSync(DSP_CONFIG.pythonCommand, ['--version'], {
         encoding: 'utf8',
         timeout: 5000,
       }).trim();
