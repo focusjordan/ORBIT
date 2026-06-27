@@ -88,5 +88,8 @@
   "devDependencies": {
     "eslint": "^8.57.0",
     "nodemon": "^3.1.11"
+  },
+  "overrides": {
+    "protobufjs": "^7.6.4"
   }
 }
