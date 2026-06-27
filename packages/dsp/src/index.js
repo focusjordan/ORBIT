@@ -37,17 +37,19 @@ function resolvePythonCommand() {
   if (process.env.ORBIT_PYTHON_PATH) {
     return process.env.ORBIT_PYTHON_PATH;
   }
+  const isWin = process.platform === 'win32';
   let currentDir = __dirname;
   for (let i = 0; i < 4; i++) {
-    const venvPath = path.join(currentDir, '.venv/bin/python3');
-    if (fs.existsSync(venvPath)) {
-      return venvPath;
-    }
+    const unixVenv = path.join(currentDir, '.venv', 'bin', 'python3');
+    const winVenv = path.join(currentDir, '.venv', 'Scripts', 'python.exe');
+    if (fs.existsSync(unixVenv)) return unixVenv;
+    if (fs.existsSync(winVenv)) return winVenv;
+    
     const parentDir = path.dirname(currentDir);
     if (parentDir === currentDir) break;
     currentDir = parentDir;
   }
-  return 'python3';
+  return isWin ? 'python' : 'python3';
 }
 
 /**

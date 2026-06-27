@@ -19,12 +19,14 @@ function resolvePythonCommand() {
   if (process.env.ORBIT_SILENTCIPHER_PYTHON) {
     return process.env.ORBIT_SILENTCIPHER_PYTHON;
   }
+  const isWin = process.platform === 'win32';
   let currentDir = __dirname;
   for (let i = 0; i < 4; i++) {
-    const watermarkVenv = path.join(currentDir, '.venv-watermark/bin/python3');
-    if (fs.existsSync(watermarkVenv)) {
-      return watermarkVenv;
-    }
+    const wmUnixVenv = path.join(currentDir, '.venv-watermark', 'bin', 'python3');
+    const wmWinVenv = path.join(currentDir, '.venv-watermark', 'Scripts', 'python.exe');
+    if (fs.existsSync(wmUnixVenv)) return wmUnixVenv;
+    if (fs.existsSync(wmWinVenv)) return wmWinVenv;
+    
     const parentDir = path.dirname(currentDir);
     if (parentDir === currentDir) break;
     currentDir = parentDir;
@@ -34,15 +36,16 @@ function resolvePythonCommand() {
   }
   currentDir = __dirname;
   for (let i = 0; i < 4; i++) {
-    const standardVenv = path.join(currentDir, '.venv/bin/python3');
-    if (fs.existsSync(standardVenv)) {
-      return standardVenv;
-    }
+    const unixVenv = path.join(currentDir, '.venv', 'bin', 'python3');
+    const winVenv = path.join(currentDir, '.venv', 'Scripts', 'python.exe');
+    if (fs.existsSync(unixVenv)) return unixVenv;
+    if (fs.existsSync(winVenv)) return winVenv;
+    
     const parentDir = path.dirname(currentDir);
     if (parentDir === currentDir) break;
     currentDir = parentDir;
   }
-  return 'python3';
+  return isWin ? 'python' : 'python3';
 }
 
 /**

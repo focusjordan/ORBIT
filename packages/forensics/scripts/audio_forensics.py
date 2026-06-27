@@ -618,7 +618,7 @@ def measure_noise_floor_structure(y, sr, n_fft=4096):
     hf_noise = np.mean(S[hf_mask, :], axis=0)
     # Autocorrelation of high frequency envelope
     acorr = np.correlate(hf_noise, hf_noise, mode='full')
-    acorr = acorr[acorr.length//2:]
+    acorr = acorr[len(acorr)//2:]
     acorr /= acorr[0] + 1e-10
 
     # Human noise floor is highly unpredictable (decaying random acorr).

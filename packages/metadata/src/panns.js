@@ -11,18 +11,31 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
+function resolvePythonCommand() {
+  if (process.env.ORBIT_PANNS_PYTHON) return process.env.ORBIT_PANNS_PYTHON;
+  if (process.env.ORBIT_PYTHON_PATH) return process.env.ORBIT_PYTHON_PATH;
+  
+  const isWin = process.platform === 'win32';
+  let currentDir = __dirname;
+  for (let i = 0; i < 4; i++) {
+    const unixVenv = path.join(currentDir, '.venv', 'bin', 'python3');
+    const winVenv = path.join(currentDir, '.venv', 'Scripts', 'python.exe');
+    if (fs.existsSync(unixVenv)) return unixVenv;
+    if (fs.existsSync(winVenv)) return winVenv;
+    
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) break;
+    currentDir = parentDir;
+  }
+  return isWin ? 'python' : 'python3';
+}
+
 const PANNS_CONFIG = {
   scriptPath: path.join(__dirname, '../scripts/panns_inference.py'),
   embeddingDim: 2048,
   topK: 20,
   timeout: 120000,
-  pythonCommand: process.env.ORBIT_PANNS_PYTHON
-    || process.env.ORBIT_PYTHON_PATH
-    || (fs.existsSync(path.join(__dirname, '../../.venv/bin/python3'))
-      ? path.join(__dirname, '../../.venv/bin/python3')
-      : fs.existsSync(path.join(__dirname, '../../../.venv/bin/python3'))
-        ? path.join(__dirname, '../../../.venv/bin/python3')
-        : 'python3'),
+  pythonCommand: resolvePythonCommand(),
   env: {
     ...process.env,
     OPENBLAS_NUM_THREADS: '1',
