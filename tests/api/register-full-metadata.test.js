@@ -30,18 +30,22 @@ const TEST_PLATFORM_ID = 'test-platform';
 // Get appropriate test audio based on mode
 const TEST_AUDIO_PATH = getTestAudioPath();
 
-// Load private key from credentials file or env
+// Load private key and API key from credentials file or env
 let privateKeyBase64 = process.env.TEST_PLATFORM_PRIVATE_KEY;
-if (!privateKeyBase64) {
+let PLATFORM_API_KEY = process.env.TEST_PLATFORM_API_KEY;
+
+if (!privateKeyBase64 || !PLATFORM_API_KEY) {
   try {
     const creds = JSON.parse(fs.readFileSync(path.join(__dirname, '../../.test-platform-credentials.json'), 'utf8'));
-    privateKeyBase64 = creds.private_key;
+    if (!privateKeyBase64) privateKeyBase64 = creds.private_key;
+    if (!PLATFORM_API_KEY) PLATFORM_API_KEY = creds.api_key;
   } catch (err) {
     // Will fail below if still not set
   }
 }
-if (!privateKeyBase64) {
-  console.error('❌ TEST_PLATFORM_PRIVATE_KEY environment variable not set');
+
+if (!privateKeyBase64 || !PLATFORM_API_KEY) {
+  console.error('❌ TEST_PLATFORM_PRIVATE_KEY or TEST_PLATFORM_API_KEY environment variable not set');
   process.exit(1);
 }
 const privateKey = Buffer.from(privateKeyBase64, 'base64');
@@ -84,7 +88,7 @@ async function orbitRequest(endpoint, metadata, audioBuffer) {
       ...formHeaders,
       'X-ORBIT-Platform': TEST_PLATFORM_ID,
       'X-ORBIT-Signature': signature.toString('base64'),
-      'X-ORBIT-API-Key': apiKey,
+      'X-ORBIT-API-Key': PLATFORM_API_KEY,
     },
     body: formData.getBuffer(), // Use getBuffer() for synchronous FormData
     duplex: 'half', // Required for streaming bodies in fetch
