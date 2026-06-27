@@ -517,6 +517,7 @@ async function checkEnvironment() {
     audioAnalysis: { available: false, message: '' },
     panns: { available: false, message: '' },
     genreClassifier: { available: false, message: '' },
+    silentCipher: { available: false, message: '' },
     overall: { available: false, message: '' },
   };
   
@@ -577,6 +578,22 @@ async function checkEnvironment() {
       message: `GenreClassifier error: ${error.message}`,
     };
   }
+
+  // Check SilentCipher/Watermark (requires @ohnrshyp/watermark)
+  try {
+    const watermark = require('@ohnrshyp/watermark');
+    const watermarkStatus = await watermark.checkPythonEnvironment();
+    status.silentCipher = {
+      available: !!watermarkStatus.available,
+      message: watermarkStatus.message || 'SilentCipher check completed',
+      details: watermarkStatus.details,
+    };
+  } catch (error) {
+    status.silentCipher = {
+      available: false,
+      message: `SilentCipher error: ${error.message}`,
+    };
+  }
   
   // Overall status
   const availabilityFlags = [
@@ -584,6 +601,7 @@ async function checkEnvironment() {
     status.audioAnalysis.available,
     status.panns.available,
     status.genreClassifier.available,
+    status.silentCipher.available,
   ];
   const allAvailable = availabilityFlags.every(Boolean);
   const partialAvailable = availabilityFlags.some(Boolean);
@@ -599,6 +617,7 @@ async function checkEnvironment() {
     if (!status.audioAnalysis.available) unavailable.push('AudioAnalysis');
     if (!status.panns.available) unavailable.push('PANNs');
     if (!status.genreClassifier.available) unavailable.push('GenreClassifier');
+    if (!status.silentCipher.available) unavailable.push('SilentCipher');
     
     status.overall = {
       available: true,

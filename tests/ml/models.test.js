@@ -195,12 +195,11 @@ runner.test('Models are not loaded initially', () => {
 // MERT test removed - CC BY-NC 4.0 license incompatible with commercial use
 // Use CLAP embeddings (clap.getAudioEmbedding) instead
 
-runner.test('SilentCipher and WMCodec still require custom loading (future updates)', async () => {
-  await assertThrowsAsync(
-    () => modelManager.getSilentCipher(),
-    'requires custom loading',
-    'SilentCipher should throw custom loading error'
-  );
+runner.test('SilentCipher successfully loads, WMCodec still requires custom loading', async () => {
+  const silentCipher = await modelManager.getSilentCipher();
+  assertTruthy(silentCipher, 'SilentCipher should be loaded');
+  assertEqual(typeof silentCipher.embed, 'function', 'SilentCipher should have embed function');
+  assertEqual(typeof silentCipher.extract, 'function', 'SilentCipher should have extract function');
   
   await assertThrowsAsync(
     () => modelManager.getWmCodec(),

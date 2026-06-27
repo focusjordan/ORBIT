@@ -176,10 +176,11 @@ runner.test('Environment check returns status for all components', async () => {
   assertType(status, 'object', 'Status: ');
   assertHasProperty(status, 'clap', 'Status: ');
   assertHasProperty(status, 'audioAnalysis', 'Status: ');
+  assertHasProperty(status, 'silentCipher', 'Status: ');
   assertHasProperty(status, 'overall', 'Status: ');
   
   // Each component should have available and message
-  for (const component of ['clap', 'audioAnalysis', 'overall']) {
+  for (const component of ['clap', 'audioAnalysis', 'silentCipher', 'overall']) {
     assertHasProperty(status[component], 'available', `${component}: `);
     assertHasProperty(status[component], 'message', `${component}: `);
   }

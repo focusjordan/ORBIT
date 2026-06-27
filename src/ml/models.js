@@ -91,12 +91,14 @@ const MODEL_CONFIGS = {
   
   // SilentCipher for neural watermarking
   silentCipher: {
-    id: 'silentcipher/model',  // Placeholder - actual ID TBD
+    id: 'silentcipher-44.1k',
     task: 'audio-watermarking',
     size: '~100MB',
     embeddingDim: null,  // Not an embedding model
     description: 'Neural audio watermarking (primary)',
     custom: true,
+    loader: 'watermark-package',
+    available: true,
   },
   
   // WMCodec for codec-aware watermarking fallback
@@ -333,13 +335,20 @@ class ModelManager {
    * 
    * Used for: Primary neural watermarking (99%+ extraction accuracy)
    * 
-   * NOTE: Requires custom loading - will be implemented in a future update
-   * 
    * @returns {Promise<Object>} Watermarking model
-   * @throws {Error} Until implemented
    */
   async getSilentCipher() {
-    return this._loadModel('silentCipher');
+    if (!this.models.silentCipher) {
+      try {
+        this._logProgress('silentCipher', 'loading from @ohnrshyp/watermark');
+        this.models.silentCipher = require('@ohnrshyp/watermark');
+        this._logProgress('silentCipher', 'loaded successfully');
+      } catch (error) {
+        this._logProgress('silentCipher', 'FAILED to load', error.message);
+        throw new Error(`Failed to load @ohnrshyp/watermark package: ${error.message}`);
+      }
+    }
+    return this.models.silentCipher;
   }
   
   /**
