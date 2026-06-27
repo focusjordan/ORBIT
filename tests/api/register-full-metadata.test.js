@@ -36,7 +36,7 @@ let PLATFORM_API_KEY = process.env.TEST_PLATFORM_API_KEY;
 
 if (!privateKeyBase64 || !PLATFORM_API_KEY) {
   try {
-    const creds = JSON.parse(fs.readFileSync(path.join(__dirname, '../../.test-platform-credentials.json'), 'utf8'));
+    const creds = JSON.parse(fs.readFileSync(path.join(__dirname, '../../credentials/.test-platform-credentials.json'), 'utf8'));
     if (!privateKeyBase64) privateKeyBase64 = creds.private_key;
     if (!PLATFORM_API_KEY) PLATFORM_API_KEY = creds.api_key;
   } catch (err) {

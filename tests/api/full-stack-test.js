@@ -32,7 +32,7 @@ const TEST_PLATFORM_ID = process.env.TEST_PLATFORM_ID || 'test-platform';
 let PLATFORM_PRIVATE_KEY = process.env.TEST_PLATFORM_PRIVATE_KEY;
 if (!PLATFORM_PRIVATE_KEY) {
   try {
-    const credsPath = path.join(__dirname, '../../.test-platform-credentials.json');
+    const credsPath = path.join(__dirname, '../../credentials/.test-platform-credentials.json');
     const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
     PLATFORM_PRIVATE_KEY = creds.private_key; // snake_case in file
     console.log('✓ Loaded credentials from .test-platform-credentials.json');

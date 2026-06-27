@@ -57,7 +57,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Auto-load test platform credentials if available
-const credentialsPath = path.join(process.cwd(), '.test-platform-credentials.json');
+const credentialsPath = path.join(process.cwd(), 'credentials/.test-platform-credentials.json');
 if (fs.existsSync(credentialsPath) && !process.env.TEST_PLATFORM_PRIVATE_KEY) {
   try {
     const creds = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));

@@ -28,7 +28,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 const { execSync } = require('child_process');
 
-const CREDENTIALS_FILE = path.join(__dirname, '../.test-platform-credentials.json');
+const CREDENTIALS_FILE = path.join(__dirname, '../credentials/.test-platform-credentials.json');
 const TEST_PLATFORM_ID = 'test-platform';
 
 // Test audio configuration
