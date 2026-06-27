@@ -30,6 +30,10 @@
   "devDependencies": {
     "jest": "^29.7.0"
   },
+  "overrides": {
+    "js-yaml": "^4.2.0"
+  },
+
   "repository": {
     "type": "git",
     "url": "https://github.com/ohnrshyp/orbit"
