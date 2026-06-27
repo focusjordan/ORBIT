@@ -22,6 +22,11 @@ function auditLog(command, action, details = {}) {
   try {
     if (!fs.existsSync(AUDIT_DIR)) {
       fs.mkdirSync(AUDIT_DIR, { recursive: true });
+      try {
+        fs.chmodSync(AUDIT_DIR, 0o700);
+      } catch {
+        void 0;
+      }
     }
 
     // Rotate if file is too large
@@ -49,7 +54,15 @@ function auditLog(command, action, details = {}) {
       ...safeDetails,
     };
 
-    fs.appendFileSync(AUDIT_FILE, JSON.stringify(entry) + '\n', 'utf8');
+    fs.appendFileSync(AUDIT_FILE, JSON.stringify(entry) + '\n', {
+      encoding: 'utf8',
+      mode: 0o600
+    });
+    try {
+      fs.chmodSync(AUDIT_FILE, 0o600);
+    } catch {
+      void 0;
+    }
   } catch {
     // Audit logging should never crash the CLI
   }

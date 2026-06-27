@@ -118,7 +118,10 @@ const cmd = new Command('ingest')
         let audioPath = null;
         if (track.audio_filename) {
           const candidate = path.resolve(audioDir, track.audio_filename);
-          if (fs.existsSync(candidate)) {
+          const relative = path.relative(audioDir, candidate);
+          const isSafe = !relative.startsWith('..') && !path.isAbsolute(relative);
+          
+          if (isSafe && fs.existsSync(candidate)) {
             audioPath = candidate;
           } else {
             // Try just the basename in the audio dir

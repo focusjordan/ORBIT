@@ -92,6 +92,7 @@ const TEST_SUITES = {
     { name: 'Watermark Embed', file: 'tests/engines/watermark-embed.test.js' },
     { name: 'Watermark Extract', file: 'tests/engines/watermark-extract.test.js' },
     { name: 'Audio Utils', file: 'tests/utils/audio.test.js' },
+    { name: 'CLI Security', file: 'tests/engines/cli-security.test.js' },
   ],
   
   // V1 Tests that need Chromaprint (fpcalc)

@@ -69,7 +69,15 @@ function writeConfig(scope, data) {
 
   const existing = fs.existsSync(filePath) ? readJsonSafe(filePath) : {};
   const merged = { ...existing, ...data };
-  fs.writeFileSync(filePath, JSON.stringify(merged, null, 2) + '\n', 'utf8');
+  fs.writeFileSync(filePath, JSON.stringify(merged, null, 2) + '\n', {
+    encoding: 'utf8',
+    mode: 0o600
+  });
+  try {
+    fs.chmodSync(filePath, 0o600);
+  } catch {
+    // Graceful fallback for non-POSIX environments
+  }
   return filePath;
 }
 
