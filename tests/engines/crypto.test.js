@@ -118,6 +118,52 @@ function runTests() {
   }
   console.log('   ✅ Edge cases handled correctly\n');
   
+  // Test 11: Pre-Hash Protocol (Buffer and base64 string)
+  console.log('Test 11: Pre-Hash Protocol (Buffer, base64, and SDK compatibility)');
+  const rawAudio = Buffer.from('this is a massive audio payload that should be pre-hashed');
+  const base64Audio = rawAudio.toString('base64');
+  
+  const payloadBuffer = {
+    title: 'Pre-hashed Track',
+    audio: rawAudio
+  };
+  
+  const payloadBase64 = {
+    title: 'Pre-hashed Track',
+    audio: base64Audio
+  };
+  
+  // 1. Check that they produce the exact same signature
+  const sigBuffer = OrbitCrypto.sign(payloadBuffer, privateKey);
+  const sigBase64 = OrbitCrypto.sign(payloadBase64, privateKey);
+  console.assert(sigBuffer.equals(sigBase64), 'Signatures from Buffer and base64 string must be identical');
+  
+  // 2. Check that the verified data gets pre-hashed (so verify works for both payloads with the same signature)
+  const verifyBuffer = OrbitCrypto.verify(payloadBuffer, sigBuffer, publicKey);
+  const verifyBase64 = OrbitCrypto.verify(payloadBase64, sigBuffer, publicKey);
+  console.assert(verifyBuffer, 'Verification with Buffer payload should succeed');
+  console.assert(verifyBase64, 'Verification with base64 payload should succeed');
+  
+  // 3. Verify that changing the audio fails verification
+  const tamperedPayload = {
+    title: 'Pre-hashed Track',
+    audio: Buffer.from('different audio payload')
+  };
+  const verifyTampered = OrbitCrypto.verify(tamperedPayload, sigBuffer, publicKey);
+  console.assert(!verifyTampered, 'Verification with tampered audio must fail');
+  
+  // 4. Test SDK Client signing vs Server verification
+  const { OrbitClient } = require('../../sdk/index');
+  const client = new OrbitClient({
+    apiUrl: 'http://localhost:4000',
+    platformId: 'test-platform',
+    privateKey: privateKey
+  });
+  
+  const sdkSignature = client._sign(payloadBase64);
+  console.assert(sdkSignature.equals(sigBuffer), 'SDK client signature must be identical to server crypto signature');
+  console.log('   ✅ Pre-Hash Protocol verified successfully\n');
+  
   console.log('🧪 All crypto tests passed!');
 }
 

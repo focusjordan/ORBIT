@@ -33,13 +33,15 @@ class OrbitCrypto {
       // Remove signature field if present
       const { signature, ...unsigned } = data;
       
-      // PRE-HASH PROTOCOL
-      // If a massive audio buffer is present, we hash it natively (C++) via SHA-256
-      // and sign the hash instead. This prevents the synchronous Ed25519 math 
-      // from blocking the Node.js event loop on massive payloads.
-      if (unsigned.audio && Buffer.isBuffer(unsigned.audio)) {
-        unsigned.audio_hash = this.hash(unsigned.audio);
-        delete unsigned.audio;
+      if (unsigned.audio) {
+        if (Buffer.isBuffer(unsigned.audio)) {
+          unsigned.audio_hash = this.hash(unsigned.audio);
+          delete unsigned.audio;
+        } else if (typeof unsigned.audio === 'string') {
+          const audioBuffer = Buffer.from(unsigned.audio, 'base64');
+          unsigned.audio_hash = this.hash(audioBuffer);
+          delete unsigned.audio;
+        }
       }
       
       return cbor.encode(unsigned);

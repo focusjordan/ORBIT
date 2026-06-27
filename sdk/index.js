@@ -87,6 +87,21 @@ class OrbitClient {
     } else if (typeof data === 'object' && data !== null) {
       // Remove signature field if present, then encode
       const { signature, ...unsigned } = data;
+      
+      // PRE-HASH PROTOCOL
+      // If audio is present, we hash it natively (SHA-256)
+      // and sign the hash instead. This prevents event loop blocking on massive payloads.
+      if (unsigned.audio) {
+        if (Buffer.isBuffer(unsigned.audio)) {
+          unsigned.audio_hash = crypto.createHash('sha256').update(unsigned.audio).digest();
+          delete unsigned.audio;
+        } else if (typeof unsigned.audio === 'string') {
+          const audioBuffer = Buffer.from(unsigned.audio, 'base64');
+          unsigned.audio_hash = crypto.createHash('sha256').update(audioBuffer).digest();
+          delete unsigned.audio;
+        }
+      }
+      
       dataBuffer = cbor.encode(unsigned);
     } else {
       throw new Error('Data must be Buffer or Object');
