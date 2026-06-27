@@ -21,9 +21,7 @@
  */
 
 const OrbitCrypto = require('../../engines/crypto');
-const OrbitWatermark = require('../../engines/watermark');
 const queries = require('../../ledger/queries');
-const config = require('../../config');
 
 /**
  * POST /orbit/v1/transfer

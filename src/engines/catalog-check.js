@@ -20,6 +20,7 @@
  */
 
 const crypto = require('crypto');
+const FormData = require('form-data');
 const config = require('../config');
 
 // ============================================================================
@@ -140,19 +141,23 @@ async function lookupACRCloud(audioBuffer) {
   const signature = buildACRCloudSignature(accessKey, accessSecret, timestamp);
 
   const form = new FormData();
-  form.set('access_key', accessKey);
-  form.set('data_type', 'audio');
-  form.set('signature', signature);
-  form.set('signature_version', '1');
-  form.set('timestamp', String(timestamp));
-  form.set('sample_bytes', String(audioBuffer.length));
-  form.set('sample', new Blob([audioBuffer], { type: 'audio/wav' }), 'sample.wav');
+  form.append('access_key', accessKey);
+  form.append('data_type', 'audio');
+  form.append('signature', signature);
+  form.append('signature_version', '1');
+  form.append('timestamp', String(timestamp));
+  form.append('sample_bytes', String(audioBuffer.length));
+  form.append('sample', audioBuffer, {
+    filename: 'sample.wav',
+    contentType: 'audio/wav',
+  });
 
   const url = `https://${host}/v1/identify`;
 
   const res = await fetch(url, {
     method: 'POST',
-    body: form,
+    headers: form.getHeaders(),
+    body: form.getBuffer(),
     signal: AbortSignal.timeout(15_000),
   });
 
