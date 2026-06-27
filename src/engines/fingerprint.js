@@ -8,7 +8,7 @@
  * - Keep this simple: Chromaprint → SHA-256 hash → exact comparison
  */
 
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -47,17 +47,17 @@ class OrbitFingerprint {
     
     try {
       // Verify fpcalc is available
-      try {
-        execSync('fpcalc -version', { stdio: 'pipe' });
-      } catch {
+      const versionCheck = spawnSync('fpcalc', ['-version'], { stdio: 'pipe' });
+      if (versionCheck.error || versionCheck.status !== 0) {
         throw new Error(
           'Chromaprint (fpcalc) not found. Install with: brew install chromaprint'
         );
       }
       
       // Run fpcalc
-      const result = execSync(
-        `fpcalc -json -length ${length} "${audioPath}"`,
+      const spawnResult = spawnSync(
+        'fpcalc',
+        ['-json', '-length', String(length), audioPath],
         { 
           encoding: 'utf8', 
           maxBuffer: 10 * 1024 * 1024,
@@ -65,7 +65,15 @@ class OrbitFingerprint {
         }
       );
       
-      const { fingerprint, duration } = JSON.parse(result);
+      if (spawnResult.error) {
+        throw spawnResult.error;
+      }
+      
+      if (spawnResult.status !== 0) {
+        throw new Error(`fpcalc exited with code ${spawnResult.status}: ${spawnResult.stderr}`);
+      }
+      
+      const { fingerprint, duration } = JSON.parse(spawnResult.stdout);
       
       if (!fingerprint) {
         throw new Error('Failed to generate fingerprint - no output from fpcalc');

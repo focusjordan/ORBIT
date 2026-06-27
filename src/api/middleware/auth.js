@@ -110,8 +110,22 @@ async function platformAuth(req, res, next) {
       );
     }
     
-    // Compare hashes (timing-safe comparison)
-    const apiKeyValid = crypto.timingSafeEqual(providedKeyHash, platform.api_key_hash);
+    // Ensure target hash is a Buffer of correct length before timing-safe comparison
+    let targetHash = platform.api_key_hash;
+    if (typeof targetHash === 'string') {
+      // In case it's returned as a hex/base64 string instead of a Buffer
+      if (targetHash.length === 64) {
+        targetHash = Buffer.from(targetHash, 'hex');
+      } else {
+        targetHash = Buffer.from(targetHash, 'base64');
+      }
+    }
+    
+    // Compare hashes (timing-safe comparison with length guard)
+    let apiKeyValid = false;
+    if (Buffer.isBuffer(targetHash) && providedKeyHash.length === targetHash.length) {
+      apiKeyValid = crypto.timingSafeEqual(providedKeyHash, targetHash);
+    }
     
     if (!apiKeyValid) {
       console.warn(`[Auth] Invalid API key for platform '${platformId}'`);
