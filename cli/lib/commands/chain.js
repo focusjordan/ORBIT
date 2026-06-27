@@ -1,7 +1,6 @@
 'use strict';
 
 const { Command } = require('commander');
-const chalk = require('chalk');
 const { buildClient } = require('../config');
 const out = require('../output');
 

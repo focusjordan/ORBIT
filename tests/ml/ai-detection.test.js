@@ -24,7 +24,6 @@ const fs = require('fs');
 
 // Test configuration
 const TEST_AUDIO_PATH = path.join(__dirname, '../fixtures/test-audio.mp3');
-const TEST_AUDIO_WAV_PATH = path.join(__dirname, '../fixtures/test-audio-watermarked.wav');
 
 // Import AI detection module
 const aiDetection = require('../../src/ml/ai-detection');
@@ -147,11 +146,7 @@ function assertIncludes(array, value, message = '') {
   }
 }
 
-function assertArrayLength(arr, expectedLength, message = '') {
-  if (!Array.isArray(arr) || arr.length !== expectedLength) {
-    throw new Error(`${message}Expected array of length ${expectedLength}, got: ${arr?.length}`);
-  }
-}
+
 
 // ============================================================================
 // TEST SUITES

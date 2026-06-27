@@ -31,7 +31,8 @@ class OrbitCrypto {
       return data;
     } else if (typeof data === 'object' && data !== null) {
       // Remove signature field if present
-      const { signature, ...unsigned } = data;
+      const unsigned = { ...data };
+      delete unsigned.signature;
       
       if (unsigned.audio) {
         if (Buffer.isBuffer(unsigned.audio)) {

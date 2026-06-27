@@ -59,7 +59,7 @@ class PlatformAdapter {
    * @param {Object} req - Express request object
    * @returns {Promise<Buffer>} Audio buffer
    */
-  async getAudioBuffer(req) {
+  async getAudioBuffer(_req) {
     throw new Error('getAudioBuffer() must be implemented by platform');
   }
   
@@ -78,7 +78,7 @@ class PlatformAdapter {
    * @param {Object} technicalMetadata - Auto-extracted from audio
    * @returns {Object} ORBIT metadata object
    */
-  mapMetadata(req, technicalMetadata) {
+  mapMetadata(_req, _technicalMetadata) {
     throw new Error('mapMetadata() must be implemented by platform');
   }
   

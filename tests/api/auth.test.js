@@ -77,7 +77,6 @@ async function runTests() {
   console.log('═══════════════════════════════════════════════════════\n');
   
   const PORT = process.env.PORT || 4000;
-  const BASE_URL = `http://localhost:${PORT}`;
   
   try {
     // Check if server is running

@@ -28,7 +28,6 @@ class AudioUtils {
     let audioPath;
     let tempFile = null;
     let shouldConvert = false;
-    let originalChannels = null;
     
     // Handle Buffer input
     if (Buffer.isBuffer(input)) {
@@ -36,15 +35,6 @@ class AudioUtils {
       fs.writeFileSync(tempFile, input);
       audioPath = tempFile;
       shouldConvert = true; // Unknown format, convert to WAV
-      
-      // Detect original channel count before conversion
-      try {
-        const info = AudioUtils.getDetailedAudioInfo(tempFile);
-        originalChannels = info.channels;
-      } catch (e) {
-        // Default to stereo if detection fails
-        originalChannels = 2;
-      }
     } else {
       audioPath = input;
       if (!fs.existsSync(audioPath)) {
@@ -53,14 +43,6 @@ class AudioUtils {
       // Check if already WAV
       const ext = path.extname(audioPath).toLowerCase();
       shouldConvert = ext !== '.wav';
-      
-      // Detect original channel count
-      try {
-        const info = AudioUtils.getDetailedAudioInfo(audioPath);
-        originalChannels = info.channels;
-      } catch (e) {
-        originalChannels = 2;
-      }
     }
     
     let wavPath = audioPath;

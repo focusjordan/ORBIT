@@ -120,11 +120,7 @@ function assertGreaterThan(actual, expected, message = '') {
   }
 }
 
-function assertLessThan(actual, expected, message = '') {
-  if (actual >= expected) {
-    throw new Error(`${message}Expected ${actual} < ${expected}`);
-  }
-}
+
 
 function assertArrayLength(arr, expectedLength, message = '') {
   if (!Array.isArray(arr) || arr.length !== expectedLength) {
@@ -245,7 +241,7 @@ runner.test('Check CLAP model availability', async () => {
   try {
     // Try a simple classification to verify model works
     console.log('\n    ⏳ Loading CLAP model (first run downloads ~600MB)...');
-    const results = await clap.classifyWithLabels(TEST_AUDIO_PATH, ['music', 'speech'], { verbose: false });
+    await clap.classifyWithLabels(TEST_AUDIO_PATH, ['music', 'speech'], { verbose: false });
     modelAvailable = true;
     console.log('    ✓ CLAP model available and working');
   } catch (error) {

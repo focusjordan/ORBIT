@@ -53,7 +53,7 @@ const cmd = new Command('detect')
         },
       };
 
-      out.success(command, output, (d) => {
+      out.success(command, output, (_d) => {
         if (aiDetection) {
           const rec = aiDetection.recommendation || aiDetection.label || 'UNKNOWN';
           const score = aiDetection.score != null ? (aiDetection.score * 100).toFixed(1) + '%' : 'N/A';

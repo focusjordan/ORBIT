@@ -17,7 +17,7 @@
 
 const express = require('express');
 const config = require('../config');
-const { platformAuth, optionalAuth } = require('./middleware/auth');
+const { platformAuth } = require('./middleware/auth');
 const { registerUpload, parseCborMetadata } = require('./middleware/multipart');
 const { sanitizeInput } = require('./middleware/sanitize');
 

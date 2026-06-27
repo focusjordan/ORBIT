@@ -166,7 +166,7 @@ app.use((req, res) => {
 
 // Global error handler
 // Sanitize error messages in production to prevent information disclosure
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   // Always log the full error server-side
   console.error('Unhandled error:', err);
   console.error('Stack:', err.stack);

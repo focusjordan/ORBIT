@@ -120,11 +120,7 @@ function assertGreaterThan(actual, expected, message = '') {
   }
 }
 
-function assertLessThan(actual, expected, message = '') {
-  if (actual >= expected) {
-    throw new Error(`${message}Expected ${actual} < ${expected}`);
-  }
-}
+
 
 // ==========================================
 // TEST SUITES

@@ -75,15 +75,15 @@ async function runTests() {
   let registrationId;
   let fingerprintHash;
   let watermarkedAudio;
-  let transferId;
 
   try {
     // Test 1: Register new audio (or verify if already registered)
     const registerResult = await runTest('Test 1: Register new audio', async () => {
       const audioBuffer = fs.readFileSync(TEST_AUDIO_PATH);
+      let result;
       
       try {
-        const result = await client.register(audioBuffer, {
+        result = await client.register(audioBuffer, {
           title: 'SDK Test Track',
           artist: 'SDK Test Artist',
           duration_ms: 180000,
@@ -95,7 +95,6 @@ async function runTests() {
         }, '12345678-1234-1234-1234-123456789012');
         
         console.log('   ✅ New registration created');
-        return result;
       } catch (error) {
         if (error.code === 'duplicate_registration') {
           // Audio already registered - verify instead to get the data
@@ -103,15 +102,16 @@ async function runTests() {
           const verifyResult = await client.verify(audioBuffer);
           
           // Convert verify result to look like register result for tests
-          return {
+          result = {
             success: true,
             registration_id: verifyResult.fingerprint_match.registration_id,
             fingerprint_hash: verifyResult.fingerprint_hash,
             watermarked_audio: audioBuffer, // Use original
             registered_at: verifyResult.origin.timestamp
           };
+        } else {
+          throw error; // Re-throw if it's a different error
         }
-        throw error; // Re-throw if it's a different error
       }
 
       console.log(`   Registration ID: ${result.registration_id}`);
@@ -194,9 +194,8 @@ async function runTests() {
     // Test 5: Transfer (will fail since we don't have another platform, but tests the SDK method)
     console.log('▶️  Test 5: Attempt transfer (expected to fail - no second platform)');
     try {
-      const result = await client.transfer(registrationId, 'nonexistent-platform');
+      await client.transfer(registrationId, 'nonexistent-platform');
       console.log('   ⚠️  Unexpected: Transfer succeeded');
-      transferId = result.transfer_id;
     } catch (error) {
       if (error.code === 'not_found' || error.code === 'invalid_platform') {
         console.log(`✅ Test 5: Transfer correctly rejected (${error.code})`);

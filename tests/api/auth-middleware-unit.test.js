@@ -3,7 +3,6 @@
  */
 
 const assert = require('assert');
-const crypto = require('crypto');
 const OrbitCrypto = require('../../src/engines/crypto');
 
 // Mock queries before importing the middleware

@@ -33,7 +33,8 @@ class OrbitCrypto {
       dataBuffer = data;
     } else if (typeof data === 'object' && data !== null) {
       // Remove signature field if present, then encode
-      const { signature, ...unsigned } = data;
+      const unsigned = { ...data };
+      delete unsigned.signature;
       dataBuffer = cbor.encode(unsigned);
     } else {
       throw new Error('Data must be Buffer or Object');
@@ -60,7 +61,8 @@ class OrbitCrypto {
     if (Buffer.isBuffer(data)) {
       dataBuffer = data;
     } else if (typeof data === 'object' && data !== null) {
-      const { signature: _, ...unsigned } = data;
+      const unsigned = { ...data };
+      delete unsigned.signature;
       dataBuffer = cbor.encode(unsigned);
     } else {
       throw new Error('Data must be Buffer or Object');

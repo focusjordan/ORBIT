@@ -3,7 +3,6 @@
  * 
  * This file shows how to integrate ORBIT middleware into your existing routes.
  * Copy the relevant patterns into your actual routes file.
- */
  * 
  * Includes duplicate check (orbitDuplicateCheck) and auto-registration (registerWithOrbit).
  */
@@ -240,7 +239,7 @@ router.get('/api/tracks/:trackId/orbit',
  */
 router.post('/api/tracks/:trackId/orbit/register',
   auth,
-  artistOnly,
+  isMusician,
   async (req, res) => {
     try {
       const track = await Track.findById(req.params.trackId);
@@ -273,7 +272,7 @@ router.post('/api/tracks/:trackId/orbit/register',
       const audioBuffer = await fetchAudioFromS3(track.audioUrl);
       
       // Register with ORBIT (using SDK)
-      const { getOrbitClient, mapOhnrshypToOrbit, extractAudioMetadata } = require('./orbit-middleware-ohnrshyp');
+      const { getOrbitClient, extractAudioMetadata } = require('./orbit-middleware-ohnrshyp');
       const client = getOrbitClient();
 
       if (!client) {
@@ -335,7 +334,7 @@ router.post('/api/tracks/:trackId/orbit/register',
 );
 
 // Helper function (you would have your own implementation)
-async function fetchAudioFromS3(audioUrl) {
+async function fetchAudioFromS3(_audioUrl) {
   // Your S3 fetch logic here
   // Return Buffer
   throw new Error('fetchAudioFromS3 not implemented - add your S3 logic');

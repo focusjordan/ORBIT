@@ -233,14 +233,18 @@ async function checkPrerequisites() {
     const { execSync } = require('child_process');
     execSync('fpcalc -version', { stdio: 'pipe' });
     checks.fpcalc = true;
-  } catch {}
+  } catch {
+    // ignore
+  }
   
   // Check ffmpeg
   try {
     const { execSync } = require('child_process');
     execSync('ffmpeg -version', { stdio: 'pipe' });
     checks.ffmpeg = true;
-  } catch {}
+  } catch {
+    // ignore
+  }
   
   // Check test audio
   const hasFullAudio = fs.existsSync(path.join(process.cwd(), 'tests/fixtures/test-audio.mp3'));
@@ -254,13 +258,17 @@ async function checkPrerequisites() {
     await pool.query('SELECT 1');
     await pool.end();
     checks.postgres = true;
-  } catch {}
+  } catch {
+    // ignore
+  }
   
   // Check if server is running
   try {
     const response = await fetch('http://localhost:4000/health');
     checks.server = response.ok;
-  } catch {}
+  } catch {
+    // ignore
+  }
   
   return checks;
 }

@@ -22,7 +22,6 @@
  */
 
 const fs = require('fs');
-const path = require('path');
 const cbor = require('cbor');
 const OrbitCrypto = require('../../src/engines/crypto');
 const FormData = require('form-data');
@@ -134,41 +133,7 @@ async function getChain(fingerprintHash) {
   return { status: response.status, data: responseData };
 }
 
-/**
- * Helper: Initiate transfer
- */
-async function initiateTransfer(registrationId, toPlatform) {
-  const url = `${API_URL}/orbit/v1/transfer`;
-  
-  const requestData = {
-    registration_id: registrationId,
-    to_platform: toPlatform
-  };
-  
-  const signature = OrbitCrypto.sign(requestData, privateKey);
-  const requestBody = cbor.encode(requestData);
-  
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/cbor',
-      'X-ORBIT-Platform': TEST_PLATFORM_ID,
-      'X-ORBIT-Signature': signature.toString('base64'),
-      'X-ORBIT-API-Key': PLATFORM_API_KEY
-    },
-    body: requestBody
-  });
-  
-  const text = await response.text();
-  let responseData;
-  try {
-    responseData = JSON.parse(text);
-  } catch {
-    responseData = { error: 'unparseable_response', body: text };
-  }
-  
-  return { status: response.status, data: responseData };
-}
+
 
 // ============================================================================
 // MAIN TEST EXECUTION

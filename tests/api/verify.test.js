@@ -24,7 +24,6 @@
  */
 
 const fs = require('fs');
-const path = require('path');
 const cbor = require('cbor');
 const OrbitCrypto = require('../../src/engines/crypto');
 const FormData = require('form-data');

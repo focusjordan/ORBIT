@@ -41,7 +41,6 @@ async function runLoadTest() {
       // Small artificial stagger to simulate network arrival
       await new Promise(r => setTimeout(r, index * 10)); 
       
-      const memBefore = process.memoryUsage().heapUsed;
       const parsed = JSON.parse(reqStr);
       const buf = Buffer.from(parsed.audio, 'base64');
       const memAfter = process.memoryUsage().heapUsed;
@@ -78,7 +77,6 @@ async function runLoadTest() {
     const cborPromises = cborRequests.map(async (reqBuf, index) => {
       await new Promise(r => setTimeout(r, index * 10));
       
-      const memBefore = process.memoryUsage().heapUsed;
       const parsed = await cbor.decodeFirst(reqBuf); // Async decoding handles event loop better
       const memAfter = process.memoryUsage().heapUsed;
       
@@ -93,9 +91,11 @@ async function runLoadTest() {
   }
 
   const cborTime = performance.now() - cborStart;
-  console.log(`  - Status: Completed safely`);
-  console.log(`  - Total Processing Time: ${formatTime(cborTime)}`);
-  console.log(`  - Peak V8 Heap Used:     ${formatBytes(cborMaxMemory)}`);
+  if (cborFailed === 0) {
+    console.log(`  - Status: Completed safely`);
+    console.log(`  - Total Processing Time: ${formatTime(cborTime)}`);
+    console.log(`  - Peak V8 Heap Used:     ${formatBytes(cborMaxMemory)}`);
+  }
 
   console.log('\n===========================================================');
   console.log('CONCURRENCY SUMMARY FOR WHITEPAPER:');

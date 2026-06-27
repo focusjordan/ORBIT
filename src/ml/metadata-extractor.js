@@ -19,7 +19,6 @@
  * @see ORBIT_ENHANCEMENTS.md Section 3 (Zero-Shot Metadata Auto-Extraction)
  */
 
-const path = require('path');
 const fs = require('fs');
 
 // Import ML modules

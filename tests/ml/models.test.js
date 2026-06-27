@@ -93,17 +93,7 @@ function assertFalsy(value, message = '') {
   }
 }
 
-function assertThrows(fn, message = '') {
-  let threw = false;
-  try {
-    fn();
-  } catch (e) {
-    threw = true;
-  }
-  if (!threw) {
-    throw new Error(`${message}Expected function to throw`);
-  }
-}
+
 
 async function assertThrowsAsync(fn, expectedMessage = null, message = '') {
   let threw = false;

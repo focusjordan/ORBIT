@@ -92,7 +92,9 @@ for (const pkgName of packages) {
       try {
         execSync(`${pythonCmd} -c "import build"`, { stdio: 'ignore' });
         hasBuildModule = true;
-      } catch (e) {}
+      } catch (e) {
+        // ignore
+      }
 
       if (hasBuildModule) {
         execSync(`${pythonCmd} -m build`, { cwd: pkgPath, stdio: 'inherit' });

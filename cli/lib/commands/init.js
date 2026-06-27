@@ -3,7 +3,7 @@
 const { Command } = require('commander');
 const readline = require('readline');
 const chalk = require('chalk');
-const { loadConfig, writeConfig, GLOBAL_CONFIG_PATH } = require('../config');
+const { loadConfig, writeConfig } = require('../config');
 const out = require('../output');
 
 function prompt(rl, question, defaultValue) {

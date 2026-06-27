@@ -32,7 +32,6 @@ async function runBenchmark() {
 
   // Wait a moment for GC to settle
   await new Promise(resolve => setTimeout(resolve, 1000));
-  const baseMemory = process.memoryUsage().heapUsed;
 
   // 2. JSON + Base64 Benchmark
   console.log('\n[2/4] Testing JSON + Base64 Serialization...');
@@ -57,7 +56,7 @@ async function runBenchmark() {
   const jsonDecodeStart = performance.now();
   const preJsonDecodeMemory = process.memoryUsage().heapUsed;
   const parsedJson = JSON.parse(jsonString);
-  const decodedAudioBuffer = Buffer.from(parsedJson.audio, 'base64');
+  Buffer.from(parsedJson.audio, 'base64');
   const postJsonDecodeMemory = process.memoryUsage().heapUsed;
   const jsonDecodeTime = performance.now() - jsonDecodeStart;
   const jsonPeakMemory = postJsonDecodeMemory - preJsonDecodeMemory;
@@ -87,7 +86,7 @@ async function runBenchmark() {
   
   const cborDecodeStart = performance.now();
   const preCborDecodeMemory = process.memoryUsage().heapUsed;
-  const parsedCbor = cbor.decode(cborBuffer);
+  cbor.decode(cborBuffer);
   const postCborDecodeMemory = process.memoryUsage().heapUsed;
   const cborDecodeTime = performance.now() - cborDecodeStart;
   const cborPeakMemory = postCborDecodeMemory - preCborDecodeMemory;

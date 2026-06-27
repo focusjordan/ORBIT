@@ -140,7 +140,7 @@ async function runTests() {
     form2.append('audio', fs.createReadStream(testAudioPath));
     form2.append('title', 'Test Track 2 (Duplicate)');
     
-    const response2 = await axios.post(`http://localhost:${PORT}/api/tracks`, form2, {
+    await axios.post(`http://localhost:${PORT}/api/tracks`, form2, {
       headers: form2.getHeaders()
     });
     

@@ -15,10 +15,6 @@
  * @see ORBIT_ENHANCEMENTS.md Section 3 (Zero-Shot Metadata Auto-Extraction)
  */
 
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
-
 // Import audio utilities for Node.js audio processing
 const AudioUtils = require('./utils/audio');
 

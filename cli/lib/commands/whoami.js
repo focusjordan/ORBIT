@@ -41,9 +41,6 @@ const cmd = new Command('whoami')
     out.progress(command, 'Verifying identity with server');
 
     try {
-      const { buildClient } = require('../config');
-      const client = buildClient();
-
       // Use the auth-test endpoint to verify identity
       const url = `${conf.apiUrl}/orbit/v1/auth-test`;
       const nacl = require('tweetnacl');

@@ -26,12 +26,10 @@ const OrbitCrypto = require('../../engines/crypto');
 const { UnifiedWatermark } = require('../../engines/watermark-unified');
 const { queries } = require('@ohnrshyp/ledger');
 const config = require('../../config');
-const AudioUtils = require('../../utils/audio');
 
 // ML modules for v2 enhancements
 const contentAnalysis = require('../../ml/content-analysis');
 const metadataExtractor = require('@ohnrshyp/metadata');
-const clap = require('../../ml/clap');
 
 /**
  * Calculate overall confidence summary based on verification results
@@ -45,7 +43,6 @@ function calculateConfidenceSummary(params) {
     watermarkResult,
     signatureValid,
     aiMetadata,
-    contentAnalysisResult,
   } = params;
   
   // Identity confidence: based on fingerprint match
@@ -70,7 +67,7 @@ function calculateConfidenceSummary(params) {
     let successCount = 0;
     let totalCount = 0;
     
-    for (const [key, value] of Object.entries(status)) {
+    for (const [, value] of Object.entries(status)) {
       totalCount++;
       if (value === 'success') successCount++;
     }

@@ -6,8 +6,6 @@
  * - Highly optimized PostgreSQL queries (pgvector / similarity search)
  */
 
-const fs = require('fs');
-const path = require('path');
 const cryptoEngine = require('./crypto');
 
 let databasePool = null;

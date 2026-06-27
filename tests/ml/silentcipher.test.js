@@ -26,7 +26,6 @@ const crypto = require('crypto');
 
 // Test configuration
 const TEST_AUDIO_WAV_PATH = path.join(__dirname, '../fixtures/test-audio-rhythm.wav');
-const TEST_AUDIO_MP3_PATH = path.join(__dirname, '../fixtures/test-audio.mp3');
 
 // Import SilentCipher module
 const silentcipher = require('../../src/ml/silentcipher');
@@ -142,7 +141,6 @@ async function runTests() {
   
   // Check if test audio exists
   const hasTestWav = fs.existsSync(TEST_AUDIO_WAV_PATH);
-  const hasTestMp3 = fs.existsSync(TEST_AUDIO_MP3_PATH);
   
   // Check SilentCipher availability once
   let silentcipherAvailable = false;
@@ -288,8 +286,8 @@ async function runTests() {
     envCheckResult = await silentcipher.checkPythonEnvironment();
     silentcipherAvailable = envCheckResult.available;
     
-    assertTrue(envCheckResult.hasOwnProperty('available'), 'Should have available property');
-    assertTrue(envCheckResult.hasOwnProperty('message'), 'Should have message property');
+    assertTrue('available' in envCheckResult, 'Should have available property');
+    assertTrue('message' in envCheckResult, 'Should have message property');
     assertTrue(typeof envCheckResult.available === 'boolean', 'available should be boolean');
     assertTrue(typeof envCheckResult.message === 'string', 'message should be string');
     

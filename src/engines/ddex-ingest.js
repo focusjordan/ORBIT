@@ -475,7 +475,8 @@ function parse(xml) {
   // Sort by track number if available
   enrichedTracks.sort((a, b) => (a.track_number || 999) - (b.track_number || 999));
 
-  const { trackOrder, ...releaseClean } = releaseMetadata;
+  const releaseClean = { ...releaseMetadata };
+  delete releaseClean.trackOrder;
 
   return {
     release_metadata: { ...releaseClean, territories, deal: dealTerms },

@@ -14,7 +14,7 @@ const LOCAL_CONFIG_FILE = 'config.json';
  */
 function findLocalConfig(startDir = process.cwd()) {
   let dir = startDir;
-  while (true) {
+  while (dir) {
     const candidate = path.join(dir, LOCAL_CONFIG_DIR, LOCAL_CONFIG_FILE);
     if (fs.existsSync(candidate)) return candidate;
     const parent = path.dirname(dir);

@@ -199,7 +199,6 @@ async function registerHandler(req, res) {
     }
     
     const watermarkedAudio = embedResult.watermarkedAudio;
-    const watermarkPayload = embedResult.watermarkPayload;
     const watermarkMethod = embedResult.method;
     
     log(`Watermark embedded using ${watermarkMethod}`);

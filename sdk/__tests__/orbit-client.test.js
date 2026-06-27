@@ -267,15 +267,13 @@ describe('OrbitClient', () => {
     });
 
     it('should accept 32-byte Buffer fingerprint', async () => {
-      // This will fail network call but validates input
       const fingerprint = Buffer.alloc(32);
-      // We can't actually test this without mocking fetch
-      // Just verify it doesn't throw on input validation
+      await expect(client.getChain(fingerprint)).rejects.not.toThrow(/fingerprintHash must be/);
     });
 
     it('should accept 64-char hex string fingerprint', async () => {
       const fingerprint = '0'.repeat(64);
-      // Input validation passes - network would fail
+      await expect(client.getChain(fingerprint)).rejects.not.toThrow(/fingerprintHash must be/);
     });
 
     it('should throw for wrong-length Buffer', async () => {

@@ -16,7 +16,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const cbor = require('cbor');
 
 // Test configuration
 const API_URL = process.env.API_URL || 'http://localhost:4000';

@@ -43,7 +43,7 @@ const cmd = new Command('similar')
       const data = result.data || result;
       const results = data.results || [];
 
-      out.success(command, data, (d) => {
+      out.success(command, data, (_d) => {
         if (results.length === 0) {
           console.log(chalk.yellow('\n  No similar tracks found.\n'));
           return;

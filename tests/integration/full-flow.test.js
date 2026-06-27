@@ -280,8 +280,10 @@ async function main() {
   
   // Run steps in sequence
   const step1 = await stepRegister();
-  const step2 = step1 ? await stepVerify() : false;
-  const step3 = step1 ? await stepChain() : false;
+  if (step1) {
+    await stepVerify();
+    await stepChain();
+  }
   
   const totalTime = Date.now() - startTime;
   

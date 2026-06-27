@@ -86,7 +86,8 @@ class OrbitClient {
       dataBuffer = data;
     } else if (typeof data === 'object' && data !== null) {
       // Remove signature field if present, then encode
-      const { signature, ...unsigned } = data;
+      const unsigned = { ...data };
+      delete unsigned.signature;
       
       // PRE-HASH PROTOCOL
       // If audio is present, we hash it natively (SHA-256)

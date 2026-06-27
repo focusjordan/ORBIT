@@ -162,7 +162,6 @@ async function runFullStackTest() {
     
     // Session 25b: We now fingerprint AFTER watermarking, so we just get duration here
     const localFingerprint = await OrbitFingerprint.generate(audioBuffer);
-    const localFpHex = localFingerprint.hash.toString('hex');
     
     logStep('Original audio analyzed', true, 
       `Duration: ${localFingerprint.duration}s\n   (Note: FP will be generated from watermarked audio)`);

@@ -23,7 +23,6 @@ const fs = require('fs');
 
 // Test configuration
 const TEST_AUDIO_PATH = path.join(__dirname, '../fixtures/test-audio.mp3');
-const TEST_AUDIO_SHORT = path.join(__dirname, '../fixtures/test-audio-short.wav');
 const TEST_AUDIO_RHYTHM = path.join(__dirname, '../fixtures/test-audio-rhythm.wav');
 
 // Import modules
@@ -93,11 +92,7 @@ function assertEqual(actual, expected, message = '') {
   }
 }
 
-function assertDeepEqual(actual, expected, message = '') {
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    throw new Error(`${message}Expected: ${JSON.stringify(expected)}, Got: ${JSON.stringify(actual)}`);
-  }
-}
+
 
 function assertTrue(value, message = '') {
   if (!value) {
@@ -135,17 +130,7 @@ function assertLessThan(actual, expected, message = '') {
   }
 }
 
-function assertGreaterOrEqual(actual, expected, message = '') {
-  if (!(actual >= expected)) {
-    throw new Error(`${message}Expected ${actual} >= ${expected}`);
-  }
-}
 
-function assertIncludes(array, value, message = '') {
-  if (!array.includes(value)) {
-    throw new Error(`${message}Expected array to include: ${value}`);
-  }
-}
 
 // ============================================================================
 // TEST SUITES

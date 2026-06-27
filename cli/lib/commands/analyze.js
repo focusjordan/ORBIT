@@ -39,10 +39,11 @@ const cmd = new Command('analyze')
       out.clearProgress(command);
 
       const data = result.data || result;
-      const analysis = data.analysis || data;
 
       out.success(command, data, (d) => {
         console.log(chalk.green.bold('\n  Analysis complete.\n'));
+
+        const analysis = d.analysis || d;
 
         if (analysis.genre && analysis.genre.length > 0) {
           const top = analysis.genre.slice(0, 3).map(g =>
@@ -87,8 +88,8 @@ const cmd = new Command('analyze')
           out.field(command, 'Vocals', desc);
         }
 
-        if (data.processing_time_ms) {
-          out.field(command, 'Processing Time', `${data.processing_time_ms}ms`);
+        if (d.processing_time_ms) {
+          out.field(command, 'Processing Time', `${d.processing_time_ms}ms`);
         }
 
         console.log();
