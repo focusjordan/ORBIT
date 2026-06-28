@@ -168,45 +168,55 @@ CREATE INDEX IF NOT EXISTS idx_orbit_mert_embedding ON orbit_registrations
   USING ivfflat (mert_embedding vector_cosine_ops) WITH (lists = 100);
 `;
 
-async function migrate() {
-  console.log('🚀 Running ORBIT database migration...');
-  
-  try {
-    await pool.query(schema);
-    console.log('✅ Migration complete!');
-    
-    // Verify tables exist
-    const tables = await pool.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public' 
-      AND table_name LIKE 'orbit_%'
-      ORDER BY table_name
-    `);
-    
-    console.log('\n📋 Created tables:');
-    tables.rows.forEach(row => console.log(`   - ${row.table_name}`));
-    
-    // Verify extensions
-    const extensions = await pool.query(`
-      SELECT extname 
-      FROM pg_extension 
-      WHERE extname IN ('uuid-ossp', 'pgcrypto', 'vector')
-      ORDER BY extname
-    `);
-    
-    console.log('\n🔌 Installed extensions:');
-    extensions.rows.forEach(row => console.log(`   - ${row.extname}`));
-    
-    console.log('\n✨ Database ready for ORBIT operations!');
-    
-  } catch (error) {
-    console.error('❌ Migration failed:', error.message);
-    console.error('\nFull error:', error);
-    process.exit(1);
-  } finally {
-    await pool.end();
+async function migrate(retries = 10, delayMs = 5000) {
+  console.log('🚀 Connecting to ORBIT database...');
+  for (let i = 1; i <= retries; i++) {
+    try {
+      // Run a simple query to verify connection
+      await pool.query('SELECT 1');
+      console.log('🔌 Database connection established.');
+      
+      console.log('🚀 Running ORBIT database migration...');
+      await pool.query(schema);
+      console.log('✅ Migration complete!');
+      
+      // Verify tables exist
+      const tables = await pool.query(`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name LIKE 'orbit_%'
+        ORDER BY table_name
+      `);
+      
+      console.log('\n📋 Created tables:');
+      tables.rows.forEach(row => console.log(`   - ${row.table_name}`));
+      
+      // Verify extensions
+      const extensions = await pool.query(`
+        SELECT extname 
+        FROM pg_extension 
+        WHERE extname IN ('uuid-ossp', 'pgcrypto', 'vector')
+        ORDER BY extname
+      `);
+      
+      console.log('\n🔌 Installed extensions:');
+      extensions.rows.forEach(row => console.log(`   - ${row.extname}`));
+      
+      console.log('\n✨ Database ready for ORBIT operations!');
+      return;
+      
+    } catch (error) {
+      console.error(`⚠️ Connection attempt ${i}/${retries} failed: ${error.message}`);
+      if (i < retries) {
+        console.log(`Waiting ${delayMs / 1000}s before next attempt...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      } else {
+        console.error('❌ Migration failed: Max connection retries exceeded.');
+        process.exit(1);
+      }
+    }
   }
 }
 
-migrate();
+migrate().finally(() => pool.end());
