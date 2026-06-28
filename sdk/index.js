@@ -9,7 +9,7 @@
  * const { OrbitClient } = require('@ohnrshyp/orbit-sdk');
  * 
  * const client = new OrbitClient({
- *   apiUrl: 'https://orbit.ohnrshyp.com',
+ *   apiUrl: 'http://localhost:3000',
  *   platformId: 'your-platform-id',
  *   privateKey: Buffer.from(process.env.ORBIT_PRIVATE_KEY, 'base64')
  * });
@@ -38,14 +38,14 @@ class OrbitClient {
    * Create a new ORBIT client
    * 
    * @param {Object} config - Client configuration
-   * @param {string} config.apiUrl - Base URL of ORBIT API (e.g., 'https://orbit.ohnrshyp.com')
+   * @param {string} config.apiUrl - Base URL of ORBIT API (e.g., 'http://localhost:3000')
    * @param {string} config.platformId - Your registered platform ID
    * @param {Buffer} config.privateKey - Your Ed25519 private key (64 bytes)
    * @param {string} [config.apiKey] - Optional API key for rate limiting/billing
    * 
    * @example
    * const client = new OrbitClient({
-   *   apiUrl: 'https://orbit.ohnrshyp.com',
+   *   apiUrl: 'http://localhost:3000',
    *   platformId: 'ohnrshyp',
    *   privateKey: Buffer.from(process.env.ORBIT_PRIVATE_KEY, 'base64')
    * });

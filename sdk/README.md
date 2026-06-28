@@ -26,7 +26,7 @@ const fs = require('fs');
 
 // Initialize client
 const client = new OrbitClient({
-  apiUrl: 'https://orbit.ohnrshyp.com',
+  apiUrl: 'http://localhost:3000', // URL of your ORBIT node
   platformId: 'your-platform-id',
   privateKey: Buffer.from(process.env.ORBIT_PRIVATE_KEY, 'base64')
 });
@@ -53,7 +53,7 @@ new OrbitClient(config)
 ```
 
 **Parameters:**
-- `config.apiUrl` (string) - Base URL of ORBIT API (e.g., `'https://orbit.ohnrshyp.com'`)
+- `config.apiUrl` (string) - Base URL of your ORBIT API node (e.g., `'http://localhost:3000'` or `'https://orbit.yourdomain.com'`)
 - `config.platformId` (string) - Your registered platform ID
 - `config.privateKey` (Buffer) - Your Ed25519 private key (64 bytes)
 - `config.apiKey` (string, optional) - Optional API key for rate limiting/billing
@@ -247,6 +247,82 @@ chain.registrations.forEach((reg, i) => {
 });
 ```
 
+---
+
+### `watermarkmatch(audioBuffer)`
+
+Verify an audio file by strictly extracting its embedded watermark without processing its fingerprint. Fast and efficient when you only need to confirm watermark presence.
+
+**Parameters:**
+- `audioBuffer` (Buffer) - Binary audio data to verify
+
+**Returns:** Promise<Object>
+- Match result object from the ORBIT API.
+
+**Example:**
+```javascript
+const result = await client.watermarkmatch(audioBuffer);
+```
+
+---
+
+### `listRegistrations([options])`
+
+List all registrations for your authenticated platform.
+
+**Parameters:**
+- `options.limit` (number, optional) - Max results (1-100), defaults to 50
+- `options.offset` (number, optional) - Pagination offset, defaults to 0
+
+**Returns:** Promise<Object>
+- `total` (number) - Total registration count
+- `registrations` (Array) - Registration records
+
+---
+
+### `listPendingTransfers()`
+
+List all pending inbound transfers requiring your acceptance.
+
+**Returns:** Promise<Object>
+- `total` (number) - Count of pending transfers
+- `transfers` (Array) - Pending transfer records
+
+---
+
+### `similar(audioBuffer, [options])` (AI v2)
+
+Uses AI (CLAP embeddings) to find similar-sounding tracks in the ORBIT network. Identifies covers, pitch-shifted audio, and stylistic similarities.
+
+**Parameters:**
+- `audioBuffer` (Buffer) - Binary audio data
+- `options.threshold` (number, optional) - Similarity threshold (0-1), defaults to 0.5
+- `options.limit` (number, optional) - Maximum results, defaults to 20
+- `options.includeDerivatives` (boolean, optional) - Include covers/remixes, defaults to true
+
+**Returns:** Promise<Object>
+- `results` (Array) - Array of similar tracks with a `similarity` score.
+
+---
+
+### `analyze(audioBuffer, [options])` (AI v2)
+
+Run a complete AI-powered analysis of an audio file without registering it to the chain. Detects genre, mood, BPM, key, instruments, and vocals.
+
+**Parameters:**
+- `audioBuffer` (Buffer) - Binary audio data
+- `options.include` (Array<string>, optional) - Specific metadata fields to extract.
+
+**Returns:** Promise<Object>
+- `analysis` (Object) - Detected metadata predictions with confidence scoring.
+
+**Example:**
+```javascript
+const analysis = await client.analyze(audioBuffer);
+console.log(`Detected BPM: ${analysis.analysis.bpm.value}`);
+console.log(`Primary Genre: ${analysis.analysis.genre[0].label}`);
+```
+
 ## Error Handling
 
 The SDK throws errors for invalid inputs and API failures:
@@ -272,7 +348,7 @@ try {
 Recommended `.env` setup:
 
 ```env
-ORBIT_API_URL=https://orbit.ohnrshyp.com
+ORBIT_API_URL=http://localhost:3000
 ORBIT_PLATFORM_ID=your-platform-id
 ORBIT_PRIVATE_KEY=base64-encoded-ed25519-private-key
 ORBIT_API_KEY=optional-api-key
@@ -308,9 +384,8 @@ Apache 2.0
 ## Support
 
 - **Issues**: https://github.com/ohnrshyp/orbit/issues
-- **Email**: hello@ohnrshyp.com
+- **Email**: support@ohnrshyp.com
 - **Docs**: https://orbit.ohnrshyp.com/docs
-
 
 
 
