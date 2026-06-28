@@ -88,3 +88,5 @@ __pycache__/
 # PDF Exports
 tools/export-pdf.html
 docs/ORBIT Protocol Whitepaper Analysis.pdf
+/cli/
+/cli-binaries/
