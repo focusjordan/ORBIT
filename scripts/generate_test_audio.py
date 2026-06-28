@@ -16,13 +16,14 @@ Output:
 import os
 import sys
 import numpy as np
+import subprocess
 
 # Check for required packages
 try:
     import soundfile as sf
 except ImportError:
     print("Installing soundfile...")
-    os.system(f"{sys.executable} -m pip install soundfile")
+    subprocess.run([sys.executable, "-m", "pip", "install", "soundfile"], check=True)
     import soundfile as sf
 
 

@@ -25,7 +25,7 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 
 const silentcipher = require('../src/ml/silentcipher');
 
@@ -54,7 +54,12 @@ function checkFfmpeg() {
  * Convert audio to MP3 using ffmpeg
  */
 function convertToMp3(inputPath, outputPath, bitrate = '128k') {
-  execSync(`ffmpeg -y -i "${inputPath}" -b:a ${bitrate} "${outputPath}"`, {
+  execFileSync('ffmpeg', [
+    '-y',
+    '-i', inputPath,
+    '-b:a', bitrate,
+    outputPath
+  ], {
     stdio: 'pipe'
   });
 }

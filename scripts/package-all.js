@@ -5,7 +5,7 @@
  * for dry-run verification across all decoupled workspace packages.
  */
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -90,17 +90,17 @@ for (const pkgName of packages) {
       // Check if 'build' module is installed
       let hasBuildModule = false;
       try {
-        execSync(`${pythonCmd} -c "import build"`, { stdio: 'ignore' });
+        execFileSync(pythonCmd, ['-c', 'import build'], { stdio: 'ignore' });
         hasBuildModule = true;
       } catch (e) {
         // ignore
       }
 
       if (hasBuildModule) {
-        execSync(`${pythonCmd} -m build`, { cwd: pkgPath, stdio: 'inherit' });
+        execFileSync(pythonCmd, ['-m', 'build'], { cwd: pkgPath, stdio: 'inherit' });
       } else {
         console.log(`⚠️ 'build' module not found in Python. Falling back to setuptools sdist/bdist_wheel...`);
-        execSync(`${pythonCmd} setup.py sdist bdist_wheel`, { cwd: pkgPath, stdio: 'ignore' });
+        execFileSync(pythonCmd, ['setup.py', 'sdist', 'bdist_wheel'], { cwd: pkgPath, stdio: 'ignore' });
       }
 
       // Move built files from packages/<pkg>/dist to dist/python/

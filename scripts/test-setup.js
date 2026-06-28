@@ -26,7 +26,7 @@ const nacl = require('tweetnacl');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 
 const CREDENTIALS_FILE = path.join(__dirname, '../credentials/.test-platform-credentials.json');
 const TEST_PLATFORM_ID = 'test-platform';
@@ -59,10 +59,16 @@ function generateTestAudio(outputPath, duration) {
   console.log(`   Generating ${filename} (${duration}s)...`);
   
   try {
-    execSync(
-      `ffmpeg -f lavfi -i "sine=frequency=440:duration=${duration}" -af "volume=0.5" -ar 44100 -ac 2 -b:a 192k "${outputPath}" -y`,
-      { stdio: 'pipe' }
-    );
+    execFileSync('ffmpeg', [
+      '-f', 'lavfi',
+      '-i', `sine=frequency=440:duration=${duration}`,
+      '-af', 'volume=0.5',
+      '-ar', '44100',
+      '-ac', '2',
+      '-b:a', '192k',
+      outputPath,
+      '-y'
+    ], { stdio: 'pipe' });
     return true;
   } catch (error) {
     console.error(`   ❌ Failed to generate ${filename}:`, error.message);
