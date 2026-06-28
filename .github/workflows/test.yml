@@ -7,43 +7,9 @@ on:
     branches: [main, develop]
 
 jobs:
-  # Unit tests - Fast, no external dependencies
-  unit-tests:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Install Chromaprint
-        run: sudo apt-get update && sudo apt-get install -y libchromaprint-tools ffmpeg
-      
-      - name: Create test audio fixture
-        run: |
-          # Generate a 30-second test tone if fixture doesn't exist
-          if [ ! -f tests/fixtures/test-audio.mp3 ]; then
-            ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3
-          fi
-      
-      - name: Run unit tests
-        run: npm run test:unit
-        env:
-          SKIP_API_TESTS: '1'
-          SKIP_ML_TESTS: '1'
-
-  # V1 Core tests - Needs PostgreSQL
-  v1-tests:
-    name: V1 Core Tests
+  # CI Pipeline - Explicit, visible steps
+  ci-pipeline:
+    name: CI Pipeline
     runs-on: ubuntu-latest
     
     services:
@@ -60,7 +26,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -79,19 +45,35 @@ jobs:
       
       - name: Create test audio fixtures
         run: |
-          # Generate test audio files
           ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3 -y
           ffmpeg -f lavfi -i "sine=frequency=440:duration=15" -b:a 192k tests/fixtures/test-audio-short.mp3 -y
           ffmpeg -f lavfi -i "sine=frequency=440:duration=15" tests/fixtures/test-audio-short.wav -y
           ffmpeg -f lavfi -i "sine=frequency=440:duration=30" tests/fixtures/test-audio-watermarked.wav -y
           ffmpeg -f lavfi -i "sine=frequency=880:duration=30" tests/fixtures/test-audio-rhythm.wav -y
-      
+          
       - name: Setup environment
         run: |
           cp .env.example .env
           echo "DATABASE_URL=postgres://orbit:orbit@localhost:5432/orbit_test" >> .env
           echo "ORBIT_SECRET_KEY=test-secret-key-for-ci-$(date +%s)" >> .env
-      
+
+      - name: Step 1 - Linting
+        run: npm run lint
+
+      - name: Step 2 - Package Sanity Checks
+        run: npm run test:packages
+
+      - name: Step 3 - Crypto Engine
+        run: npm run test:crypto
+
+      - name: Step 4 - Audio Utils
+        run: npm run test:audio
+
+      - name: Step 5 - Unit Tests
+        run: npm run test:unit
+        env:
+          SKIP_API_TESTS: '1'
+
       - name: Run database migrations
         run: npm run migrate
         env:
@@ -101,11 +83,10 @@ jobs:
         run: npm run seed:platform
         env:
           DATABASE_URL: postgres://orbit:orbit@localhost:5432/orbit_test
-      
-      - name: Start server and run V1 tests
+
+      - name: Start Express Server
         run: |
           npm start &
-          # Wait up to 10 seconds for the server to respond
           for i in {1..10}; do
             if curl -s http://localhost:4000/health > /dev/null; then
               echo "Server is up!"
@@ -114,68 +95,31 @@ jobs:
             echo "Waiting for server to start..."
             sleep 1
           done
-          npm run test:v1
         env:
           DATABASE_URL: postgres://orbit:orbit@localhost:5432/orbit_test
           API_URL: http://localhost:4000
           PORT: 4000
+
+      - name: Step 6 - API Auth Tests
+        run: npm run test:auth
+        env:
+          API_URL: http://localhost:4000
           SKIP_ML_TESTS: '1'
 
-  # V2 ML tests - Needs models (slow, optional)
-  v2-ml-tests:
-    name: V2 ML Tests (Metadata Extraction)
-    runs-on: ubuntu-latest
-    # Only run on main branch or if explicitly requested
-    if: github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '[test-ml]')
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-      
-      - name: Install Python dependencies
-        run: |
-          pip install -r scripts/requirements-ml.txt
-          
-      - name: Install FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      
-      - name: Create test audio fixtures
-        run: |
-          ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3 -y
-          ffmpeg -f lavfi -i "sine=frequency=440:duration=15" -b:a 192k tests/fixtures/test-audio-short.mp3 -y
-          ffmpeg -f lavfi -i "sine=frequency=440:duration=15" tests/fixtures/test-audio-short.wav -y
-          ffmpeg -f lavfi -i "sine=frequency=440:duration=30" tests/fixtures/test-audio-watermarked.wav -y
-          ffmpeg -f lavfi -i "sine=frequency=880:duration=30" tests/fixtures/test-audio-rhythm.wav -y
-      
-      - name: Cache ML models
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/huggingface
-          key: ${{ runner.os }}-huggingface-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-huggingface-
-      
-      - name: Run V2 safe ML tests
-        run: npm run test:v2:safe
+      - name: Step 7 - API Register Tests
+        run: npm run test:register
         env:
-          SKIP_API_TESTS: '1'
-          ORBIT_PYTHON_PATH: python3
-        timeout-minutes: 30  # ML model downloads can be slow
+          API_URL: http://localhost:4000
+          SKIP_ML_TESTS: '1'
 
-
-
+      - name: Step 8 - API Verify Tests
+        run: npm run test:verify
+        env:
+          API_URL: http://localhost:4000
+          SKIP_ML_TESTS: '1'
+          
+      - name: Step 9 - API Chain Tests
+        run: npm run test:chain
+        env:
+          API_URL: http://localhost:4000
+          SKIP_ML_TESTS: '1'

@@ -290,115 +290,8 @@ runner.test('Audio without watermark returns detected=false', async () => {
   console.log(`   Detected: ${result.detected}, Confidence: ${result.confidence.toFixed(4)}`);
 });
 
-// ============================================================================
-// SILENTCIPHER TESTS (Conditional on availability)
-// ============================================================================
-
-runner.test('SilentCipher availability check', async () => {
-  resetAvailabilityCache(); // Ensure fresh check
-  const availability = await checkSilentCipherAvailable();
-  
-  if (typeof availability.available !== 'boolean') {
-    throw new Error('Should have available boolean');
-  }
-  if (typeof availability.message !== 'string') {
-    throw new Error('Should have message string');
-  }
-  
-  console.log(`   Available: ${availability.available}`);
-  console.log(`   Message: ${availability.message}`);
-});
-
-runner.test('Neural embed/extract (if SilentCipher available)', async () => {
-  const availability = await checkSilentCipherAvailable();
-  
-  if (!availability.available) {
-    console.log('   ⏭️  Skipping: SilentCipher not available');
-    return;
-  }
-  
-  // Use short audio for neural watermarking test
-  const testAudioPath = TEST_AUDIO_PATH;
-  if (!fs.existsSync(testAudioPath)) {
-    throw new Error(`Test audio not found: ${testAudioPath}`);
-  }
-  
-  const watermark = new UnifiedWatermark('test-secret-key', { method: 'neural' });
-  const audioBuffer = fs.readFileSync(testAudioPath);
-  const payloadHash = crypto.randomBytes(16);
-  
-  // Embed
-  const embedResult = await watermark.embed(audioBuffer, {
-    platform: 'test-platform',
-    timestamp: Date.now(),
-    payloadHash
-  });
-  
-  if (!embedResult.success) {
-    throw new Error('Neural embed should succeed');
-  }
-  if (embedResult.method !== 'silentcipher') {
-    throw new Error(`Method should be 'silentcipher', got '${embedResult.method}'`);
-  }
-  if (!embedResult.sdr || embedResult.sdr < 20) {
-    throw new Error(`SDR should be >= 20dB, got ${embedResult.sdr}`);
-  }
-  
-  console.log(`   Embedded: SDR=${embedResult.sdr.toFixed(1)}dB`);
-  
-  // Extract
-  const extractResult = await watermark.extract(embedResult.watermarkedAudio);
-  
-  if (!extractResult.success) {
-    throw new Error('Neural extract should succeed');
-  }
-  if (!extractResult.detected) {
-    throw new Error('Should detect neural watermark');
-  }
-  if (extractResult.method !== 'silentcipher') {
-    throw new Error(`Extract method should be 'silentcipher', got '${extractResult.method}'`);
-  }
-  
-  // Verify payload hash prefix matches (5 bytes)
-  const extractedPrefix = extractResult.payloadHash;
-  const expectedPrefix = payloadHash.slice(0, 5);
-  if (!extractedPrefix.equals(expectedPrefix)) {
-    throw new Error('Extracted hash prefix should match');
-  }
-  
-  console.log(`   Extracted: confidence=${(extractResult.confidence * 100).toFixed(1)}%`);
-});
-
-// ============================================================================
-// FALLBACK BEHAVIOR TESTS
-// ============================================================================
-
-runner.test('Auto mode falls back to spread when neural unavailable', async () => {
-  if (!fs.existsSync(TEST_AUDIO_RHYTHM_PATH)) {
-    throw new Error(`Test audio not found: ${TEST_AUDIO_RHYTHM_PATH}`);
-  }
-  
-  const watermark = new UnifiedWatermark('test-secret-key', { method: 'auto' });
-  const audioBuffer = fs.readFileSync(TEST_AUDIO_RHYTHM_PATH);
-  
-  const embedResult = await watermark.embed(audioBuffer, {
-    platform: 'test-platform',
-    timestamp: Date.now(),
-    payloadHash: crypto.randomBytes(16)
-  });
-  
-  if (!embedResult.success) {
-    throw new Error('Embed should succeed');
-  }
-  
-  // Should use either method based on availability
-  if (!['silentcipher', 'spread'].includes(embedResult.method)) {
-    throw new Error(`Invalid method: ${embedResult.method}`);
-  }
-  
-  console.log(`   Method used: ${embedResult.method}`);
-  console.log(`   Fallback used: ${embedResult.fallbackUsed || false}`);
-});
+// Removed SilentCipher and Fallback behavior tests. 
+// These have been migrated to watermark-neural.test.js for explicit testing.
 
 // ============================================================================
 // HASH MATCHING TESTS
@@ -420,21 +313,7 @@ runner.test('UnifiedWatermark.hashMatches() for spread spectrum', () => {
   }
 });
 
-runner.test('UnifiedWatermark.hashMatches() for silentcipher', () => {
-  const fullHash = crypto.randomBytes(32);
-  const extracted5 = fullHash.slice(0, 5);
-  
-  const matches = UnifiedWatermark.hashMatches(extracted5, fullHash, 'silentcipher');
-  if (!matches) {
-    throw new Error('Should match 5-byte prefix');
-  }
-  
-  const wrongHash = crypto.randomBytes(32);
-  const noMatch = UnifiedWatermark.hashMatches(extracted5, wrongHash, 'silentcipher');
-  if (noMatch) {
-    throw new Error('Should not match wrong hash');
-  }
-});
+
 
 runner.test('UnifiedWatermark.hashMatches() handles null/undefined', () => {
   const hash = crypto.randomBytes(16);
