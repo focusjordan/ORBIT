@@ -27,7 +27,6 @@ const {
 } = require('../../src/engines/watermark-unified');
 
 // Test fixtures
-const TEST_AUDIO_PATH = path.join(__dirname, '../fixtures/test-audio-short.wav');
 const TEST_AUDIO_RHYTHM_PATH = path.join(__dirname, '../fixtures/test-audio-rhythm.wav');
 
 /**
