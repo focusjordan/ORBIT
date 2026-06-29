@@ -1,0 +1,22 @@
+{
+  "name": "ohnrscript-language-support",
+  "displayName": "Ohnrscript",
+  "description": "Language support for Ohnrscript (.ohn)",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "typescript",
+        "extensions": [
+          ".ohn"
+        ]
+      }
+    ]
+  }
+}

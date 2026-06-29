@@ -1,0 +1,23 @@
+{
+  "name": "@ohnrshyp/ohnrscript",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "bin": {
+    "ohnc": "bin/ohnc.js"
+  },
+  "dependencies": {
+    "@babel/cli": "^7.29.7",
+    "@babel/core": "^7.29.7",
+    "@babel/preset-env": "^7.29.7"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2"
+  }
+}
