@@ -156,7 +156,7 @@ async function runTests() {
 
     try {
       // Create a mock parent program to register global option '--json'
-      const { Command } = require('../../cli/node_modules/commander');
+      const { Command } = require('commander');
       const parentProgram = new Command();
       parentProgram.option('--json');
       parentProgram.addCommand(ingestCmd);

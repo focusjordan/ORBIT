@@ -7,11 +7,86 @@ on:
     branches: [main, develop]
 
 jobs:
-  # CI Pipeline - Explicit, visible steps
-  ci-pipeline:
-    name: CI Pipeline
+  lint-and-sanity:
+    name: Lint & Sanity Checks
     runs-on: ubuntu-latest
-    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Step 1 - Linting
+        run: npm run lint
+      - name: Step 2 - Package Sanity Checks
+        run: npm run test:packages
+
+  crypto-audio:
+    name: Crypto & Audio Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromaprint & FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y libchromaprint-tools ffmpeg
+      - name: Create test audio fixtures
+        run: |
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3 -y
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=15" -b:a 192k tests/fixtures/test-audio-short.mp3 -y
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=15" tests/fixtures/test-audio-short.wav -y
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=30" tests/fixtures/test-audio-watermarked.wav -y
+          ffmpeg -f lavfi -i "sine=frequency=880:duration=30" tests/fixtures/test-audio-rhythm.wav -y
+      - name: Step 3 - Crypto Engine
+        run: npm run test:crypto
+      - name: Step 4 - Audio Utils
+        run: npm run test:audio
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromaprint & FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y libchromaprint-tools ffmpeg
+      - name: Create test audio fixtures
+        run: |
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3 -y
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=15" -b:a 192k tests/fixtures/test-audio-short.mp3 -y
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=15" tests/fixtures/test-audio-short.wav -y
+          ffmpeg -f lavfi -i "sine=frequency=440:duration=30" tests/fixtures/test-audio-watermarked.wav -y
+          ffmpeg -f lavfi -i "sine=frequency=880:duration=30" tests/fixtures/test-audio-rhythm.wav -y
+      - name: Setup environment
+        run: |
+          cp .env.example .env
+          echo "DATABASE_URL=postgres://orbit:orbit@localhost:5432/orbit_test" >> .env
+          echo "ORBIT_SECRET_KEY=test-secret-key-for-ci-$(date +%s)" >> .env
+      - name: Step 5 - Unit Tests
+        run: npm run test:unit
+        env:
+          SKIP_API_TESTS: '1'
+
+  api-tests:
+    name: API Tests
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -26,23 +101,18 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
-      
       - name: Install dependencies
         run: npm ci
-      
       - name: Install Chromaprint & FFmpeg
         run: sudo apt-get update && sudo apt-get install -y libchromaprint-tools ffmpeg
-      
       - name: Create test audio fixtures
         run: |
           ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3 -y
@@ -50,40 +120,19 @@ jobs:
           ffmpeg -f lavfi -i "sine=frequency=440:duration=15" tests/fixtures/test-audio-short.wav -y
           ffmpeg -f lavfi -i "sine=frequency=440:duration=30" tests/fixtures/test-audio-watermarked.wav -y
           ffmpeg -f lavfi -i "sine=frequency=880:duration=30" tests/fixtures/test-audio-rhythm.wav -y
-          
       - name: Setup environment
         run: |
           cp .env.example .env
           echo "DATABASE_URL=postgres://orbit:orbit@localhost:5432/orbit_test" >> .env
           echo "ORBIT_SECRET_KEY=test-secret-key-for-ci-$(date +%s)" >> .env
-
-      - name: Step 1 - Linting
-        run: npm run lint
-
-      - name: Step 2 - Package Sanity Checks
-        run: npm run test:packages
-
-      - name: Step 3 - Crypto Engine
-        run: npm run test:crypto
-
-      - name: Step 4 - Audio Utils
-        run: npm run test:audio
-
-      - name: Step 5 - Unit Tests
-        run: npm run test:unit
-        env:
-          SKIP_API_TESTS: '1'
-
       - name: Run database migrations
         run: npm run migrate
         env:
           DATABASE_URL: postgres://orbit:orbit@localhost:5432/orbit_test
-      
       - name: Seed test platform
         run: npm run seed:platform
         env:
           DATABASE_URL: postgres://orbit:orbit@localhost:5432/orbit_test
-
       - name: Start Express Server
         run: |
           npm start &
@@ -99,25 +148,21 @@ jobs:
           DATABASE_URL: postgres://orbit:orbit@localhost:5432/orbit_test
           API_URL: http://localhost:4000
           PORT: 4000
-
       - name: Step 6 - API Auth Tests
         run: npm run test:auth
         env:
           API_URL: http://localhost:4000
           SKIP_ML_TESTS: '1'
-
       - name: Step 7 - API Register Tests
         run: npm run test:register
         env:
           API_URL: http://localhost:4000
           SKIP_ML_TESTS: '1'
-
       - name: Step 8 - API Verify Tests
         run: npm run test:verify
         env:
           API_URL: http://localhost:4000
           SKIP_ML_TESTS: '1'
-          
       - name: Step 9 - API Chain Tests
         run: npm run test:chain
         env:
