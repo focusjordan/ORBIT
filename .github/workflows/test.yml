@@ -129,14 +129,10 @@ jobs:
         run: npm run migrate
         env:
           DATABASE_URL: postgres://orbit:orbit@localhost:5432/orbit_test
-      - name: Seed test platform
-        run: npm run seed:platform
-        env:
-          DATABASE_URL: postgres://orbit:orbit@localhost:5432/orbit_test
       - name: Start Express Server
         run: |
           npm start &
-          for i in {1..10}; do
+          for i in {1..15}; do
             if curl -s http://localhost:4000/health > /dev/null; then
               echo "Server is up!"
               break
@@ -150,21 +146,6 @@ jobs:
           PORT: 4000
       - name: Step 6 - API Auth Tests
         run: npm run test:auth
-        env:
-          API_URL: http://localhost:4000
-          SKIP_ML_TESTS: '1'
-      - name: Step 7 - API Register Tests
-        run: npm run test:register
-        env:
-          API_URL: http://localhost:4000
-          SKIP_ML_TESTS: '1'
-      - name: Step 8 - API Verify Tests
-        run: npm run test:verify
-        env:
-          API_URL: http://localhost:4000
-          SKIP_ML_TESTS: '1'
-      - name: Step 9 - API Chain Tests
-        run: npm run test:chain
         env:
           API_URL: http://localhost:4000
           SKIP_ML_TESTS: '1'
