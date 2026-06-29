@@ -63,7 +63,11 @@ async function seedPlatform() {
     };
     
     // Save credentials to file
-    const credentialsPath = path.join(__dirname, `../credentials/.${platformId}-credentials.json`);
+    const credentialsDir = path.join(__dirname, '../credentials');
+    if (!fs.existsSync(credentialsDir)) {
+      fs.mkdirSync(credentialsDir, { recursive: true });
+    }
+    const credentialsPath = path.join(credentialsDir, `.${platformId}-credentials.json`);
     fs.writeFileSync(credentialsPath, JSON.stringify(credentials, null, 2));
     console.log(`📁 Credentials saved to: ${credentialsPath}`);
     console.log('   (This file is gitignored for security)\n');
