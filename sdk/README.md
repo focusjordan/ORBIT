@@ -1,6 +1,8 @@
 # ORBIT SDK
 
-Official JavaScript/Node.js SDK for the ORBIT audio provenance protocol.
+Welcome to the official JavaScript/Node.js SDK for **ORBIT**! 👋
+
+The ORBIT SDK provides a simple, developer-friendly interface for platforms and digital service providers (DSPs) to interact with their ORBIT Enterprise Node. It abstracts away complex cryptography and API routing, allowing you to seamlessly register, watermark, and verify the provenance of audio assets.
 
 ## Installation
 
@@ -8,385 +10,79 @@ Official JavaScript/Node.js SDK for the ORBIT audio provenance protocol.
 npm install @ohnrshyp/orbit-sdk
 ```
 
-Or for local development:
-
-```bash
-cd /path/to/orbit/sdk
-npm link
-
-# In your project
-npm link @ohnrshyp/orbit-sdk
-```
-
 ## Quick Start
+
+Getting started with ORBIT is easy! To use the SDK, you'll need the API URL of your ORBIT node, your assigned Platform ID, and your Ed25519 private key for cryptographic signing.
+
+### Initialization
+
+When initializing the `OrbitClient`, the `privateKey` strictly requires a `Buffer` of exactly 64 bytes in length. The SDK handles all cryptographic signing automatically.
 
 ```javascript
 const { OrbitClient } = require('@ohnrshyp/orbit-sdk');
 const fs = require('fs');
 
-// Initialize client
+// Initialize your ORBIT client
 const client = new OrbitClient({
-  apiUrl: 'http://localhost:3000', // URL of your ORBIT node
-  platformId: 'your-platform-id',
-  privateKey: Buffer.from(process.env.ORBIT_PRIVATE_KEY, 'base64')
-});
-
-// Verify audio provenance
-const audioBuffer = fs.readFileSync('track.mp3');
-const result = await client.verify(audioBuffer);
-
-if (result.verified) {
-  console.log(`✅ Verified: ${result.metadata.title} by ${result.metadata.artist}`);
-  console.log(`   Registered by: ${result.origin.platform}`);
-  console.log(`   At: ${result.origin.timestamp}`);
-} else {
-  console.log('❌ Not registered in ORBIT');
-}
-```
-
-## API Reference
-
-### Constructor
-
-```javascript
-new OrbitClient(config)
-```
-
-**Parameters:**
-- `config.apiUrl` (string) - Base URL of your ORBIT API node (e.g., `'http://localhost:3000'` or `'https://orbit.yourdomain.com'`)
-- `config.platformId` (string) - Your registered platform ID
-- `config.privateKey` (Buffer) - Your Ed25519 private key (64 bytes)
-- `config.apiKey` (string, optional) - Optional API key for rate limiting/billing
-
-**Example:**
-```javascript
-const client = new OrbitClient({
-  apiUrl: process.env.ORBIT_API_URL,
+  apiUrl: process.env.ORBIT_API_URL, 
   platformId: process.env.ORBIT_PLATFORM_ID,
-  privateKey: Buffer.from(process.env.ORBIT_PRIVATE_KEY, 'base64')
+  privateKey: Buffer.from(process.env.ORBIT_PRIVATE_KEY, 'base64'),
+  // apiKey is optional for rate limiting/billing
+  // apiKey: process.env.ORBIT_API_KEY
 });
 ```
 
----
+### Registering Audio
 
-### `register(audioBuffer, metadata, ownerId)`
+Registering an audio file embeds a robust, inaudible watermark and securely records the asset's provenance on the ORBIT network.
 
-Register new audio with ORBIT, embedding watermark and recording provenance.
-
-**Parameters:**
-- `audioBuffer` (Buffer) - Binary audio data (MP3, WAV, FLAC, etc.)
-- `metadata` (Object) - Audio metadata
-  - `title` (string, required) - Track title
-  - `artist` (string, required) - Artist name
-  - `duration_ms` (number, required) - Duration in milliseconds
-  - `isrc` (string) - International Standard Recording Code
-  - `upc` (string) - Universal Product Code
-  - `primary_genre` (string) - Primary genre
-  - `album_title` (string) - Album/EP name
-  - `p_line` (string) - ℗ Sound recording copyright
-  - `c_line` (string) - © Composition copyright
-  - [see full metadata schema in docs]
-- `ownerId` (string) - UUID of the owner (user/artist ID from your system)
-
-**Returns:** Promise<Object>
-- `success` (boolean) - Whether registration succeeded
-- `registration_id` (number) - Unique registration ID
-- `fingerprint_hash` (Buffer) - 32-byte fingerprint hash
-- `watermarked_audio` (Buffer) - Audio with embedded watermark
-- `registered_at` (string) - ISO 8601 timestamp
-
-**Example:**
 ```javascript
 const audioBuffer = fs.readFileSync('track.mp3');
 
+// Register the audio and supply its metadata alongside the owner ID
 const result = await client.register(audioBuffer, {
   title: 'Midnight Drive',
-  artist: 'The Neon Collective',
-  duration_ms: 234567,
-  isrc: 'USRC12345678',
-  primary_genre: 'Electronic',
-  album_title: 'Night Visions',
-  p_line: '2024 Neon Records',
-  c_line: '2024 Neon Publishing'
+  artist: 'The Neon Collective'
 }, 'user-uuid-here');
 
-// Store the watermarked audio
+// The resulting object includes your newly watermarked audio
 fs.writeFileSync('track-watermarked.mp3', result.watermarked_audio);
-
-console.log(`✅ Registered as ID: ${result.registration_id}`);
+console.log(`✅ Registered! ID: ${result.registration_id}`);
 ```
 
----
+### Verifying Audio
 
-### `verify(audioBuffer)`
+You can easily check if an audio file belongs to the ORBIT network by passing it to the `verify` method. ORBIT seamlessly extracts the watermark and fingerprint to return its full provenance history.
 
-Verify audio provenance by checking fingerprint and watermark.
-
-**Parameters:**
-- `audioBuffer` (Buffer) - Binary audio data to verify
-
-**Returns:** Promise<Object>
-- `verified` (boolean) - Whether audio is registered
-- `fingerprint_hash` (Buffer) - Generated fingerprint
-- `fingerprint_match` (Object) - Match details
-  - `registration_id` (number) - ID of matching registration
-  - `similarity` (number) - Match confidence (0-1)
-- `watermark` (Object) - Watermark extraction result
-  - `detected` (boolean) - Whether watermark was found
-  - `valid` (boolean) - Whether watermark is valid
-- `metadata` (Object) - Registered metadata
-- `origin` (Object) - Origin information
-  - `platform` (string) - Platform where registered
-  - `timestamp` (string) - Registration timestamp
-  - `signature_valid` (boolean) - Signature validity
-- `transfers` (Array) - Transfer history
-- `duplicate_of` (number|null) - Registration ID if duplicate
-
-**Example:**
 ```javascript
-const audioBuffer = fs.readFileSync('unknown-track.mp3');
-const result = await client.verify(audioBuffer);
+const unknownAudio = fs.readFileSync('unknown-track.mp3');
+const result = await client.verify(unknownAudio);
 
 if (result.verified) {
   console.log(`✅ Verified: ${result.metadata.title}`);
   console.log(`   Origin: ${result.origin.platform}`);
-  console.log(`   Registered: ${result.origin.timestamp}`);
-  
-  if (result.duplicate_of) {
-    console.log(`⚠️  Duplicate of registration ${result.duplicate_of}`);
-  }
 } else {
   console.log('❌ Not registered in ORBIT');
 }
 ```
 
----
+## Additional Capabilities
 
-### `transfer(registrationId, toPlatform)`
+Beyond basic registration and verification, the SDK empowers you to do much more:
 
-Initiate B2B transfer to another platform.
+* **B2B Transfers**: Securely transfer custody of audio assets between different platforms (`transfer`, `acceptTransfer`) while maintaining an unbroken cryptographic chain of provenance.
+* **AI Similarity**: Find similar-sounding tracks in the ORBIT network using AI-powered audio embeddings (`similar`), ideal for identifying covers or pitch-shifted versions.
+* **Audio Analysis**: Run an AI-powered analysis of an audio file (`analyze`) to detect genre, mood, BPM, key, instruments, and vocals—without registering it.
+* **Watermark Matching**: Quickly and efficiently confirm the presence of an ORBIT watermark (`watermarkmatch`) without performing a full fingerprint scan.
+* **Provenance Chain Retrieval**: Retrieve the complete custody chain for an audio file, including all registrations, transfers, and Merkle proofs (`getChain`).
+* **Platform Management**: Easily manage your platform integration, including listing registrations and pending inbound transfers (`listRegistrations`, `listPendingTransfers`).
 
-**Parameters:**
-- `registrationId` (number) - ID of registration to transfer
-- `toPlatform` (string) - Platform ID of recipient
+## Support & Documentation
 
-**Returns:** Promise<Object>
-- `success` (boolean) - Whether transfer was initiated
-- `transfer_id` (number) - Unique transfer ID
-- `status` (string) - Transfer status ('pending')
-- `expires_at` (string) - ISO 8601 expiration timestamp
-- `recipient_notified` (boolean) - Whether recipient was notified
+For complete documentation, issue tracking, and community support, please visit our main repository:
 
-**Example:**
-```javascript
-const result = await client.transfer(12345, 'partner-dsp');
-
-console.log(`✅ Transfer initiated: ${result.transfer_id}`);
-console.log(`   Status: ${result.status}`);
-console.log(`   Expires: ${result.expires_at}`);
-```
-
----
-
-### `acceptTransfer(transferId)`
-
-Accept an incoming transfer from another platform.
-
-**Parameters:**
-- `transferId` (number) - ID of pending transfer
-
-**Returns:** Promise<Object>
-- `success` (boolean) - Whether transfer was accepted
-- `new_registration_id` (number) - Your new registration ID
-- `watermarked_audio` (Buffer) - Re-watermarked audio
-- `metadata` (Object) - Full metadata
-- `full_chain` (Array) - Complete custody chain
-
-**Example:**
-```javascript
-// After receiving notification of pending transfer
-const result = await client.acceptTransfer(67890);
-
-// Store the re-watermarked audio
-fs.writeFileSync('received-track.mp3', result.watermarked_audio);
-
-console.log(`✅ Transfer accepted`);
-console.log(`   New registration: ${result.new_registration_id}`);
-console.log(`   Chain length: ${result.full_chain.length}`);
-```
-
----
-
-### `getChain(fingerprintHash)`
-
-Get complete custody chain for a fingerprint.
-
-**Parameters:**
-- `fingerprintHash` (Buffer|string) - Fingerprint hash (32 bytes as Buffer or 64-char hex string)
-
-**Returns:** Promise<Object>
-- `fingerprint_hash` (Buffer) - Fingerprint hash
-- `registrations` (Array) - All registrations with this fingerprint
-- `transfers` (Array) - All transfers
-- `merkle_proof` (Object) - Merkle proof of inclusion
-
-**Example:**
-```javascript
-// Using fingerprint hash from registration
-const chain = await client.getChain(result.fingerprint_hash);
-
-// Or using hex string
-const chain = await client.getChain('a1b2c3d4e5f6...');
-
-console.log(`${chain.registrations.length} registration(s)`);
-console.log(`${chain.transfers.length} transfer(s)`);
-
-// Display chain
-chain.registrations.forEach((reg, i) => {
-  console.log(`${i + 1}. ${reg.metadata.title} - ${reg.origin.platform}`);
-});
-```
-
----
-
-### `watermarkmatch(audioBuffer)`
-
-Verify an audio file by strictly extracting its embedded watermark without processing its fingerprint. Fast and efficient when you only need to confirm watermark presence.
-
-**Parameters:**
-- `audioBuffer` (Buffer) - Binary audio data to verify
-
-**Returns:** Promise<Object>
-- Match result object from the ORBIT API.
-
-**Example:**
-```javascript
-const result = await client.watermarkmatch(audioBuffer);
-```
-
----
-
-### `listRegistrations([options])`
-
-List all registrations for your authenticated platform.
-
-**Parameters:**
-- `options.limit` (number, optional) - Max results (1-100), defaults to 50
-- `options.offset` (number, optional) - Pagination offset, defaults to 0
-
-**Returns:** Promise<Object>
-- `total` (number) - Total registration count
-- `registrations` (Array) - Registration records
-
----
-
-### `listPendingTransfers()`
-
-List all pending inbound transfers requiring your acceptance.
-
-**Returns:** Promise<Object>
-- `total` (number) - Count of pending transfers
-- `transfers` (Array) - Pending transfer records
-
----
-
-### `similar(audioBuffer, [options])` (AI v2)
-
-Uses AI (CLAP embeddings) to find similar-sounding tracks in the ORBIT network. Identifies covers, pitch-shifted audio, and stylistic similarities.
-
-**Parameters:**
-- `audioBuffer` (Buffer) - Binary audio data
-- `options.threshold` (number, optional) - Similarity threshold (0-1), defaults to 0.5
-- `options.limit` (number, optional) - Maximum results, defaults to 20
-- `options.includeDerivatives` (boolean, optional) - Include covers/remixes, defaults to true
-
-**Returns:** Promise<Object>
-- `results` (Array) - Array of similar tracks with a `similarity` score.
-
----
-
-### `analyze(audioBuffer, [options])` (AI v2)
-
-Run a complete AI-powered analysis of an audio file without registering it to the chain. Detects genre, mood, BPM, key, instruments, and vocals.
-
-**Parameters:**
-- `audioBuffer` (Buffer) - Binary audio data
-- `options.include` (Array<string>, optional) - Specific metadata fields to extract.
-
-**Returns:** Promise<Object>
-- `analysis` (Object) - Detected metadata predictions with confidence scoring.
-
-**Example:**
-```javascript
-const analysis = await client.analyze(audioBuffer);
-console.log(`Detected BPM: ${analysis.analysis.bpm.value}`);
-console.log(`Primary Genre: ${analysis.analysis.genre[0].label}`);
-```
-
-## Error Handling
-
-The SDK throws errors for invalid inputs and API failures:
-
-```javascript
-try {
-  const result = await client.verify(audioBuffer);
-} catch (error) {
-  console.error(`Error: ${error.message}`);
-  console.error(`Status: ${error.status}`);
-  console.error(`Code: ${error.code}`);
-  
-  if (error.code === 'not_found') {
-    console.log('Audio not registered in ORBIT');
-  } else if (error.code === 'unauthorized') {
-    console.log('Invalid platform credentials');
-  }
-}
-```
-
-## Environment Variables
-
-Recommended `.env` setup:
-
-```env
-ORBIT_API_URL=http://localhost:3000
-ORBIT_PLATFORM_ID=your-platform-id
-ORBIT_PRIVATE_KEY=base64-encoded-ed25519-private-key
-ORBIT_API_KEY=optional-api-key
-```
-
-## Platform Registration
-
-To use ORBIT, you need to register your platform and receive:
-1. **Platform ID** - Your unique identifier
-2. **Ed25519 Keypair** - For signing requests
-3. **API Key** (optional) - For rate limiting/billing
-
-Contact Ohnrshyp to register: hello@ohnrshyp.com
-
-## Development
-
-Running tests:
-
-```bash
-# Start ORBIT server
-cd /path/to/orbit
-npm run dev
-
-# In another terminal
-cd /path/to/orbit/sdk
-npm test
-```
+* **ORBIT Main Repository**: [https://github.com/focusjordan/ORBIT](https://github.com/focusjordan/ORBIT)
 
 ## License
 
 Apache 2.0
-
-## Support
-
-- **Issues**: https://github.com/ohnrshyp/orbit/issues
-- **Email**: support@ohnrshyp.com
-- **Docs**: https://orbit.ohnrshyp.com/docs
-
-
-
-
