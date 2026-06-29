@@ -17,7 +17,10 @@ const code = fs.readFileSync(inputFile, 'utf8');
 babel.transformAsync(code, {
   filename: inputFile,
   presets: ['@babel/preset-env'],
-  // plugins: [] // Add custom Ohnrscript memory-safety plugins here later
+  plugins: [
+    ['@babel/plugin-syntax-decorators', { legacy: true }],
+    require('../src/plugins/babel-plugin-binary-layout')
+  ]
 }).then(result => {
   fs.writeFileSync(outputFile, result.code);
   console.log(`Successfully compiled ${inputFile} -> ${outputFile}`);

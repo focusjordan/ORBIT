@@ -1,0 +1,42 @@
+// Ohnrscript Audio ML Packet Definition
+// This file demonstrates the @binaryLayout language feature
+// which transpiles into a zero-allocation, memory-safe data wrapper
+// for massive ArrayBuffers.
+
+@binaryLayout
+class AudioMLBatch {
+  // Packet Header Information
+  @type('uint8')
+  @size(1)
+  version;
+
+  @type('uint8')
+  @size(1)
+  flags;
+
+  @type('uint16')
+  @size(1)
+  batchId;
+
+  @type('uint32')
+  @size(1)
+  timestamp;
+
+  // ML Context Data (e.g., raw embedding vector)
+  @type('float32')
+  @size(512)
+  embedding;
+
+  // Raw Audio PCM Data (e.g., 1024 samples)
+  @type('float32')
+  @size(1024)
+  pcmData;
+}
+
+// In standard usage:
+// const packet = AudioMLBatch.fromBuffer(massiveNetworkBuffer);
+// processEmbedding(packet.embedding);
+// 
+// Because \`packet.embedding\` uses .slice(), it copies the 512 floats into a new ArrayBuffer.
+// Once \`massiveNetworkBuffer\` falls out of scope, V8 can garbage collect it completely,
+// saving hundreds of megabytes in a high-throughput streaming application!
