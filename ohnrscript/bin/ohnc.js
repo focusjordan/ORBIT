@@ -12,14 +12,17 @@ if (!inputFile || !inputFile.endsWith('.ohn')) {
 const outputFile = inputFile.replace(/\.ohn$/, '.js');
 const code = fs.readFileSync(inputFile, 'utf8');
 
-// The transpiler prioritizes zero-cost abstractions and memory safety.
 // We use Babel as our foundation and apply our presets/plugins.
 babel.transformAsync(code, {
   filename: inputFile,
-  presets: ['@babel/preset-env'],
+  parserOpts: {
+    plugins: ['typescript']
+  },
+  presets: ['@babel/preset-env', '@babel/preset-typescript'],
   plugins: [
     ['@babel/plugin-syntax-decorators', { legacy: true }],
-    require('../src/plugins/babel-plugin-binary-layout')
+    require('../src/plugins/babel-plugin-binary-layout'),
+    require('../src/plugins/babel-plugin-cbor-aot')
   ]
 }).then(result => {
   fs.writeFileSync(outputFile, result.code);
