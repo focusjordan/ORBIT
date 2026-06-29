@@ -1,0 +1,8 @@
+// Phase 2 CBOR Dynamic Length Feature Test
+@cbor
+class DeviceTelemetry {
+  deviceId: string;
+  measurements: Array<number>;
+  firmwareVersion: string;
+  isOnline: boolean;
+}
