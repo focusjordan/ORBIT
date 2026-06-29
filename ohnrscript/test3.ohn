@@ -1,6 +1,0 @@
-@cbor
-class ServerStatus {
-  isOnline: boolean;
-  activeConnections: number;
-  uptimeSeconds: number;
-}
