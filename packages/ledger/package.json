@@ -9,7 +9,7 @@
     "url": "https://github.com/focusjordan/ORBIT/issues"
   },
   "name": "@ohnrshyp/ledger",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Cryptographic ledger and database query engine for ORBIT (Ed25519, CBOR, pgvector similarities)",
   "main": "src/index.js",
   "scripts": {
