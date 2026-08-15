@@ -1,5 +1,32 @@
 # ORBIT
 
+<p align="center">
+  <a href="https://github.com/focusjordan/ORBIT/actions/workflows/test.yml">
+    <img src="https://github.com/focusjordan/ORBIT/actions/workflows/test.yml/badge.svg" alt="CI Status" />
+  </a>
+  <a href="https://www.bestpractices.dev/projects/14095">
+    <img src="https://www.bestpractices.dev/projects/14095/badge" alt="OpenSSF Best Practices" />
+  </a>
+  <a href="https://api.scorecard.dev/projects/github.com/focusjordan/ORBIT">
+    <img src="https://api.scorecard.dev/projects/github.com/focusjordan/ORBIT/badge" alt="OpenSSF Scorecard" />
+  </a>
+  <a href="https://slsa.dev">
+    <img src="https://img.shields.io/badge/SLSA-Level%201-blue.svg?style=flat-square" alt="SLSA Level 1" />
+  </a>
+  <a href="https://codecov.io/gh/focusjordan/ORBIT">
+    <img src="https://codecov.io/gh/focusjordan/ORBIT/branch/main/graph/badge.svg" alt="Codecov" />
+  </a>
+  <a href="docs/INTEGRATING_OHNRSCRIPT_INTO_ORBIT.md">
+    <img src="https://img.shields.io/badge/Runtime-Ohnrscript%20DOD-ff6600.svg?style=flat-square" alt="Powered by Ohnrscript" />
+  </a>
+  <a href="docs/RELEASE_NOTES_v2.0.0.md">
+    <img src="https://img.shields.io/badge/version-v2.0.0-blue.svg?style=flat-square" alt="Version 2.0.0" />
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square" alt="License" />
+  </a>
+</p>
+
 **Origin-Based Identity & Rights Transfer Protocol**
 
 > 🤖 **LLM & Agent Friendly Repo**: We maintain a machine-readable directory and integration guide of this project in [llms.txt](llms.txt) to help AI assistants install our packages and leverage our systems easily.
