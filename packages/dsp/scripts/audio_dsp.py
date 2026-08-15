@@ -206,11 +206,53 @@ def calculate_energy(y):
     return round(float(energy), 4)
 
 
+_NATIVE_LIB = None
+
+def _get_native_lib():
+    global _NATIVE_LIB
+    if _NATIVE_LIB is not None:
+        return _NATIVE_LIB
+    possible_paths = [
+        os.path.join(os.path.dirname(__file__), '../../../src/native/liborbit_dsp.dylib'),
+        os.path.join(os.path.dirname(__file__), '../../../src/native/liborbit_dsp.so'),
+        os.path.join(os.path.dirname(__file__), 'liborbit_dsp.so'),
+        os.path.join(os.path.dirname(__file__), 'liborbit_dsp.dylib'),
+    ]
+    for p in possible_paths:
+        if os.path.exists(p):
+            try:
+                import ctypes
+                lib = ctypes.CDLL(p)
+                lib.orbit_simd_rms.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_size_t]
+                lib.orbit_simd_rms.restype = ctypes.c_float
+                _NATIVE_LIB = lib
+                return _NATIVE_LIB
+            except Exception:
+                pass
+    _NATIVE_LIB = False
+    return _NATIVE_LIB
+
+
+def native_rms(y):
+    """Calculate RMS using hardware-accelerated C-ABI SIMD when available, with pure NumPy fallback."""
+    import numpy as np
+    lib = _get_native_lib()
+    if lib:
+        try:
+            import ctypes
+            arr = np.ascontiguousarray(y, dtype=np.float32)
+            ptr = arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+            return float(lib.orbit_simd_rms(ptr, ctypes.c_size_t(len(arr))))
+        except Exception:
+            pass
+    return float(np.sqrt(np.mean(y ** 2)))
+
+
 def calculate_loudness(y, sr):
     """Calculate loudness approximation in dB."""
     import numpy as np
     
-    rms = np.sqrt(np.mean(y ** 2))
+    rms = native_rms(y)
     if rms > 0:
         db = 20 * np.log10(rms)
     else:

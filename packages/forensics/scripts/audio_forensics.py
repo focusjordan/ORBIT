@@ -52,6 +52,33 @@ def check_dependencies():
         sys.exit(1)
 
 
+_NATIVE_LIB = None
+
+def _get_native_lib():
+    global _NATIVE_LIB
+    if _NATIVE_LIB is not None:
+        return _NATIVE_LIB
+    possible_paths = [
+        os.path.join(os.path.dirname(__file__), '../../../src/native/liborbit_dsp.dylib'),
+        os.path.join(os.path.dirname(__file__), '../../../src/native/liborbit_dsp.so'),
+        os.path.join(os.path.dirname(__file__), 'liborbit_dsp.so'),
+        os.path.join(os.path.dirname(__file__), 'liborbit_dsp.dylib'),
+    ]
+    for p in possible_paths:
+        if os.path.exists(p):
+            try:
+                import ctypes
+                lib = ctypes.CDLL(p)
+                lib.orbit_simd_cross_correlate.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_size_t]
+                lib.orbit_simd_cross_correlate.restype = ctypes.c_float
+                _NATIVE_LIB = lib
+                return _NATIVE_LIB
+            except Exception:
+                pass
+    _NATIVE_LIB = False
+    return _NATIVE_LIB
+
+
 # =========================================================================
 # CLASSICAL FORENSICS ENGINES
 # =========================================================================

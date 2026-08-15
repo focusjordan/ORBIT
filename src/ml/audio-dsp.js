@@ -16,6 +16,7 @@ const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const idEngine = require('../utils/id');
 
 /**
  * Detect audio format from buffer magic bytes
@@ -134,7 +135,7 @@ async function analyze(input, options = {}) {
     const ext = detectAudioExtension(input);
     tempFile = path.join(
       os.tmpdir(),
-      `orbit-dsp-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
+      idEngine.tempAudioFilename('orbit-dsp', ext)
     );
     fs.writeFileSync(tempFile, input);
     audioPath = tempFile;

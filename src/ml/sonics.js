@@ -2,6 +2,7 @@ const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const idEngine = require('../utils/id');
 
 function detectAudioExtension(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length < 12) return '.wav';
@@ -179,7 +180,7 @@ async function detect(input, options = {}) {
     const ext = detectAudioExtension(input);
     tempFile = path.join(
       os.tmpdir(),
-      `orbit-sonics-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
+      idEngine.tempAudioFilename('orbit-sonics', ext)
     );
     fs.writeFileSync(tempFile, input);
     audioPath = tempFile;

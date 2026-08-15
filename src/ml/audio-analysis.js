@@ -12,6 +12,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const idEngine = require('../utils/id');
 
 // Import decoupled modules
 const audioDsp = require('@ohnrshyp/dsp');
@@ -149,7 +150,7 @@ async function extractFileMetadata(input) {
     const ext = detectAudioExtension(input);
     tempFile = path.join(
       os.tmpdir(),
-      `orbit-ffprobe-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
+      idEngine.tempAudioFilename('orbit-ffprobe', ext)
     );
     fs.writeFileSync(tempFile, input);
     audioPath = tempFile;

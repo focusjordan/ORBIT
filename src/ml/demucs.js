@@ -2,6 +2,7 @@ const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const idEngine = require('../utils/id');
 
 function detectAudioExtension(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length < 12) return '.wav';
@@ -146,7 +147,7 @@ async function separate(input, options = {}) {
     const ext = detectAudioExtension(input);
     inputTempFile = path.join(
       os.tmpdir(),
-      `orbit-demucs-input-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
+      idEngine.tempAudioFilename('orbit-demucs-input', ext)
     );
     fs.writeFileSync(inputTempFile, input);
     audioPath = inputTempFile;
