@@ -9,7 +9,7 @@
 
 # Core ML
 torch>=2.0.0
-transformers>=4.35.0
+transformers>=5.15.0
 
 # Audio processing
 librosa>=0.10.0
