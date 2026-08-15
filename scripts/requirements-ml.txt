@@ -12,7 +12,7 @@ torch>=2.0.0
 transformers>=4.35.0
 
 # Audio processing
-librosa>=0.10.0
+librosa>=1.0.0
 numpy>=1.24.0
 
 # Audio file handling
