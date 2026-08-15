@@ -1,0 +1,8 @@
+# GitHub Sponsors & Project Funding Configuration
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+
+# Native GitHub Sponsors
+github: [focusjordan]
+
+# Direct Stripe Donation
+custom: ['https://donate.stripe.com/5kQcN788taJ05w4eXXaIM00?locale=en&__embed_source=buy_btn_1TmenQRapxcdOls5B7NxLVQB']
