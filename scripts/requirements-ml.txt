@@ -21,7 +21,7 @@ soundfile>=0.12.0
 # Neural Watermarking (Session 22)
 # SilentCipher by Sony AI - MIT License (commercially licensable)
 # https://github.com/sony/silentcipher
-silentcipher>=1.0.0
+silentcipher>=1.0.5
 
 # Neural Audio Separation & Processing (Demucs, PANNs, Sonics)
 scipy>=1.16.3
