@@ -29,12 +29,12 @@ const queries = require('../../ledger/queries');
 
 /**
  * Hash an API key for comparison with stored hash
- * Uses SHA-256, same as OrbitCrypto.hashApiKey
+ * Uses BLAKE3, matching OrbitCrypto.hashApiKey
  * @param {string} apiKey - Plain text API key
  * @returns {Buffer} - 32-byte hash
  */
 function hashApiKey(apiKey) {
-  return crypto.createHash('sha256').update(apiKey).digest();
+  return OrbitCrypto.hashApiKey(apiKey);
 }
 
 /**
