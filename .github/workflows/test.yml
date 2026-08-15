@@ -79,10 +79,16 @@ jobs:
           cp .env.example .env
           echo "DATABASE_URL=postgres://orbit:orbit@localhost:5432/orbit_test" >> .env
           echo "ORBIT_SECRET_KEY=test-secret-key-for-ci-$(date +%s)" >> .env
-      - name: Step 5 - Unit Tests
-        run: npm run test:unit
+      - name: Step 5 - Unit Tests & Coverage
+        run: npx c8 --reporter=lcov --reporter=text npm run test:unit
         env:
           SKIP_API_TESTS: '1'
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage/lcov.info
+          fail_ci_if_error: false
 
   api-tests:
     name: API Tests
