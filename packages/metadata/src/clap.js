@@ -426,18 +426,41 @@ async function classifyWithLabels(input, candidateLabels, options = {}) {
  * @returns {number} Similarity score in range [-1, 1]
  */
 function cosineSimilarity(embedding1, embedding2) {
-  if (embedding1.length !== embedding2.length) {
-    throw new Error(`Embedding dimension mismatch: ${embedding1.length} vs ${embedding2.length}`);
+  const len = embedding1.length;
+  if (len !== embedding2.length) {
+    throw new Error(`Embedding dimension mismatch: ${len} vs ${embedding2.length}`);
   }
   
-  let dotProduct = 0;
-  let norm1 = 0;
-  let norm2 = 0;
+  let dot0 = 0.0, dot1 = 0.0, dot2 = 0.0, dot3 = 0.0;
+  let normA0 = 0.0, normA1 = 0.0, normA2 = 0.0, normA3 = 0.0;
+  let normB0 = 0.0, normB1 = 0.0, normB2 = 0.0, normB3 = 0.0;
   
-  for (let i = 0; i < embedding1.length; i++) {
-    dotProduct += embedding1[i] * embedding2[i];
-    norm1 += embedding1[i] * embedding1[i];
-    norm2 += embedding2[i] * embedding2[i];
+  let i = 0;
+  const unrollLimit = len - (len % 4);
+  
+  while (i < unrollLimit) {
+    const va0 = embedding1[i], vb0 = embedding2[i];
+    const va1 = embedding1[i + 1], vb1 = embedding2[i + 1];
+    const va2 = embedding1[i + 2], vb2 = embedding2[i + 2];
+    const va3 = embedding1[i + 3], vb3 = embedding2[i + 3];
+    
+    dot0 += va0 * vb0; normA0 += va0 * va0; normB0 += vb0 * vb0;
+    dot1 += va1 * vb1; normA1 += va1 * va1; normB1 += vb1 * vb1;
+    dot2 += va2 * vb2; normA2 += va2 * va2; normB2 += vb2 * vb2;
+    dot3 += va3 * vb3; normA3 += va3 * va3; normB3 += vb3 * vb3;
+    i += 4;
+  }
+  
+  let dot = dot0 + dot1 + dot2 + dot3;
+  let norm1 = normA0 + normA1 + normA2 + normA3;
+  let norm2 = normB0 + normB1 + normB2 + normB3;
+  
+  while (i < len) {
+    const va = embedding1[i], vb = embedding2[i];
+    dot += va * vb;
+    norm1 += va * va;
+    norm2 += vb * vb;
+    i++;
   }
   
   // Handle zero vectors
@@ -445,7 +468,8 @@ function cosineSimilarity(embedding1, embedding2) {
     return 0;
   }
   
-  return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
+  const similarity = dot / (Math.sqrt(norm1) * Math.sqrt(norm2));
+  return Math.max(-1.0, Math.min(1.0, similarity));
 }
 
 // ==========================================
@@ -702,10 +726,15 @@ function unload() {
  * @returns {string} PostgreSQL vector string format: '[0.1,0.2,...]'
  */
 function embeddingToPostgres(embedding) {
-  const formatted = Array.from(embedding)
-    .map(v => v.toFixed(8))
-    .join(',');
-  return `[${formatted}]`;
+  if (!embedding) return null;
+  const len = embedding.length;
+  if (len === 0) return '[]';
+  let out = '[';
+  for (let i = 0; i < len; i++) {
+    if (i > 0) out += ',';
+    out += Number(embedding[i]).toFixed(8);
+  }
+  return out + ']';
 }
 
 /**

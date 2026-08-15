@@ -15,6 +15,8 @@ const { cborMiddleware } = require('./api/middleware/cbor');
 const orbitRoutes = require('./api/routes');
 const orbitV2Routes = require('./api/v2/routes');
 
+const idEngine = require('./utils/id');
+
 const app = express();
 
 // ============================================================================
@@ -176,7 +178,7 @@ app.use((err, req, res, _next) => {
     res.status(500).json({
       error: 'internal_error',
       message: 'An internal error occurred. Please try again later.',
-      request_id: `err_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      request_id: idEngine.prefixedId('err_'),
     });
   } else {
     // In development, show full error details

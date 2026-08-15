@@ -8,6 +8,7 @@ const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const idEngine = require('../utils/id');
 
 const GENRE_CONFIG = {
   scriptPath: path.join(__dirname, '../../scripts/genre_classify.py'),
@@ -40,7 +41,7 @@ function resolveInputToPath(input, prefix) {
   if (Buffer.isBuffer(input)) {
     const tempFile = path.join(
       os.tmpdir(),
-      `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}.audio`
+      idEngine.tempAudioFilename(prefix, '.audio')
     );
     fs.writeFileSync(tempFile, input);
     return { audioPath: tempFile, tempFile };

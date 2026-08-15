@@ -162,12 +162,11 @@ async function registerHandler(req, res) {
     log('Creating watermark...');
     log(`   Method: ${getWatermarkMethod()} (ORBIT_WATERMARK_METHOD)`);
     
-    // For spread spectrum fallback, check minimum duration
-    const minDurationSpread = watermark.spreadWatermark.getMinimumDuration();
-    if (getWatermarkMethod() === 'spread' && audioInfo.duration < minDurationSpread) {
+    // Minimum duration check for neural watermarking (1.0 second)
+    if (audioInfo.duration < 1.0) {
       return res.orbitError(
         'audio_too_short',
-        `Audio must be at least ${minDurationSpread.toFixed(1)} seconds for watermarking`,
+        'Audio must be at least 1.0 second for watermarking',
         400
       );
     }

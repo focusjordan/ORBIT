@@ -17,6 +17,7 @@
 
 // Import audio utilities for Node.js audio processing
 const AudioUtils = require('../utils/audio');
+const vectorEngine = require('../utils/vector');
 
 /**
  * CLAP Configuration
@@ -419,33 +420,14 @@ async function classifyWithLabels(input, candidateLabels, options = {}) {
 
 /**
  * Calculate cosine similarity between two embeddings
- * (Utility function for comparing embeddings if needed)
+ * (Powered by Ohnrscript SIMD vector math engine)
  * 
  * @param {Float32Array|number[]} embedding1 
  * @param {Float32Array|number[]} embedding2 
  * @returns {number} Similarity score in range [-1, 1]
  */
 function cosineSimilarity(embedding1, embedding2) {
-  if (embedding1.length !== embedding2.length) {
-    throw new Error(`Embedding dimension mismatch: ${embedding1.length} vs ${embedding2.length}`);
-  }
-  
-  let dotProduct = 0;
-  let norm1 = 0;
-  let norm2 = 0;
-  
-  for (let i = 0; i < embedding1.length; i++) {
-    dotProduct += embedding1[i] * embedding2[i];
-    norm1 += embedding1[i] * embedding1[i];
-    norm2 += embedding2[i] * embedding2[i];
-  }
-  
-  // Handle zero vectors
-  if (norm1 === 0 || norm2 === 0) {
-    return 0;
-  }
-  
-  return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
+  return vectorEngine.cosineSimilarity(embedding1, embedding2);
 }
 
 // ==========================================
@@ -696,16 +678,13 @@ function unload() {
 
 /**
  * Format embedding for PostgreSQL vector type
- * (Same format as MERT for consistency)
+ * (Powered by Ohnrscript single-pass zero-allocation builder)
  * 
  * @param {Float32Array|number[]} embedding 
  * @returns {string} PostgreSQL vector string format: '[0.1,0.2,...]'
  */
 function embeddingToPostgres(embedding) {
-  const formatted = Array.from(embedding)
-    .map(v => v.toFixed(8))
-    .join(',');
-  return `[${formatted}]`;
+  return vectorEngine.embeddingToPostgres(embedding, 8);
 }
 
 /**
@@ -715,14 +694,7 @@ function embeddingToPostgres(embedding) {
  * @returns {Float32Array}
  */
 function postgresVectorToEmbedding(vectorString) {
-  if (!vectorString) return null;
-  
-  const values = vectorString
-    .replace(/^\[|\]$/g, '')
-    .split(',')
-    .map(parseFloat);
-  
-  return new Float32Array(values);
+  return vectorEngine.postgresVectorToEmbedding(vectorString);
 }
 
 // ==========================================

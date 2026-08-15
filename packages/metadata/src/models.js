@@ -331,35 +331,57 @@ class ModelManager {
   // async getMert() { ... }
   
   /**
-   * Get SilentCipher model for neural watermarking
+   * Get AudioSeal model for primary neural watermarking
    * 
-   * Used for: Primary neural watermarking (99%+ extraction accuracy)
+   * Used for: Primary neural watermarking (40-bit BLAKE3 payload)
    * 
-   * @returns {Promise<Object>} Watermarking model
+   * @returns {Promise<Object>} AudioSeal watermarking engine
    */
-  async getSilentCipher() {
-    if (!this.models.silentCipher) {
+  async getAudioSeal() {
+    if (!this.models.audioSeal) {
       try {
-        this._logProgress('silentCipher', 'loading from @ohnrshyp/watermark');
-        this.models.silentCipher = require('@ohnrshyp/watermark');
-        this._logProgress('silentCipher', 'loaded successfully');
+        this._logProgress('audioSeal', 'loading AudioSeal engine');
+        this.models.audioSeal = require('@ohnrshyp/watermark');
+        this._logProgress('audioSeal', 'loaded successfully');
       } catch (error) {
-        this._logProgress('silentCipher', 'FAILED to load', error.message);
-        throw new Error(`Failed to load @ohnrshyp/watermark package: ${error.message}`);
+        this._logProgress('audioSeal', 'FAILED to load', error.message);
+        throw new Error(`Failed to load AudioSeal engine: ${error.message}`);
       }
     }
-    return this.models.silentCipher;
+    return this.models.audioSeal;
   }
-  
+
+  /**
+   * Get Perth model for fallback neural watermarking
+   * 
+   * Used for: Fallback perceptual neural watermarking
+   * 
+   * @returns {Promise<Object>} Perth watermarking engine
+   */
+  async getPerth() {
+    if (!this.models.perth) {
+      try {
+        this._logProgress('perth', 'loading Perth engine');
+        this.models.perth = require('@ohnrshyp/watermark');
+        this._logProgress('perth', 'loaded successfully');
+      } catch (error) {
+        this._logProgress('perth', 'FAILED to load', error.message);
+        throw new Error(`Failed to load Perth engine: ${error.message}`);
+      }
+    }
+    return this.models.perth;
+  }
+
+  /**
+   * Alias for getAudioSeal (backward compatibility)
+   */
+  async getSilentCipher() {
+    return this.getAudioSeal();
+  }
+
   /**
    * Get WMCodec model for codec-aware watermarking
-   * 
-   * Used for: Fallback watermarking when SilentCipher fails
-   * 
-   * NOTE: Requires custom loading - will be implemented in a future update
-   * 
-   * @returns {Promise<Object>} Watermarking model
-   * @throws {Error} Until implemented
+   * @throws {Error} Requires custom loading
    */
   async getWmCodec() {
     return this._loadModel('wmCodec');

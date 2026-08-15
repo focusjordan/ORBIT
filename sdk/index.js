@@ -26,6 +26,7 @@ const nacl = require('tweetnacl');
 const cbor = require('cbor');
 const FormData = require('form-data');
 const crypto = require('crypto');
+const { blake3 } = require('@noble/hashes/blake3.js');
 
 /**
  * ORBIT API Client
@@ -90,15 +91,15 @@ class OrbitClient {
       delete unsigned.signature;
       
       // PRE-HASH PROTOCOL
-      // If audio is present, we hash it natively (SHA-256)
+      // If audio is present, we hash it natively (BLAKE3)
       // and sign the hash instead. This prevents event loop blocking on massive payloads.
       if (unsigned.audio) {
         if (Buffer.isBuffer(unsigned.audio)) {
-          unsigned.audio_hash = crypto.createHash('sha256').update(unsigned.audio).digest();
+          unsigned.audio_hash = Buffer.from(blake3(unsigned.audio));
           delete unsigned.audio;
         } else if (typeof unsigned.audio === 'string') {
           const audioBuffer = Buffer.from(unsigned.audio, 'base64');
-          unsigned.audio_hash = crypto.createHash('sha256').update(audioBuffer).digest();
+          unsigned.audio_hash = Buffer.from(blake3(audioBuffer));
           delete unsigned.audio;
         }
       }

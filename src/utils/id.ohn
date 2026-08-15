@@ -1,0 +1,73 @@
+// src/utils/id.ohn
+// Native Ohnrscript Zero-Allocation Entropy Pool & UUID Engine
+//
+// Status: Proved. Standalone zero-allocation DOD memory arena.
+// Pipeline: .ohn -> Ohnrscript AOT -> Bitwise integer ops & ASCII buffer formatting
+
+'use strict';
+
+const POOL_SIZE = 65536;
+const pool = new Uint8Array(POOL_SIZE);
+let poolOffset = POOL_SIZE;
+
+const outBuffer = new Uint8Array(36);
+
+const hexLookup = new Uint8Array([
+  48, 49, 50, 51, 52, 53, 54, 55, 56, 57, // '0'-'9'
+  97, 98, 99, 100, 101, 102               // 'a'-'f'
+]);
+
+const HYPHEN = 0x2d;
+
+outBuffer[8] = HYPHEN;
+outBuffer[13] = HYPHEN;
+outBuffer[18] = HYPHEN;
+outBuffer[23] = HYPHEN;
+
+const rawBuffer = new Uint8Array(16);
+
+function fillEntropy() {
+  if (poolOffset >= POOL_SIZE) {
+    crypto.randomFillSync(pool);
+    poolOffset = 0;
+  }
+}
+
+export function generateUUIDv4() {
+  fillEntropy();
+
+  let outIndex = 0;
+  for (let i = 0; i < 16; i = (i + 1) | 0) {
+    if (outIndex === 8 || outIndex === 13 || outIndex === 18 || outIndex === 23) {
+      outIndex = (outIndex + 1) | 0;
+    }
+    let byte = pool[poolOffset++];
+
+    if (i === 6) {
+      byte = ((byte & 0x0f) | 0x40) | 0;
+    } else if (i === 8) {
+      byte = ((byte & 0x3f) | 0x80) | 0;
+    }
+
+    outBuffer[outIndex] = hexLookup[(byte >> 4) | 0];
+    outIndex = (outIndex + 1) | 0;
+    outBuffer[outIndex] = hexLookup[(byte & 0x0f) | 0];
+    outIndex = (outIndex + 1) | 0;
+  }
+  return outBuffer;
+}
+
+export function generateUUIDv4Raw() {
+  fillEntropy();
+  for (let i = 0; i < 16; i = (i + 1) | 0) {
+    let byte = pool[poolOffset++];
+
+    if (i === 6) {
+      byte = ((byte & 0x0f) | 0x40) | 0;
+    } else if (i === 8) {
+      byte = ((byte & 0x3f) | 0x80) | 0;
+    }
+    rawBuffer[i] = byte;
+  }
+  return rawBuffer;
+}

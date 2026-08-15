@@ -18,6 +18,7 @@ const clap = require('../../ml/clap');
 const OrbitFingerprint = require('../../engines/fingerprint');
 const aiDetection = require('../../ml/ai-detection');
 const catalogCheck = require('../../engines/catalog-check');
+const idEngine = require('../../utils/id');
 
 const router = express.Router();
 
@@ -201,7 +202,7 @@ async function similarHandler(req, res) {
     // ========================================================================
     
     const response = {
-      query_embedding_id: `emb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      query_embedding_id: idEngine.prefixedId('emb_'),
       
       results: results.map(work => ({
         registration_id: work.registration_id,

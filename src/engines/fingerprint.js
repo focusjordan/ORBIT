@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const idEngine = require('../utils/id');
 
 class OrbitFingerprint {
   /**
@@ -32,7 +33,7 @@ class OrbitFingerprint {
     if (Buffer.isBuffer(input)) {
       tempFile = path.join(
         os.tmpdir(), 
-        `orbit-${Date.now()}-${Math.random().toString(36).slice(2)}.audio`
+        idEngine.tempAudioFilename('orbit', '.audio')
       );
       fs.writeFileSync(tempFile, input);
       audioPath = tempFile;

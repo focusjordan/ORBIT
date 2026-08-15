@@ -579,20 +579,26 @@ async function checkEnvironment() {
     };
   }
 
-  // Check SilentCipher/Watermark (requires @ohnrshyp/watermark)
+  // Check Watermark/AudioSeal (requires @ohnrshyp/watermark)
   try {
     const watermark = require('@ohnrshyp/watermark');
     const watermarkStatus = await watermark.checkPythonEnvironment();
-    status.silentCipher = {
+    const wmStatusObj = {
       available: !!watermarkStatus.available,
-      message: watermarkStatus.message || 'SilentCipher check completed',
+      message: watermarkStatus.message || 'Watermark check completed',
       details: watermarkStatus.details,
     };
+    status.watermark = wmStatusObj;
+    status.audioSeal = wmStatusObj;
+    status.silentCipher = wmStatusObj;
   } catch (error) {
-    status.silentCipher = {
+    const wmErrObj = {
       available: false,
-      message: `SilentCipher error: ${error.message}`,
+      message: `Watermark error: ${error.message}`,
     };
+    status.watermark = wmErrObj;
+    status.audioSeal = wmErrObj;
+    status.silentCipher = wmErrObj;
   }
   
   // Overall status
@@ -601,7 +607,7 @@ async function checkEnvironment() {
     status.audioAnalysis.available,
     status.panns.available,
     status.genreClassifier.available,
-    status.silentCipher.available,
+    status.watermark.available,
   ];
   const allAvailable = availabilityFlags.every(Boolean);
   const partialAvailable = availabilityFlags.some(Boolean);

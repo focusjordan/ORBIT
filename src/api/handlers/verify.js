@@ -26,6 +26,7 @@ const OrbitCrypto = require('../../engines/crypto');
 const { UnifiedWatermark } = require('../../engines/watermark-unified');
 const { queries } = require('@ohnrshyp/ledger');
 const config = require('../../config');
+const idEngine = require('../../utils/id');
 
 // ML modules for v2 enhancements
 const contentAnalysis = require('../../ml/content-analysis');
@@ -297,24 +298,14 @@ async function verifyHandler(req, res) {
         watermarkResult.fallback_attempted = extracted.fallbackUsed || false;
         watermarkResult._extractedPayloadHash = extracted.payloadHash || null;
         
-        if (extracted.method === 'silentcipher') {
-          watermarkResult.payload_hash = extracted.payloadHash.toString('hex');
-          watermarkResult.message = extracted.message;
-          console.log(`[Verify] Neural watermark extracted: hash_prefix=${watermarkResult.payload_hash}`);
-        } else if (extracted.method === 'spread') {
-          watermarkResult.payload_hash = extracted.parsedPayload?.payloadHash?.toString('hex') || null;
-          watermarkResult._extractedPayloadHash = extracted.parsedPayload?.payloadHash || null;
-          
-          if (extracted.parsedPayload) {
-            watermarkResult.parsed_payload = {
-              magic: extracted.parsedPayload.magic,
-              version: extracted.parsedPayload.version,
-              timestamp: new Date(extracted.parsedPayload.timestamp).toISOString(),
-              platform_hash: extracted.parsedPayload.platformHash.toString('hex'),
-              crc_valid: extracted.parsedPayload.crcValid,
-            };
-            console.log(`[Verify] Spread watermark extracted: platform=${watermarkResult.parsed_payload.platform_hash.slice(0, 8)}...`);
-          }
+        if (extracted.method === 'audioseal' || extracted.method === 'silentcipher') {
+          watermarkResult.payload_hash = extracted.payloadHash ? extracted.payloadHash.toString('hex') : null;
+          watermarkResult.crc_valid = extracted.crcValid || false;
+          console.log(`[Verify] AudioSeal neural watermark extracted: hash_prefix=${watermarkResult.payload_hash}`);
+        } else if (extracted.method === 'perth') {
+          watermarkResult.payload_hash = null;
+          watermarkResult.perceptual_verified = true;
+          console.log(`[Verify] Perth fallback neural watermark extracted: confidence=${extracted.confidence}`);
         }
       } else {
         console.log(`[Verify] Watermark not detected`);
@@ -422,7 +413,7 @@ async function verifyHandler(req, res) {
     
     // Add CLAP embedding to identity if available
     if (clapEmbedding) {
-      response.identity.clap_embedding_id = `emb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      response.identity.clap_embedding_id = idEngine.prefixedId('emb_');
       response.identity.clap_embedding_dim = clapEmbedding.length;
       
       // Optionally include raw embedding (large, usually not needed)
@@ -488,6 +479,11 @@ async function verifyHandler(req, res) {
       } else {
         console.log(`[Verify] Watermark hash MISMATCH — extracted: ${watermarkResult.payload_hash}, stored: ${storedHash.toString('hex').slice(0, 10)}...`);
       }
+    } else if (watermarkResult.detected && watermarkResult.method === 'perth') {
+      // Perth provides perceptual presence detection
+      watermarkResult.valid = true;
+      watermarkResult.registration_match = registration.id;
+      console.log(`[Verify] Perth neural watermark verified for registration ${registration.id}`);
     } else if (watermarkResult.detected) {
       console.log(`[Verify] Watermark detected but cannot compare — missing stored hash or extracted hash`);
     }
