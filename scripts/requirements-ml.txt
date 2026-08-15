@@ -8,24 +8,24 @@
 # For CUDA: pip install torch (will auto-detect)
 
 # Core ML
-torch>=2.0.0
-transformers>=4.35.0
+torch>=2.13.0
+transformers>=5.15.0
 
 # Audio processing
-librosa>=0.10.0
-numpy>=1.24.0
+librosa>=1.0.0
+numpy>=2.5.2
 
 # Audio file handling
-soundfile>=0.12.0
+soundfile>=0.14.0
 
 # Neural Watermarking (Session 22)
 # SilentCipher by Sony AI - MIT License (commercially licensable)
 # https://github.com/sony/silentcipher
-silentcipher>=1.0.0
+silentcipher>=1.0.5
 
 # Neural Audio Separation & Processing (Demucs, PANNs, Sonics)
-scipy>=1.16.3
-demucs>=4.0.1
+scipy>=1.18.0
+demucs>=4.1.0
 panns-inference>=0.1.1
 sonics>=0.1.0
 
