@@ -40,8 +40,8 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm ci
-      - name: Install Chromaprint (fpcalc)
-        run: sudo apt-get install -y --no-install-recommends libchromaprint-tools
+      - name: Install dependencies (Chromaprint & FFmpeg)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libchromaprint-tools ffmpeg
       - name: Create test audio fixtures
         run: |
           ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3 -y
@@ -77,8 +77,8 @@ jobs:
           pip install -r requirements.txt
       - name: Install dependencies
         run: npm ci
-      - name: Install Chromaprint (fpcalc)
-        run: sudo apt-get install -y --no-install-recommends libchromaprint-tools
+      - name: Install dependencies (Chromaprint & FFmpeg)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libchromaprint-tools ffmpeg
       - name: Create test audio fixtures
         run: |
           ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3 -y
@@ -144,8 +144,8 @@ jobs:
           pip install -r requirements.txt
       - name: Install dependencies
         run: npm ci
-      - name: Install Chromaprint (fpcalc)
-        run: sudo apt-get install -y --no-install-recommends libchromaprint-tools
+      - name: Install dependencies (Chromaprint & FFmpeg)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libchromaprint-tools ffmpeg
       - name: Create test audio fixtures
         run: |
           ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3 -y
