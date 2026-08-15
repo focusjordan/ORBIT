@@ -26,6 +26,6 @@
   "dependencies": {
     "@ohnrshyp/orbit-sdk": "file:../sdk",
     "commander": "^12.1.0",
-    "chalk": "^4.1.2"
+    "chalk": "^6.0.0"
   }
 }
