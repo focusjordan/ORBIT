@@ -25,7 +25,7 @@ silentcipher>=1.0.0
 
 # Neural Audio Separation & Processing (Demucs, PANNs, Sonics)
 scipy>=1.16.3
-demucs>=4.0.1
+demucs>=4.1.0
 panns-inference>=0.1.1
 sonics>=0.1.0
 
