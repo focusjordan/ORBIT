@@ -17,6 +17,7 @@ classifiers = [
 ]
 dependencies = [
     "torch>=2.0.0",
+    "torchaudio>=2.0.0",
     "audioseal>=0.2.0",
     "resemble-perth>=1.0.1",
     "blake3>=0.4.1",

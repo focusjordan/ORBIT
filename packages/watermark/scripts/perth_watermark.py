@@ -26,6 +26,22 @@ os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
 warnings.filterwarnings('ignore')
 
+# Mock pkg_resources for setuptools >= 70
+import sys
+import os
+try:
+    import pkg_resources
+except ImportError:
+    import importlib.util
+    class MockPkgResources:
+        @staticmethod
+        def resource_filename(pkg, res):
+            spec = importlib.util.find_spec(pkg)
+            if spec and spec.origin:
+                return os.path.join(os.path.dirname(spec.origin), res)
+            return res
+    sys.modules['pkg_resources'] = MockPkgResources()
+
 # Ensure librosa exposes resample for resemble-perth compatibility across all librosa versions
 try:
     import librosa
