@@ -3,15 +3,44 @@
 const { Command } = require('commander');
 const fs = require('fs');
 const path = require('path');
+const readline = require('readline');
 const chalk = require('chalk');
 const { buildClient } = require('../config');
 const out = require('../output');
 
+function inferMetaFromFilename(filePath) {
+  const name = path.basename(filePath, path.extname(filePath));
+  // Replace underscores and split by dash
+  const cleanName = name.replace(/_/g, ' ');
+  const parts = cleanName.split(/\s*-\s*/);
+  if (parts.length >= 2) {
+    return {
+      artist: parts[0].trim(),
+      title: parts.slice(1).join(' - ').trim(),
+    };
+  }
+  return {
+    artist: '',
+    title: cleanName.trim(),
+  };
+}
+
+function promptInteractive(question, defaultValue) {
+  const suffix = defaultValue ? chalk.dim(` [${defaultValue}]`) : '';
+  return new Promise(resolve => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(`  ${question}${suffix}: `, answer => {
+      rl.close();
+      resolve(answer.trim() || defaultValue || '');
+    });
+  });
+}
+
 const cmd = new Command('register')
   .description('Register audio with ORBIT — embed watermark and record provenance')
   .argument('<file>', 'path to audio file (MP3, WAV, FLAC, etc.)')
-  .requiredOption('--title <title>', 'track title')
-  .requiredOption('--artist <artist>', 'artist name')
+  .option('--title <title>', 'track title (inferred from filename/tags if omitted)')
+  .option('--artist <artist>', 'artist name (inferred from filename/tags if omitted)')
   .option('--owner-id <id>', 'owner UUID (defaults to platform ID)')
   .option('--isrc <code>', 'ISRC code')
   .option('--upc <code>', 'UPC code')
@@ -30,13 +59,11 @@ const cmd = new Command('register')
     }
 
     out.header(command, 'ORBIT Register');
-    out.progress(command, 'Connecting');
 
     let client;
     try {
       client = buildClient();
     } catch (err) {
-      out.clearProgress(command);
       out.fail(command, err.message);
     }
 
@@ -47,12 +74,49 @@ const cmd = new Command('register')
     // Build metadata from flags + optional JSON sidecar
     let meta = {};
     if (opts.meta) {
-      if (!fs.existsSync(opts.meta)) out.fail(command, `Metadata file not found: ${opts.meta}`);
-      meta = JSON.parse(fs.readFileSync(opts.meta, 'utf8'));
+      if (!fs.existsSync(opts.meta)) {
+        out.fail(command, `Metadata file not found: ${opts.meta}`);
+      }
+      try {
+        meta = JSON.parse(fs.readFileSync(opts.meta, 'utf8'));
+      } catch (err) {
+        out.fail(command, `Failed to parse metadata JSON: ${err.message}`);
+      }
     }
 
-    meta.title = opts.title || meta.title;
-    meta.artist = opts.artist || meta.artist;
+    const inferred = inferMetaFromFilename(file);
+    let title = opts.title || meta.title;
+    let artist = opts.artist || meta.artist;
+
+    // In interactive mode, prompt if title or artist is missing
+    const isInteractive = process.stdin.isTTY && !out.flags(command).json && !out.flags(command).quiet;
+    if (isInteractive && (!title || !artist)) {
+      console.log(chalk.dim('  Metadata not fully specified. Please confirm:'));
+      if (!title) {
+        title = await promptInteractive('Track Title', inferred.title || 'Untitled');
+      }
+      if (!artist) {
+        artist = await promptInteractive('Artist Name', inferred.artist || 'Unknown Artist');
+      }
+      console.log();
+    } else {
+      // Non-interactive fallback
+      title = title || inferred.title || 'Untitled';
+      artist = artist || inferred.artist || 'Unknown Artist';
+    }
+
+    if (!title || !artist) {
+      out.fail(
+        command,
+        'Both title and artist are required for registration.',
+        null,
+        1,
+        "Provide '--title <title>' and '--artist <artist>' or rename file to 'Artist - Title.ext'."
+      );
+    }
+
+    meta.title = title;
+    meta.artist = artist;
     if (opts.isrc) meta.isrc = opts.isrc;
     if (opts.upc) meta.upc = opts.upc;
     if (opts.genre) meta.primary_genre = opts.genre;
@@ -114,3 +178,4 @@ const cmd = new Command('register')
   });
 
 module.exports = cmd;
+

@@ -86,7 +86,7 @@ const cmd = new Command('verify')
         if (d.fingerprint_match) {
           out.field(command, 'Registration ID', String(d.fingerprint_match.registration_id));
           if (d.fingerprint_match.similarity != null) {
-            out.field(command, 'Match Confidence', (d.fingerprint_match.similarity * 100).toFixed(1) + '%');
+            out.field(command, 'Match Confidence', out.confidenceBar(d.fingerprint_match.similarity));
           }
         }
 
@@ -102,8 +102,10 @@ const cmd = new Command('verify')
           const det = d.ai_detection;
           const label = det.recommendation || det.label || 'N/A';
           const color = label === 'LIKELY_AI' ? 'red' : label === 'REVIEW' ? 'yellow' : 'green';
-          out.field(command, 'AI Detection', chalk[color](label));
-          if (det.score != null) out.field(command, 'AI Score', (det.score * 100).toFixed(1) + '%');
+          out.field(command, 'AI Detection', chalk[color].bold(label));
+          if (det.score != null) {
+            out.field(command, 'AI Score', out.confidenceBar(det.score));
+          }
         }
 
         console.log();
@@ -115,3 +117,4 @@ const cmd = new Command('verify')
   });
 
 module.exports = cmd;
+

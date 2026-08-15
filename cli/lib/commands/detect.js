@@ -56,36 +56,36 @@ const cmd = new Command('detect')
       out.success(command, output, (_d) => {
         if (aiDetection) {
           const rec = aiDetection.recommendation || aiDetection.label || 'UNKNOWN';
-          const score = aiDetection.score != null ? (aiDetection.score * 100).toFixed(1) + '%' : 'N/A';
           const colorMap = { LIKELY_AI: 'red', REVIEW: 'yellow', LIKELY_HUMAN: 'green' };
           const color = colorMap[rec] || 'white';
 
           console.log();
-          out.field(command, 'Recommendation', chalk[color].bold(rec));
-          out.field(command, 'Confidence', score);
+          out.field(command, 'Verdict', chalk[color].bold(rec));
+          if (aiDetection.score != null) {
+            out.field(command, 'Confidence', out.confidenceBar(aiDetection.score));
+          }
 
           if (aiDetection.signals) {
             console.log();
-            console.log(chalk.dim('  Signals:'));
+            console.log(chalk.dim('  Signal Breakdown:'));
             for (const [key, val] of Object.entries(aiDetection.signals)) {
-              let sigScore = String(val);
+              let sigScore = null;
               if (typeof val === 'number') {
-                sigScore = (val * 100).toFixed(1) + '%';
+                sigScore = val;
               } else if (val && typeof val === 'object') {
-                const numeric =
+                sigScore =
                   val.aiScore ??
                   val.anomalyScore ??
                   val.suspicionScore ??
                   val.provenanceScore ??
                   val.watermarkScore ??
-                  val.sonicsScore;
-                if (typeof numeric === 'number') {
-                  sigScore = (numeric * 100).toFixed(1) + '%';
-                } else if (val.available === false) {
-                  sigScore = 'unavailable';
-                }
+                  val.sonicsScore ??
+                  null;
               }
-              out.field(command, `  ${key}`, sigScore);
+              const displayVal = sigScore != null
+                ? out.confidenceBar(sigScore)
+                : (val?.available === false ? chalk.dim('unavailable') : String(val));
+              out.field(command, `  ${key}`, displayVal);
             }
           }
         } else {
@@ -114,3 +114,4 @@ const cmd = new Command('detect')
   });
 
 module.exports = cmd;
+

@@ -8,11 +8,21 @@ const pkg = require('../package.json');
 program
   .name('orbit')
   .version(pkg.version, '-v, --version')
-  .description('ORBIT — Origin-Based Identity & Rights Transfer Protocol\nRegister, verify, transfer, and analyze audio provenance.')
+  .description('ORBIT — Origin-Based Identity & Rights Transfer Protocol\nRegister, verify, transfer, and analyze audio provenance.\nEngineered for high-throughput automation & agent workflows with full human ergonomics.')
   .option('--json', 'output results as JSON (agent-friendly)')
-  .option('--quiet', 'suppress non-essential output');
+  .option('--quiet', 'suppress non-essential output')
+  .addHelpText('after', `
+Quickstart Examples:
+  $ orbit doctor                                # Diagnose environment & dependency health
+  $ orbit status                                # Inspect server & ledger connectivity
+  $ orbit register track.wav                    # Smart registration (auto-infers title/artist)
+  $ orbit verify track.orbit.wav                # Verify origin, watermark, and provenance
+  $ orbit detect track.mp3                      # Multi-signal AI audio detection
+  $ orbit batch ./audio-dir --command verify    # Bulk process an audio catalog
+`);
 
-// Setup & identity
+// Setup, diagnostics & identity
+program.addCommand(require('../lib/commands/doctor'));
 program.addCommand(require('../lib/commands/init'));
 program.addCommand(require('../lib/commands/keygen'));
 program.addCommand(require('../lib/commands/status'));
@@ -42,3 +52,4 @@ program.addCommand(require('../lib/commands/audit'));
 program.addCommand(require('../lib/commands/ingest'));
 
 program.parse(process.argv);
+
