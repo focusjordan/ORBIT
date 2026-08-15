@@ -1,212 +1,58 @@
 /**
  * ORBIT Watermark Engine - Embed Tests
- * Tests for spread spectrum watermark embedding
+ * Tests for AudioSeal and Perth neural watermark embedding
  */
 
-const OrbitWatermark = require('../../src/engines/watermark');
-const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const OrbitCrypto = require('../../src/engines/crypto');
+const { UnifiedWatermark } = require('../../src/engines/watermark-unified');
 
-function runTests() {
+const TEST_AUDIO_PATH = path.join(__dirname, '../fixtures/test-audio-rhythm.wav');
+
+async function runTests() {
   console.log('🧪 Running Watermark Embed Tests\n');
   
-  const watermark = new OrbitWatermark('test-secret-key');
+  const watermark = new UnifiedWatermark('test-secret-key');
+  const audioBuffer = fs.readFileSync(TEST_AUDIO_PATH);
   
-  // Test 1: Create payload
+  // Test 1: Create watermark payload
   console.log('Test 1: Create watermark payload');
+  const payloadHash = OrbitCrypto.hash('Watermark Embed Test Track').slice(0, 5);
   const payload = watermark.createPayload({
     platform: 'test-platform',
     timestamp: Date.now(),
-    payloadHash: crypto.randomBytes(16)
+    payloadHash
   });
   
-  console.assert(payload.length === 64, 'Payload should be 64 bytes');
-  console.assert(payload.slice(0, 4).toString() === 'ORBT', 'Should have magic bytes');
-  console.assert(payload.readUInt8(4) === 1, 'Version should be 1');
-  console.log(`   ✅ Payload created (${payload.length} bytes)\n`);
+  console.assert(payload.platform === 'test-platform', 'Platform should match');
+  console.assert(payload.payloadHash.length === 5, 'Payload hash should be 5 bytes');
+  console.log(`   ✅ Payload created (hash: ${payload.payloadHash.toString('hex')})\n`);
   
-  // Test 2: Check minimum duration
-  console.log('Test 2: Check minimum audio duration');
-  const minDuration = watermark.getMinimumDuration();
-  const minSamples = watermark.getRequiredSamples();
-  console.log(`   Required: ${minSamples} samples (${minDuration.toFixed(2)}s at 44.1kHz)`);
-  console.assert(minDuration > 0, 'Should require some duration');
-  console.log('   ✅ Duration requirements calculated\n');
+  // Test 2: Embed via AudioSeal (Primary)
+  console.log('Test 2: Embed watermark via AudioSeal');
+  const embedResult = await watermark.embed(audioBuffer, payload, { verbose: false });
   
-  // Test 3: Embed into silence
-  console.log('Test 3: Embed payload into audio samples');
-  const sampleCount = Math.ceil(minSamples * 1.1); // 10% buffer
-  const audioSamples = new Float32Array(sampleCount); // Silence
+  console.assert(embedResult.success === true, 'Embed should succeed');
+  console.assert(embedResult.method === 'audioseal', 'Primary method should be audioseal');
+  console.assert(embedResult.watermarkedAudio.length > 0, 'Should return watermarked audio');
+  console.assert(embedResult.sdr > 25.0, 'SDR should be > 25dB');
+  console.log(`   ✅ AudioSeal embedding complete (SDR: ${embedResult.sdr.toFixed(1)}dB)\n`);
   
-  const watermarked = watermark.embed(audioSamples, payload);
+  // Test 3: Embed via Perth (Fallback)
+  console.log('Test 3: Embed watermark via Perth fallback engine');
+  const perthWatermark = new UnifiedWatermark('test-secret-key', { method: 'perth' });
+  const perthResult = await perthWatermark.embed(audioBuffer, payload, { verbose: false });
   
-  console.assert(watermarked.length === audioSamples.length, 'Output length should match input');
-  console.log('   ✅ Embedding complete\n');
+  console.assert(perthResult.success === true, 'Perth embed should succeed');
+  console.assert(perthResult.method === 'perth', 'Method should be perth');
+  console.assert(perthResult.watermarkedAudio.length > 0, 'Should return watermarked audio');
+  console.log(`   ✅ Perth embedding complete (SDR: ${perthResult.sdr.toFixed(1)}dB)\n`);
   
-  // Test 4: Verify watermark modifies signal
-  console.log('Test 4: Verify watermark modifies signal');
-  let differences = 0;
-  let maxDiff = 0;
-  
-  for (let i = 0; i < minSamples; i++) {
-    const diff = Math.abs(watermarked[i] - audioSamples[i]);
-    if (diff > 0) differences++;
-    if (diff > maxDiff) maxDiff = diff;
-  }
-  
-  console.assert(differences > 0, 'Some samples should be modified');
-  console.assert(maxDiff < 0.02, 'Max difference should be small (imperceptible)');
-  console.log(`   Modified samples: ${differences}`);
-  console.log(`   Max amplitude change: ${maxDiff.toFixed(6)}`);
-  console.log('   ✅ Signal modified within acceptable range\n');
-  
-  // Test 5: Audio too short throws error
-  console.log('Test 5: Audio too short throws error');
-  const shortAudio = new Float32Array(1000);
-  try {
-    watermark.embed(shortAudio, payload);
-    console.log('   ❌ Should have thrown error');
-    process.exit(1);
-  } catch (error) {
-    console.assert(error.message.includes('too short'), 'Should mention audio too short');
-    console.log('   ✅ Correctly rejected short audio\n');
-  }
-  
-  // Test 6: Different payloads produce different watermarks
-  console.log('Test 6: Different payloads produce different watermarks');
-  const payload2 = watermark.createPayload({
-    platform: 'other-platform',
-    timestamp: Date.now() + 1000
-  });
-  
-  const watermarked2 = watermark.embed(new Float32Array(sampleCount), payload2);
-  
-  // Check across entire watermark range (not just first 1000 samples)
-  // Different payloads will differ where their bits differ
-  let samplesDifferent = 0;
-  const checkRange = Math.min(sampleCount, 512000); // Check full payload range
-  for (let i = 0; i < checkRange; i++) {
-    if (watermarked[i] !== watermarked2[i]) samplesDifferent++;
-  }
-  
-  console.assert(samplesDifferent > 0, 'Different payloads should produce different watermarks');
-  console.log(`   Samples different: ${samplesDifferent} out of ${checkRange}`);
-  console.log(`   ✅ Different payloads produce different outputs\n`);
-  
-  // Test 7: Repeating pattern - verify multiple instances
-  console.log('Test 7: Repeating pattern (snippet detection capability)');
-  // Create 3 minutes of audio (enough for multiple repeats at 30s intervals)
-  const longAudio = new Float32Array(3 * 60 * 44100); // 3 minutes
-  const watermarkedLong = watermark.embed(longAudio, payload);
-  
-  console.assert(watermarkedLong.length === longAudio.length, 'Output length should match');
-  console.log('   ✅ Repeating pattern embedded (see console output above)\n');
-  
-  // Test 8: Loudness-aware embedding
-  console.log('Test 8: Loudness-aware embedding (quiet vs loud audio)');
-  
-  // Quiet audio (low RMS)
-  const quietAudio = new Float32Array(sampleCount);
-  for (let i = 0; i < quietAudio.length; i++) {
-    quietAudio[i] = (Math.random() - 0.5) * 0.01; // Very quiet noise
-  }
-  const watermarkedQuiet = watermark.embed(quietAudio, payload);
-  
-  // Loud audio (high RMS)
-  const loudAudio = new Float32Array(sampleCount);
-  for (let i = 0; i < loudAudio.length; i++) {
-    loudAudio[i] = (Math.random() - 0.5) * 0.8; // Loud noise
-  }
-  const watermarkedLoud = watermark.embed(loudAudio, payload);
-  
-  // Calculate max changes
-  let maxChangeQuiet = 0;
-  let maxChangeLoud = 0;
-  for (let i = 0; i < 10000; i++) {
-    maxChangeQuiet = Math.max(maxChangeQuiet, Math.abs(watermarkedQuiet[i] - quietAudio[i]));
-    maxChangeLoud = Math.max(maxChangeLoud, Math.abs(watermarkedLoud[i] - loudAudio[i]));
-  }
-  
-  console.log(`   Quiet audio - max change: ${maxChangeQuiet.toFixed(6)}`);
-  console.log(`   Loud audio - max change: ${maxChangeLoud.toFixed(6)}`);
-  console.assert(maxChangeQuiet < 0.01, 'Quiet audio should have small changes');
-  console.log('   ✅ Loudness-aware embedding working\n');
-  
-  // Test 9: CRC validation
-  console.log('Test 9: CRC checksum validation');
-  const testPayload = watermark.createPayload({
-    platform: 'test',
-    timestamp: 1234567890000
-  });
-  
-  // Verify CRC is at the end
-  const storedCrc = testPayload.readUInt16BE(62);
-  const calculatedCrc = watermark._crc16(testPayload.slice(0, 62));
-  console.assert(storedCrc === calculatedCrc, 'CRC should match');
-  console.log(`   ✅ CRC validation working (0x${storedCrc.toString(16)})\n`);
-  
-  // Test 10: Deterministic spreading sequence
-  console.log('Test 10: Deterministic spreading sequence');
-  const seq1 = watermark._generateSpreadSequence('test-seed', 1000);
-  const seq2 = watermark._generateSpreadSequence('test-seed', 1000);
-  
-  let sequencesMatch = true;
-  for (let i = 0; i < 1000; i++) {
-    if (seq1[i] !== seq2[i]) {
-      sequencesMatch = false;
-      break;
-    }
-  }
-  
-  console.assert(sequencesMatch, 'Same seed should produce same sequence');
-  console.log('   ✅ Spreading sequence is deterministic\n');
-  
-  // Test 11: Verify bit-level embedding correctness
-  console.log('Test 11: Bit-level embedding correctness');
-  
-  // Create payloads that differ in a known bit position
-  const testPayload1 = Buffer.alloc(64);
-  testPayload1.write('ORBT', 0);
-  testPayload1.writeUInt8(1, 4); // Version
-  testPayload1.writeUInt8(0b00000000, 5); // Flags: bit 0 = 0
-  
-  const testPayload2 = Buffer.alloc(64);
-  testPayload2.write('ORBT', 0);
-  testPayload2.writeUInt8(1, 4); // Version
-  testPayload2.writeUInt8(0b00000001, 5); // Flags: bit 0 = 1 (DIFFERENT)
-  
-  const testAudio1 = new Float32Array(sampleCount);
-  const testAudio2 = new Float32Array(sampleCount);
-  
-  const testWatermark = new OrbitWatermark('test-key-validation');
-  testWatermark.embedAtOffset(testAudio1, 0, testPayload1, 0.005);
-  testWatermark.embedAtOffset(testAudio2, 0, testPayload2, 0.005);
-  
-  // Bits 0-39 are identical (ORBT + version bytes), so samples 0-39999 should be identical
-  let identicalInSameRegion = 0;
-  for (let i = 0; i < 40000; i++) {
-    if (testAudio1[i] === testAudio2[i]) identicalInSameRegion++;
-  }
-  
-  // Bit 47 differs (last bit of flags byte), so samples 47000-48000 should differ
-  let differentInDiffRegion = 0;
-  for (let i = 47000; i < 48000; i++) {
-    if (testAudio1[i] !== testAudio2[i]) differentInDiffRegion++;
-  }
-  
-  console.log(`   Identical samples in same-bit region: ${identicalInSameRegion}/40000`);
-  console.log(`   Different samples in diff-bit region: ${differentInDiffRegion}/1000`);
-  console.assert(identicalInSameRegion === 40000, 'Same bits should produce identical samples');
-  console.assert(differentInDiffRegion === 1000, 'Different bits should produce different samples');
-  console.log('   ✅ Bit-level embedding verified correct\n');
-  
-  console.log('✅ All watermark embed tests passed!');
+  console.log('🎉 All Watermark Embed tests passed!\n');
 }
 
-// Run tests
-try {
-  runTests();
-} catch (error) {
-  console.error('\n❌ Test failed:', error.message);
-  console.error(error.stack);
+runTests().catch(err => {
+  console.error('❌ Test failed:', err);
   process.exit(1);
-}
+});

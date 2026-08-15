@@ -1,14 +1,12 @@
 /**
  * ORBIT Unified Watermark Engine Tests
  * 
- * Session 22 - Tests for unified neural + spread spectrum watermarking
- * 
  * Tests verify:
  * 1. Module exports and configuration
  * 2. UnifiedWatermark class functionality
- * 3. Embed/extract with spread spectrum (always available)
- * 4. Embed/extract with SilentCipher (if available)
- * 5. Fallback behavior
+ * 3. Primary AudioSeal (40-bit BLAKE3) embed/extract
+ * 4. Fallback Perth perceptual embed/extract
+ * 5. Auto routing and fallback behavior
  * 6. Hash matching utilities
  * 
  * Run: node tests/engines/watermark-unified.test.js
@@ -16,22 +14,19 @@
 
 const path = require('path');
 const fs = require('fs');
-const crypto = require('crypto');
+const OrbitCrypto = require('../../src/engines/crypto');
 
-// Import unified watermark module
 const { 
   UnifiedWatermark, 
   getWatermarkMethod, 
-  checkSilentCipherAvailable,
+  checkAudioSealAvailable,
+  checkPerthAvailable,
+  checkWatermarkAvailable,
   resetAvailabilityCache 
 } = require('../../src/engines/watermark-unified');
 
-// Test fixtures
 const TEST_AUDIO_RHYTHM_PATH = path.join(__dirname, '../fixtures/test-audio-rhythm.wav');
 
-/**
- * Test runner
- */
 class TestRunner {
   constructor(suiteName) {
     this.suiteName = suiteName;
@@ -81,7 +76,6 @@ class TestRunner {
   }
 }
 
-// Create test runner
 const runner = new TestRunner('Unified Watermark Engine Tests');
 
 // ============================================================================
@@ -95,95 +89,51 @@ runner.test('Module exports required functions', () => {
   if (typeof getWatermarkMethod !== 'function') {
     throw new Error('getWatermarkMethod should be a function');
   }
-  if (typeof checkSilentCipherAvailable !== 'function') {
-    throw new Error('checkSilentCipherAvailable should be a function');
+  if (typeof checkAudioSealAvailable !== 'function') {
+    throw new Error('checkAudioSealAvailable should be a function');
   }
-  if (typeof resetAvailabilityCache !== 'function') {
-    throw new Error('resetAvailabilityCache should be a function');
+  if (typeof checkPerthAvailable !== 'function') {
+    throw new Error('checkPerthAvailable should be a function');
+  }
+  if (typeof checkWatermarkAvailable !== 'function') {
+    throw new Error('checkWatermarkAvailable should be a function');
   }
 });
 
 runner.test('getWatermarkMethod returns valid method', () => {
   const method = getWatermarkMethod();
-  if (!['neural', 'spread', 'auto'].includes(method)) {
+  if (!['audioseal', 'perth', 'auto', 'neural', 'spread'].includes(method)) {
     throw new Error(`Invalid method: ${method}`);
   }
   console.log(`   Current method: ${method}`);
 });
 
-// ============================================================================
-// UNIFIED WATERMARK CLASS TESTS
-// ============================================================================
-
-runner.test('UnifiedWatermark instantiation', () => {
-  const watermark = new UnifiedWatermark('test-secret-key');
-  
-  if (!watermark.spreadWatermark) {
-    throw new Error('Should have spreadWatermark property');
-  }
-  if (!watermark.secretKey) {
-    throw new Error('Should have secretKey property');
-  }
-});
-
-runner.test('UnifiedWatermark.createPayload() creates 64-byte payload', () => {
-  const watermark = new UnifiedWatermark('test-secret-key');
-  const payloadHash = crypto.randomBytes(16);
-  
-  const payload = watermark.createPayload({
-    platform: 'test-platform',
-    timestamp: Date.now(),
-    payloadHash
-  });
-  
-  if (payload.length !== 64) {
-    throw new Error(`Payload should be 64 bytes, got ${payload.length}`);
-  }
-  if (payload.slice(0, 4).toString() !== 'ORBT') {
-    throw new Error('Payload should have ORBT magic bytes');
-  }
-});
-
-runner.test('UnifiedWatermark.getInfo() returns configuration', async () => {
+runner.test('UnifiedWatermark.getInfo() returns engine statuses', async () => {
   const watermark = new UnifiedWatermark('test-secret-key');
   const info = await watermark.getInfo();
   
   if (typeof info.configuredMethod !== 'string') {
     throw new Error('Should have configuredMethod');
   }
-  if (typeof info.silentcipherAvailable !== 'boolean') {
-    throw new Error('Should have silentcipherAvailable');
+  if (typeof info.audiosealAvailable !== 'boolean') {
+    throw new Error('Should have audiosealAvailable');
   }
-  if (typeof info.spreadSpectrumAvailable !== 'boolean') {
-    throw new Error('Should have spreadSpectrumAvailable');
+  if (typeof info.perthAvailable !== 'boolean') {
+    throw new Error('Should have perthAvailable');
   }
   
-  console.log(`   Configured: ${info.configuredMethod}, Neural: ${info.silentcipherAvailable}`);
+  console.log(`   Configured: ${info.configuredMethod}, AudioSeal: ${info.audiosealAvailable}, Perth: ${info.perthAvailable}`);
 });
 
 // ============================================================================
-// SPREAD SPECTRUM TESTS (Always available)
+// AUDIOSEAL PRIMARY TESTS
 // ============================================================================
 
-runner.test('Spread spectrum embed/extract round-trip', async () => {
-  // Use synthetic audio (90 seconds of quiet noise) like existing spread spectrum tests
-  // Real audio with complex waveforms can interfere with spread spectrum correlation
-  // Neural watermarking (SilentCipher) handles real audio robustly
-  const audioDurationSeconds = 90;
-  const sampleRate = 44100;
-  const samples = new Float32Array(audioDurationSeconds * sampleRate);
-  
-  // Add quiet background noise
-  for (let i = 0; i < samples.length; i++) {
-    samples[i] = (Math.random() - 0.5) * 0.01;
-  }
-  
-  // Convert to WAV buffer
-  const AudioUtils = require('../../src/utils/audio');
-  const audioBuffer = await AudioUtils.encodeSamplesToWav(samples, sampleRate, 1);
-  
-  const watermark = new UnifiedWatermark('test-secret-key', { method: 'spread' });
-  const payloadHash = crypto.randomBytes(16);
+runner.test('AudioSeal (Primary) embed/extract round-trip via UnifiedWatermark', async () => {
+  const audioBuffer = fs.readFileSync(TEST_AUDIO_RHYTHM_PATH);
+  const watermark = new UnifiedWatermark('test-secret-key', { method: 'audioseal' });
+  const fullHash = OrbitCrypto.hash('ORBIT Unified AudioSeal Track');
+  const payloadHash = fullHash.slice(0, 5);
   
   // Embed
   const embedResult = await watermark.embed(audioBuffer, {
@@ -195,14 +145,14 @@ runner.test('Spread spectrum embed/extract round-trip', async () => {
   if (!embedResult.success) {
     throw new Error('Embed should succeed');
   }
-  if (embedResult.method !== 'spread') {
-    throw new Error(`Method should be 'spread', got '${embedResult.method}'`);
+  if (embedResult.method !== 'audioseal') {
+    throw new Error(`Method should be 'audioseal', got '${embedResult.method}'`);
   }
   if (!embedResult.watermarkedAudio || embedResult.watermarkedAudio.length === 0) {
     throw new Error('Should return watermarked audio');
   }
   
-  console.log(`   Embedded: ${embedResult.watermarkedAudio.length} bytes`);
+  console.log(`   AudioSeal embedded: ${embedResult.watermarkedAudio.length} bytes (SDR: ${embedResult.sdr?.toFixed(1)}dB)`);
   
   // Extract
   const extractResult = await watermark.extract(embedResult.watermarkedAudio);
@@ -213,135 +163,78 @@ runner.test('Spread spectrum embed/extract round-trip', async () => {
   if (!extractResult.detected) {
     throw new Error('Should detect watermark');
   }
-  if (extractResult.method !== 'spread') {
-    throw new Error(`Extract method should be 'spread', got '${extractResult.method}'`);
+  if (extractResult.method !== 'audioseal') {
+    throw new Error(`Extract method should be 'audioseal', got '${extractResult.method}'`);
+  }
+  if (!extractResult.payloadHash || !extractResult.payloadHash.equals(payloadHash)) {
+    throw new Error(`Extracted hash (${extractResult.payloadHash?.toString('hex')}) does not match expected (${payloadHash.toString('hex')})`);
   }
   
-  // Verify payload hash matches
-  if (!extractResult.parsedPayload || !extractResult.parsedPayload.payloadHash) {
-    throw new Error('Should have parsedPayload with payloadHash');
-  }
-  
-  const extractedHash = extractResult.parsedPayload.payloadHash;
-  if (!extractedHash.equals(payloadHash)) {
-    throw new Error('Extracted payload hash should match original');
-  }
-  
-  console.log(`   Extracted: confidence=${extractResult.confidence.toFixed(4)}`);
+  console.log(`   AudioSeal extracted: hash=${extractResult.payloadHash.toString('hex')}, confidence=${(extractResult.confidence * 100).toFixed(1)}%`);
 });
 
-runner.test('Spread spectrum detect() convenience method', async () => {
-  // Use synthetic audio for reliable spread spectrum testing
-  const audioDurationSeconds = 90;
-  const sampleRate = 44100;
-  const samples = new Float32Array(audioDurationSeconds * sampleRate);
-  for (let i = 0; i < samples.length; i++) {
-    samples[i] = (Math.random() - 0.5) * 0.01;
-  }
+// ============================================================================
+// PERTH FALLBACK TESTS
+// ============================================================================
+
+runner.test('Perth (Fallback) embed/extract round-trip via UnifiedWatermark', async () => {
+  const audioBuffer = fs.readFileSync(TEST_AUDIO_RHYTHM_PATH);
+  const watermark = new UnifiedWatermark('test-secret-key', { method: 'perth' });
+  const payloadHash = OrbitCrypto.hash('ORBIT Unified Perth Track').slice(0, 5);
   
-  const AudioUtils = require('../../src/utils/audio');
-  const audioBuffer = await AudioUtils.encodeSamplesToWav(samples, sampleRate, 1);
-  
-  const watermark = new UnifiedWatermark('test-secret-key', { method: 'spread' });
-  
-  // Embed first
+  // Embed
   const embedResult = await watermark.embed(audioBuffer, {
     platform: 'test-platform',
     timestamp: Date.now(),
-    payloadHash: crypto.randomBytes(16)
+    payloadHash
   });
   
-  // Use detect()
-  const detectResult = await watermark.detect(embedResult.watermarkedAudio);
-  
-  if (typeof detectResult.detected !== 'boolean') {
-    throw new Error('detect() should return detected boolean');
+  if (!embedResult.success) {
+    throw new Error('Embed should succeed');
   }
-  if (!detectResult.detected) {
-    throw new Error('Should detect watermark');
-  }
-  if (typeof detectResult.confidence !== 'number') {
-    throw new Error('detect() should return confidence number');
-  }
-});
-
-runner.test('Audio without watermark returns detected=false', async () => {
-  if (!fs.existsSync(TEST_AUDIO_RHYTHM_PATH)) {
-    throw new Error(`Test audio not found: ${TEST_AUDIO_RHYTHM_PATH}`);
+  if (embedResult.method !== 'perth') {
+    throw new Error(`Method should be 'perth', got '${embedResult.method}'`);
   }
   
-  const watermark = new UnifiedWatermark('test-secret-key', { method: 'spread' });
-  const audioBuffer = fs.readFileSync(TEST_AUDIO_RHYTHM_PATH);
+  console.log(`   Perth embedded: ${embedResult.watermarkedAudio.length} bytes (SDR: ${embedResult.sdr?.toFixed(1)}dB)`);
   
-  // Extract from unwatermarked audio
-  const result = await watermark.extract(audioBuffer);
+  // Extract
+  const extractResult = await watermark.extract(embedResult.watermarkedAudio);
   
-  if (!result.success) {
-    throw new Error('Extract should succeed (even if no watermark)');
+  if (!extractResult.success) {
+    throw new Error('Extract should succeed');
+  }
+  if (!extractResult.detected) {
+    throw new Error('Should detect Perth watermark');
+  }
+  if (extractResult.method !== 'perth') {
+    throw new Error(`Extract method should be 'perth', got '${extractResult.method}'`);
   }
   
-  // The spread spectrum may or may not detect a false positive depending on the audio
-  // Just check the structure is correct
-  if (typeof result.detected !== 'boolean') {
-    throw new Error('Should have detected boolean');
-  }
-  
-  console.log(`   Detected: ${result.detected}, Confidence: ${result.confidence.toFixed(4)}`);
-});
-
-// Removed SilentCipher and Fallback behavior tests. 
-// These have been migrated to watermark-neural.test.js for explicit testing.
-
-// ============================================================================
-// HASH MATCHING TESTS
-// ============================================================================
-
-runner.test('UnifiedWatermark.hashMatches() for spread spectrum', () => {
-  const fullHash = crypto.randomBytes(32);
-  const extracted16 = fullHash.slice(0, 16);
-  
-  const matches = UnifiedWatermark.hashMatches(extracted16, fullHash, 'spread');
-  if (!matches) {
-    throw new Error('Should match 16-byte prefix');
-  }
-  
-  const wrongHash = crypto.randomBytes(32);
-  const noMatch = UnifiedWatermark.hashMatches(extracted16, wrongHash, 'spread');
-  if (noMatch) {
-    throw new Error('Should not match wrong hash');
-  }
-});
-
-
-
-runner.test('UnifiedWatermark.hashMatches() handles null/undefined', () => {
-  const hash = crypto.randomBytes(16);
-  
-  if (UnifiedWatermark.hashMatches(null, hash, 'spread')) {
-    throw new Error('Should return false for null extracted');
-  }
-  if (UnifiedWatermark.hashMatches(hash, null, 'spread')) {
-    throw new Error('Should return false for null expected');
-  }
-  if (UnifiedWatermark.hashMatches(undefined, hash, 'spread')) {
-    throw new Error('Should return false for undefined extracted');
-  }
+  console.log(`   Perth extracted: confidence=${extractResult.confidence}`);
 });
 
 // ============================================================================
-// RUN TESTS
+// HASH MATCHING UTILITY TESTS
 // ============================================================================
 
-async function main() {
-  const success = await runner.run();
-  process.exit(success ? 0 : 1);
-}
-
-main().catch(error => {
-  console.error('Test runner error:', error);
-  process.exit(1);
+runner.test('UnifiedWatermark.hashMatches() compares 5-byte BLAKE3 prefixes', () => {
+  const fullHash1 = OrbitCrypto.hash('track 1');
+  const fullHash2 = OrbitCrypto.hash('track 2');
+  const extractedPrefix1 = fullHash1.slice(0, 5);
+  const extractedPrefix2 = fullHash2.slice(0, 5);
+  
+  if (!UnifiedWatermark.hashMatches(extractedPrefix1, fullHash1)) {
+    throw new Error('Matching hashes should return true');
+  }
+  if (UnifiedWatermark.hashMatches(extractedPrefix1, fullHash2)) {
+    throw new Error('Different hashes should return false');
+  }
+  if (UnifiedWatermark.hashMatches(extractedPrefix2, fullHash1)) {
+    throw new Error('Different hashes should return false');
+  }
 });
 
-
-
-
+runner.run().then((success) => {
+  if (!success) process.exit(1);
+});

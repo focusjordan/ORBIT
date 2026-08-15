@@ -1,83 +1,113 @@
 /**
  * ORBIT Unified Watermark Engine
  * 
- * Unified interface for neural (SilentCipher) and spread spectrum watermarking
+ * Unified interface for AudioSeal (Primary Neural) and Perth (Fallback Neural) watermarking
  * 
- * This module provides a single interface that:
- * 1. Tries SilentCipher (neural) first for superior robustness
- * 2. Falls back to spread spectrum if neural fails
- * 3. Respects ORBIT_WATERMARK_METHOD env var configuration
+ * Architecture:
+ * 1. Primary: AudioSeal (Meta FAIR) with 40-bit (5-byte) BLAKE3 frame multiplexing
+ * 2. Fallback: Perth (Resemble AI) perceptual neural watermarking
+ * 3. Respects ORBIT_WATERMARK_METHOD env var configuration:
+ *    - "audioseal" → AudioSeal only (fails if unavailable)
+ *    - "perth"     → Perth only (fallback engine only)
+ *    - "auto"      → Try AudioSeal first, fall back to Perth (default)
  * 
- * Configuration (via ORBIT_WATERMARK_METHOD env var):
- * - "neural"  → SilentCipher only (fails if unavailable)
- * - "spread"  → Spread spectrum only (original v1 behavior)
- * - "auto"    → Try neural first, fall back to spread (default)
- * 
- * Key architectural difference:
- * - Spread spectrum embeds full 64-byte payload (self-verifiable via CRC)
- * - SilentCipher embeds 5-byte hash prefix (requires ledger lookup)
- * 
- * @see ORBIT_ENHANCEMENTS.md Section 1 (Neural Watermarking)
- * @see src/engines/watermark.js (spread spectrum implementation)
- * @see src/ml/silentcipher.js (neural watermarking wrapper)
+ * @module engines/watermark-unified
  */
 
 const fs = require('fs');
-
-// Core watermarking implementations
-const OrbitWatermark = require('./watermark');
-const silentcipher = require('@ohnrshyp/watermark');
-const AudioUtils = require('../utils/audio');
+const audioseal = require('./audioseal');
+const perth = require('./perth');
 
 /**
  * Watermark method configuration
- * @type {'neural'|'spread'|'auto'}
+ * @type {'audioseal'|'perth'|'auto'}
  */
 const WATERMARK_METHOD = process.env.ORBIT_WATERMARK_METHOD || 'auto';
 
-/**
- * Cache for SilentCipher availability check
- * @type {{checked: boolean, available: boolean, message: string}|null}
- */
-let silentcipherAvailability = null;
+let audiosealAvailability = null;
+let perthAvailability = null;
 
 /**
- * Check if SilentCipher is available (cached after first check)
+ * Check if AudioSeal is available (cached after first check)
  * @returns {Promise<{available: boolean, message: string}>}
  */
-async function checkSilentCipherAvailable() {
-  if (silentcipherAvailability !== null) {
-    return silentcipherAvailability;
+async function checkAudioSealAvailable() {
+  if (audiosealAvailability !== null) {
+    return audiosealAvailability;
   }
   
   try {
-    const result = await silentcipher.checkPythonEnvironment();
-    silentcipherAvailability = {
+    const result = await audioseal.checkPythonEnvironment();
+    audiosealAvailability = {
       checked: true,
-      available: result.available,
-      message: result.message
+      available: !!result.available,
+      message: result.message || 'AudioSeal environment ready',
+      details: result.details
     };
   } catch (error) {
-    silentcipherAvailability = {
+    audiosealAvailability = {
       checked: true,
       available: false,
-      message: `SilentCipher check failed: ${error.message}`
+      message: `AudioSeal check failed: ${error.message}`
     };
   }
   
-  return silentcipherAvailability;
+  return audiosealAvailability;
+}
+
+/**
+ * Check if Perth is available (cached after first check)
+ * @returns {Promise<{available: boolean, message: string}>}
+ */
+async function checkPerthAvailable() {
+  if (perthAvailability !== null) {
+    return perthAvailability;
+  }
+  
+  try {
+    const result = await perth.checkPythonEnvironment();
+    perthAvailability = {
+      checked: true,
+      available: !!result.available,
+      message: result.message || 'Perth environment ready',
+      details: result.details
+    };
+  } catch (error) {
+    perthAvailability = {
+      checked: true,
+      available: false,
+      message: `Perth check failed: ${error.message}`
+    };
+  }
+  
+  return perthAvailability;
+}
+
+/**
+ * Check overall neural watermark availability
+ */
+async function checkWatermarkAvailable() {
+  const asAvail = await checkAudioSealAvailable();
+  const perthAvail = await checkPerthAvailable();
+  return {
+    available: asAvail.available || perthAvail.available,
+    audioseal: asAvail,
+    perth: perthAvail,
+    primary: asAvail.available ? 'audioseal' : (perthAvail.available ? 'perth' : null)
+  };
 }
 
 /**
  * Reset availability cache (useful for testing)
  */
 function resetAvailabilityCache() {
-  silentcipherAvailability = null;
+  audiosealAvailability = null;
+  perthAvailability = null;
 }
 
 /**
  * Get current watermark method configuration
- * @returns {'neural'|'spread'|'auto'}
+ * @returns {'audioseal'|'perth'|'auto'}
  */
 function getWatermarkMethod() {
   return WATERMARK_METHOD;
@@ -85,57 +115,48 @@ function getWatermarkMethod() {
 
 /**
  * Unified Watermark Engine
- * 
- * Provides a consistent interface for embedding and extracting watermarks
- * using either neural (SilentCipher) or spread spectrum methods.
  */
 class UnifiedWatermark {
   /**
-   * @param {string} secretKey - Secret key for spread spectrum (required for fallback)
+   * @param {string} secretKey - Secret key (for backward compatibility & key-derived permutations)
    * @param {Object} options - Configuration options
-   * @param {string} options.method - Override ORBIT_WATERMARK_METHOD ('neural'|'spread'|'auto')
-   * @param {Object} options.spreadOptions - Options passed to OrbitWatermark constructor
+   * @param {string} options.method - Override ORBIT_WATERMARK_METHOD ('audioseal'|'perth'|'auto')
    */
   constructor(secretKey, options = {}) {
     this.secretKey = secretKey;
     this.method = options.method || WATERMARK_METHOD;
-    
-    // Initialize spread spectrum engine (always needed for fallback or payload creation)
-    this.spreadWatermark = new OrbitWatermark(secretKey, options.spreadOptions || {});
-    
-    // Store options for potential neural embedding
     this.options = options;
   }
   
   /**
    * Create watermark payload structure
-   * This is used by both methods for consistent payload format
-   * 
    * @param {Object} data - Payload data
    * @param {string} data.platform - Platform ID
    * @param {number} data.timestamp - Unix timestamp in ms
-   * @param {Buffer} data.payloadHash - Hash of full CBOR payload (16 bytes)
-   * @returns {Buffer} 64-byte binary payload (for spread spectrum)
+   * @param {Buffer} data.payloadHash - Hash of full CBOR payload (at least 5 bytes)
+   * @returns {Object} Payload object
    */
   createPayload(data) {
-    return this.spreadWatermark.createPayload(data);
+    const payloadHash = data.payloadHash || Buffer.alloc(16);
+    return {
+      platform: data.platform || 'unknown',
+      timestamp: data.timestamp || Date.now(),
+      payloadHash: payloadHash.slice(0, 16),
+      hashPrefix: payloadHash.slice(0, 5)
+    };
   }
   
   /**
    * Embed watermark into audio
    * 
-   * @param {Buffer} audioBuffer - Audio file as buffer
-   * @param {Object} payloadData - Data for watermark payload
-   * @param {string} payloadData.platform - Platform ID
-   * @param {number} payloadData.timestamp - Unix timestamp in ms  
-   * @param {Buffer} payloadData.payloadHash - Hash of full CBOR payload (16 bytes)
+   * @param {Buffer} audioBuffer - Audio file buffer
+   * @param {Object} payloadData - Payload data with payloadHash (5 bytes for AudioSeal)
    * @param {Object} options - Embed options
-   * @param {boolean} options.verbose - Log progress
    * @returns {Promise<{
    *   success: boolean,
    *   watermarkedAudio: Buffer,
-   *   method: 'silentcipher'|'spread',
-   *   watermarkPayload: Buffer,
+   *   method: 'audioseal'|'perth',
+   *   watermarkPayload: Object,
    *   sdr?: number,
    *   fallbackUsed?: boolean,
    *   fallbackReason?: string,
@@ -145,135 +166,96 @@ class UnifiedWatermark {
   async embed(audioBuffer, payloadData, options = {}) {
     const startTime = Date.now();
     const verbose = options.verbose || process.env.ORBIT_ML_VERBOSE === 'true';
-    
-    // Create the spread spectrum payload (64 bytes)
-    // This is stored in the ledger and used for spread spectrum embedding
     const watermarkPayload = this.createPayload(payloadData);
     
-    // Determine which method(s) to try
-    const shouldTryNeural = this.method === 'neural' || this.method === 'auto';
-    const shouldTrySpread = this.method === 'spread' || this.method === 'auto';
+    const shouldTryAudioSeal = this.method === 'audioseal' || this.method === 'auto' || this.method === 'neural';
+    const shouldTryPerth = this.method === 'perth' || this.method === 'auto';
     
-    // Try neural watermarking first (if configured)
-    if (shouldTryNeural) {
+    // 1. Try Primary: AudioSeal (40-bit BLAKE3)
+    if (shouldTryAudioSeal) {
       try {
-        const availability = await checkSilentCipherAvailable();
+        const availability = await checkAudioSealAvailable();
         
         if (!availability.available) {
-          if (this.method === 'neural') {
-            throw new Error(`SilentCipher not available: ${availability.message}`);
+          if (this.method === 'audioseal') {
+            throw new Error(`AudioSeal not available: ${availability.message}`);
           }
-          // Auto mode: fall through to spread spectrum
           if (verbose) {
-            console.log(`[WARN] SilentCipher not available, falling back to spread spectrum`);
+            console.log(`[WARN] AudioSeal not available, falling back to Perth: ${availability.message}`);
           }
         } else {
-          // SilentCipher embeds a 5-byte hash prefix (40 bits)
-          // We use the payloadHash for this (first 5 bytes)
-          const result = await silentcipher.embed(audioBuffer, payloadData.payloadHash, {
+          // AudioSeal embeds a 5-byte BLAKE3 payload
+          const result = await audioseal.embed(audioBuffer, payloadData.payloadHash, {
             verbose,
           });
           
           if (result.success) {
-            // Read the watermarked audio file
-            const watermarkedAudio = fs.readFileSync(result.outputPath);
-            
-            // Clean up temp file
-            try {
-              fs.unlinkSync(result.outputPath);
-            } catch (e) {
-              // Ignore cleanup errors
-            }
-            
             return {
               success: true,
-              watermarkedAudio,
-              method: 'silentcipher',
+              watermarkedAudio: result.watermarkedAudio,
+              method: 'audioseal',
               watermarkPayload,
               sdr: result.sdr,
-              message: result.message,
+              duration: result.duration,
               fallbackUsed: false,
               processingTimeMs: Date.now() - startTime
             };
           }
         }
       } catch (error) {
-        if (this.method === 'neural') {
-          // Neural-only mode: propagate the error
+        if (this.method === 'audioseal') {
           throw error;
         }
-        
-        // Auto mode: log and fall through to spread spectrum
         if (verbose) {
-          console.log(`[WARN] SilentCipher embed failed: ${error.message}`);
-          console.log(`   Falling back to spread spectrum...`);
+          console.log(`[WARN] AudioSeal embed failed: ${error.message}. Falling back to Perth...`);
         }
-        
-        // Continue to spread spectrum fallback
-        if (!shouldTrySpread) {
+        if (!shouldTryPerth) {
           throw error;
         }
       }
     }
     
-    // Try spread spectrum (fallback or primary based on config)
-    if (shouldTrySpread) {
+    // 2. Try Fallback: Perth
+    if (shouldTryPerth) {
       try {
-        // Load audio WITH stereo preservation
-        const audioData = await AudioUtils.decodeAudioToSamples(audioBuffer, { preserveStereo: true });
-        const { channels, channelCount } = audioData;
-        
-        if (verbose) {
-          console.log(`   Audio format: ${channelCount} channel(s) - ${channelCount === 2 ? 'STEREO' : 'MONO'}`);
+        const perthAvail = await checkPerthAvailable();
+        if (!perthAvail.available && this.method === 'perth') {
+          throw new Error(`Perth not available: ${perthAvail.message}`);
         }
         
-        // Embed watermark on ALL channels (L+R for stereo)
-        // This ensures watermark survives even if one channel is isolated
-        const watermarkedChannels = [];
-        for (let ch = 0; ch < channelCount; ch++) {
-          const channelSamples = channels[ch];
-          const watermarkedChannel = this.spreadWatermark.embed(channelSamples, watermarkPayload);
-          watermarkedChannels.push(watermarkedChannel);
-        }
-        
-        // Encode back to WAV preserving original channel count
-        // CRITICAL: stereo in = stereo out, mono in = mono out
-        const watermarkedAudio = await AudioUtils.encodeSamplesToWav(watermarkedChannels, 44100);
+        const result = await perth.embed(audioBuffer, { verbose });
         
         return {
           success: true,
-          watermarkedAudio,
-          method: 'spread',
+          watermarkedAudio: result.watermarkedAudio,
+          method: 'perth',
           watermarkPayload,
-          channelCount,  // Report preserved channel count
-          fallbackUsed: shouldTryNeural, // True if we tried neural first
-          fallbackReason: shouldTryNeural ? 'neural_failed' : undefined,
+          sdr: result.sdr,
+          duration: result.duration,
+          fallbackUsed: shouldTryAudioSeal,
+          fallbackReason: shouldTryAudioSeal ? 'audioseal_failed' : undefined,
           processingTimeMs: Date.now() - startTime
         };
       } catch (error) {
-        throw new Error(`Spread spectrum embed failed: ${error.message}`);
+        throw new Error(`Watermark embed failed on all engines: ${error.message}`);
       }
     }
     
-    // Should never reach here
     throw new Error('No watermark method available');
   }
   
   /**
    * Extract watermark from audio
    * 
-   * @param {Buffer} audioBuffer - Audio file as buffer
+   * @param {Buffer} audioBuffer - Audio file buffer
    * @param {Object} options - Extract options
-   * @param {boolean} options.verbose - Log progress
-   * @param {boolean} options.tryBothMethods - Try both methods even if first succeeds (for comparison)
    * @returns {Promise<{
    *   success: boolean,
    *   detected: boolean,
-   *   method: 'silentcipher'|'spread'|null,
+   *   method: 'audioseal'|'perth'|null,
    *   confidence: number,
    *   payloadHash?: Buffer,
-   *   payload?: Buffer,
-   *   parsedPayload?: Object,
+   *   crcValid?: boolean,
    *   fallbackUsed?: boolean,
    *   processingTimeMs: number
    * }>}
@@ -282,136 +264,98 @@ class UnifiedWatermark {
     const startTime = Date.now();
     const verbose = options.verbose || process.env.ORBIT_ML_VERBOSE === 'true';
     
-    // Determine which method(s) to try
-    const shouldTryNeural = this.method === 'neural' || this.method === 'auto';
-    const shouldTrySpread = this.method === 'spread' || this.method === 'auto';
+    const shouldTryAudioSeal = this.method === 'audioseal' || this.method === 'auto' || this.method === 'neural';
+    const shouldTryPerth = this.method === 'perth' || this.method === 'auto';
     
-    let neuralResult = null;
-    let spreadResult = null;
+    let audiosealResult = null;
+    let perthResult = null;
     
-    // Try neural extraction first (if configured)
-    if (shouldTryNeural) {
+    // 1. Try AudioSeal extraction
+    if (shouldTryAudioSeal) {
       try {
-        const availability = await checkSilentCipherAvailable();
+        const availability = await checkAudioSealAvailable();
         
         if (availability.available) {
-          const result = await silentcipher.extract(audioBuffer, { verbose });
+          const result = await audioseal.extract(audioBuffer, { verbose });
           
           if (result.success && result.detected) {
-            neuralResult = {
+            audiosealResult = {
               success: true,
               detected: true,
-              method: 'silentcipher',
+              method: 'audioseal',
               confidence: result.confidence,
-              payloadHash: result.payloadHash, // 5-byte hash prefix
-              message: result.message,
+              payloadHash: result.payloadHash, // 5-byte BLAKE3 hash
+              crcValid: result.crcValid,
+              slotsDetected: result.slotsDetected,
+              duration: result.duration,
               fallbackUsed: false,
               processingTimeMs: Date.now() - startTime
             };
             
-            // If not trying both methods, return neural result
             if (!options.tryBothMethods) {
-              return neuralResult;
+              return audiosealResult;
             }
           }
-        } else if (this.method === 'neural') {
-          throw new Error(`SilentCipher not available: ${availability.message}`);
         }
       } catch (error) {
-        if (this.method === 'neural') {
+        if (this.method === 'audioseal') {
           throw error;
         }
-        
         if (verbose) {
-          console.log(`[WARN] SilentCipher extract failed: ${error.message}`);
+          console.log(`[WARN] AudioSeal extract error: ${error.message}`);
         }
       }
     }
     
-    // Try spread spectrum (fallback or primary based on config)
-    if (shouldTrySpread) {
+    // 2. Try Perth extraction (if AudioSeal not detected or in perth/tryBothMethods mode)
+    if (shouldTryPerth) {
       try {
-        // Load audio with stereo preservation
-        const audioData = await AudioUtils.decodeAudioToSamples(audioBuffer, { preserveStereo: true });
-        const { channels, channelCount } = audioData;
-        
-        // Debug: Log extraction attempt details
-        console.log(`   [WM Extract] Channels: ${channelCount}, Samples/ch: ${channels?.[0]?.length || 'N/A'}`);
-        
-        // Try extraction from all channels, use best result
-        // For stereo, the watermark should be on both channels
-        let bestResult = null;
-        
-        for (let ch = 0; ch < channelCount; ch++) {
-          const channelSamples = channels[ch];
-          const result = this.spreadWatermark.extractWithSearch(channelSamples);
-          
-          // Debug: Log each channel's extraction result
-          console.log(`   [WM Extract] Ch${ch}: valid=${result.valid}, conf=${result.confidence?.toFixed(6)}, offset=${result.offset}, attempts=${result.attempts}`);
-          
-          if (result.valid) {
-            if (!bestResult || result.confidence > bestResult.confidence) {
-              bestResult = result;
-              bestResult.extractedFromChannel = ch;
-            }
+        const availability = await checkPerthAvailable();
+        if (availability.available) {
+          const result = await perth.extract(audioBuffer, { verbose });
+          if (result.success && result.detected) {
+            perthResult = {
+              success: true,
+              detected: true,
+              method: 'perth',
+              confidence: result.confidence,
+              payloadHash: null,
+              duration: result.duration,
+              fallbackUsed: shouldTryAudioSeal && !audiosealResult,
+              processingTimeMs: Date.now() - startTime
+            };
           }
-        }
-        
-        if (bestResult && bestResult.valid) {
-          const parsedPayload = this.spreadWatermark.parsePayload(bestResult.payload);
-          
-          spreadResult = {
-            success: true,
-            detected: true,
-            method: 'spread',
-            confidence: bestResult.confidence,
-            payload: bestResult.payload,
-            parsedPayload,
-            payloadHash: parsedPayload?.payloadHash,
-            offset: bestResult.offset,
-            channelCount,
-            extractedFromChannel: bestResult.extractedFromChannel,
-            fallbackUsed: shouldTryNeural && !neuralResult,
-            processingTimeMs: Date.now() - startTime
-          };
         }
       } catch (error) {
         if (verbose) {
-          console.log(`[WARN] Spread spectrum extract failed: ${error.message}`);
+          console.log(`[WARN] Perth extract error: ${error.message}`);
         }
       }
     }
     
-    // Return best result
-    if (neuralResult && neuralResult.detected) {
-      // Prefer neural result (higher confidence typically)
-      if (spreadResult && options.tryBothMethods) {
-        neuralResult.spreadResult = spreadResult;
+    if (audiosealResult && audiosealResult.detected) {
+      if (perthResult && options.tryBothMethods) {
+        audiosealResult.perthResult = perthResult;
       }
-      return neuralResult;
+      return audiosealResult;
     }
     
-    if (spreadResult && spreadResult.detected) {
-      return spreadResult;
+    if (perthResult && perthResult.detected) {
+      return perthResult;
     }
     
-    // No watermark detected
     return {
       success: true,
       detected: false,
       method: null,
       confidence: 0,
-      fallbackUsed: shouldTryNeural && shouldTrySpread,
+      fallbackUsed: shouldTryAudioSeal && shouldTryPerth,
       processingTimeMs: Date.now() - startTime
     };
   }
   
   /**
-   * Detect if audio contains a valid ORBIT watermark
-   * Convenience wrapper around extract()
-   * 
-   * @param {Buffer} audioBuffer - Audio file as buffer
-   * @returns {Promise<{detected: boolean, method: string|null, confidence: number}>}
+   * Fast detection convenience wrapper
    */
   async detect(audioBuffer) {
     const result = await this.extract(audioBuffer);
@@ -423,56 +367,48 @@ class UnifiedWatermark {
   }
   
   /**
-   * Check if a payload hash matches an extracted hash
-   * Handles the difference in hash sizes between methods:
-   * - SilentCipher: 5 bytes
-   * - Spread spectrum: 16 bytes (from 64-byte payload)
-   * 
-   * @param {Buffer} extractedHash - Hash from extraction (5 or 16 bytes)
-   * @param {Buffer} expectedHash - Full payload hash to compare
-   * @param {string} method - Extraction method used
+   * Check if extracted hash matches expected hash
+   * @param {Buffer} extractedHash 
+   * @param {Buffer} expectedHash 
+   * @param {string} method 
    * @returns {boolean}
    */
-  static hashMatches(extractedHash, expectedHash, method) {
+  static hashMatches(extractedHash, expectedHash, method = 'audioseal') {
     if (!extractedHash || !expectedHash) return false;
-    
-    if (method === 'silentcipher') {
-      // SilentCipher uses 5-byte prefix
-      return silentcipher.hashMatches(extractedHash, expectedHash);
-    } else {
-      // Spread spectrum uses 16-byte hash from payload
-      const expectedPrefix = expectedHash.slice(0, 16);
-      return extractedHash.slice(0, 16).equals(expectedPrefix);
-    }
+    return audioseal.hashMatches(extractedHash, expectedHash);
   }
   
   /**
-   * Get info about current watermark configuration
-   * @returns {Promise<Object>}
+   * Get engine diagnostic info
    */
   async getInfo() {
-    const availability = await checkSilentCipherAvailable();
+    const asAvail = await checkAudioSealAvailable();
+    const pAvail = await checkPerthAvailable();
     
     return {
       configuredMethod: this.method,
-      silentcipherAvailable: availability.available,
-      silentcipherMessage: availability.message,
-      spreadSpectrumAvailable: true, // Always available
-      effectiveMethod: this.method === 'auto' 
-        ? (availability.available ? 'silentcipher' : 'spread')
+      audiosealAvailable: asAvail.available,
+      audiosealMessage: asAvail.message,
+      perthAvailable: pAvail.available,
+      perthMessage: pAvail.message,
+      effectiveMethod: this.method === 'auto'
+        ? (asAvail.available ? 'audioseal' : (pAvail.available ? 'perth' : 'none'))
         : this.method
     };
   }
 }
 
-// Export class and utilities
 module.exports = {
   UnifiedWatermark,
   getWatermarkMethod,
-  checkSilentCipherAvailable,
+  checkAudioSealAvailable,
+  checkPerthAvailable,
+  checkWatermarkAvailable,
   resetAvailabilityCache,
+  audioseal,
+  perth,
   
-  // Re-export underlying implementations for direct access if needed
-  OrbitWatermark,
-  silentcipher
+  // Backward compatibility alias
+  checkSilentCipherAvailable: checkAudioSealAvailable,
+  silentcipher: audioseal,
 };

@@ -6,7 +6,7 @@
  * the matching registration in the ledger. No fingerprinting, no AI
  * metadata, no crypto — just the watermark round-trip.
  *
- * SilentCipher embeds 5 bytes (first 5 of the 16-byte watermark_hash).
+ * AudioSeal embeds 5 bytes (40 bits of the BLAKE3 watermark_hash).
  * This endpoint extracts those 5 bytes and finds registrations whose
  * stored watermark_hash starts with that prefix.
  */

@@ -1,22 +1,25 @@
 /**
- * @ohnrshyp/watermark
+ * ORBIT Perth Neural Watermarking Fallback Engine (OrbitPerth)
  * 
- * Standalone AudioSeal (Primary) and Perth (Fallback) Neural Watermarking Connector
+ * Perceptual neural audio watermarking with Resemble AI PerTh:
+ * - Implicit neural watermarking for tamper-resistant presence verification
+ * - Seamless fallback when primary AudioSeal is not configured or fails
  * 
- * @module @ohnrshyp/watermark
+ * @module engines/perth
  */
 
 const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const idEngine = require('../utils/id');
 
 /**
- * Resolve python command path by traversing parent directories to find virtual environments.
+ * Resolve python command path for Perth
  */
 function resolvePythonCommand() {
-  if (process.env.ORBIT_AUDIOSEAL_PYTHON) {
-    return process.env.ORBIT_AUDIOSEAL_PYTHON;
+  if (process.env.ORBIT_PERTH_PYTHON) {
+    return process.env.ORBIT_PERTH_PYTHON;
   }
   if (process.env.ORBIT_PYTHON_PATH) {
     return process.env.ORBIT_PYTHON_PATH;
@@ -44,18 +47,15 @@ function resolvePythonCommand() {
   return isWin ? 'python' : 'python3';
 }
 
-const CONFIG = {
-  scriptPath: path.join(__dirname, '../scripts/audioseal_watermark.py'),
-  perthScriptPath: path.join(__dirname, '../scripts/perth_watermark.py'),
-  messageBytes: 5,
+const PERTH_CONFIG = {
+  scriptPath: path.join(__dirname, '../../scripts/perth_watermark.py'),
   sampleRate: 16000,
   pythonCommand: resolvePythonCommand(),
   embedTimeout: 180000,
   extractTimeout: 120000,
-  confidenceThreshold: 0.45,
+  confidenceThreshold: 0.5,
   env: {
     ...process.env,
-    NO_TORCH_COMPILE: '1',
     OPENBLAS_NUM_THREADS: '1',
     OMP_NUM_THREADS: '1',
     MKL_NUM_THREADS: '1',
@@ -63,52 +63,32 @@ const CONFIG = {
 };
 
 /**
- * Convert Buffer/hash to 5-byte integer array
- */
-function hashToMessage(payloadHash) {
-  if (!Buffer.isBuffer(payloadHash)) {
-    throw new Error('payloadHash must be a Buffer');
-  }
-  const truncated = payloadHash.slice(0, CONFIG.messageBytes);
-  return Array.from(truncated);
-}
-
-/**
- * Convert 5-byte integer array back to Buffer
- */
-function messageToHash(message) {
-  if (!Array.isArray(message) || message.length !== CONFIG.messageBytes) {
-    throw new Error(`Message must be array of ${CONFIG.messageBytes} integers`);
-  }
-  return Buffer.from(message);
-}
-
-/**
- * Check if Python and AudioSeal are available
+ * Check if Python and Perth are available
+ * @returns {Promise<{available: boolean, message: string, details?: Object}>}
  */
 async function checkPythonEnvironment() {
   return new Promise((resolve) => {
     try {
-      const pythonVersion = execFileSync(CONFIG.pythonCommand, ['--version'], {
+      const pythonVersion = execFileSync(PERTH_CONFIG.pythonCommand, ['--version'], {
         encoding: 'utf8',
         timeout: 5000,
       }).trim();
       
-      if (!fs.existsSync(CONFIG.scriptPath)) {
+      if (!fs.existsSync(PERTH_CONFIG.scriptPath)) {
         resolve({
           available: false,
-          message: 'AudioSeal script not found',
-          details: { scriptPath: CONFIG.scriptPath }
+          message: 'Perth watermark script not found',
+          details: { scriptPath: PERTH_CONFIG.scriptPath }
         });
         return;
       }
       
-      const proc = spawn(CONFIG.pythonCommand, [
-        CONFIG.scriptPath,
+      const proc = spawn(PERTH_CONFIG.pythonCommand, [
+        PERTH_CONFIG.scriptPath,
         'check'
       ], {
-        cwd: path.dirname(CONFIG.scriptPath),
-        env: CONFIG.env,
+        cwd: path.dirname(PERTH_CONFIG.scriptPath),
+        env: PERTH_CONFIG.env,
       });
       
       let stdout = '';
@@ -125,15 +105,15 @@ async function checkPythonEnvironment() {
           } catch (e) {
             resolve({
               available: true,
-              message: 'AudioSeal environment ready',
+              message: 'Perth environment ready',
               details: { pythonVersion }
             });
           }
         } else {
           resolve({
             available: false,
-            message: `AudioSeal check failed: ${stderr || stdout}`,
-            details: { pythonVersion, install: 'pip install audioseal soundfile librosa blake3' }
+            message: `Perth check failed: ${stderr || stdout}`,
+            details: { pythonVersion, install: 'pip install resemble-perth soundfile librosa' }
           });
         }
       });
@@ -141,7 +121,7 @@ async function checkPythonEnvironment() {
       proc.on('error', (err) => {
         resolve({
           available: false,
-          message: `AudioSeal Python process error: ${err.message}`,
+          message: `Perth Python process error: ${err.message}`,
           details: { error: err.message }
         });
       });
@@ -151,8 +131,8 @@ async function checkPythonEnvironment() {
         available: false,
         message: `Python not available: ${error.message}`,
         details: {
-          pythonCommand: CONFIG.pythonCommand,
-          install: 'pip install audioseal soundfile librosa blake3'
+          pythonCommand: PERTH_CONFIG.pythonCommand,
+          install: 'pip install resemble-perth soundfile librosa'
         }
       });
     }
@@ -160,9 +140,12 @@ async function checkPythonEnvironment() {
 }
 
 /**
- * Embed watermark into audio using AudioSeal
+ * Embed Perth neural watermark into audio
+ * @param {Buffer|string} input - Audio Buffer or file path
+ * @param {Object} options - Embed options
+ * @returns {Promise<Object>}
  */
-async function embed(input, messageOrHash, options = {}) {
+async function embed(input, options = {}) {
   const {
     outputPath = null,
     verbose = process.env.ORBIT_ML_VERBOSE === 'true',
@@ -174,7 +157,7 @@ async function embed(input, messageOrHash, options = {}) {
   if (Buffer.isBuffer(input)) {
     inputTempFile = path.join(
       os.tmpdir(),
-      `orbit-wm-in-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`
+      idEngine.tempAudioFilename('orbit-perth-input', '.wav')
     );
     fs.writeFileSync(inputTempFile, input);
     audioPath = inputTempFile;
@@ -187,35 +170,29 @@ async function embed(input, messageOrHash, options = {}) {
     throw new Error('Input must be a file path string or Buffer');
   }
   
-  let payloadBytes;
-  if (Buffer.isBuffer(messageOrHash)) {
-    payloadBytes = messageOrHash.slice(0, CONFIG.messageBytes);
-  } else if (Array.isArray(messageOrHash)) {
-    payloadBytes = Buffer.from(messageOrHash);
-  } else {
-    throw new Error('Payload must be a Buffer or byte array');
-  }
-  
   const finalOutputPath = outputPath || path.join(
     os.tmpdir(),
-    `orbit-wm-out-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`
+    idEngine.tempAudioFilename('orbit-perth-output', '.wav')
   );
   
   try {
+    if (verbose) {
+      console.log(`[Perth] Embedding perceptual watermark into ${audioPath}`);
+    }
+    
     return await new Promise((resolve, reject) => {
       const startTime = Date.now();
       
-      const proc = spawn(CONFIG.pythonCommand, [
-        CONFIG.scriptPath,
+      const proc = spawn(PERTH_CONFIG.pythonCommand, [
+        PERTH_CONFIG.scriptPath,
         'embed',
         audioPath,
         finalOutputPath,
-        '--payload', payloadBytes.toString('hex'),
-        '--sample-rate', String(CONFIG.sampleRate),
+        '--sample-rate', String(PERTH_CONFIG.sampleRate),
       ], {
-        cwd: path.dirname(CONFIG.scriptPath),
-        timeout: CONFIG.embedTimeout,
-        env: CONFIG.env,
+        cwd: path.dirname(PERTH_CONFIG.scriptPath),
+        timeout: PERTH_CONFIG.embedTimeout,
+        env: PERTH_CONFIG.env,
       });
       
       let stdout = '';
@@ -233,9 +210,9 @@ async function embed(input, messageOrHash, options = {}) {
         if (code !== 0) {
           try {
             const errorData = JSON.parse(stdout);
-            reject(new Error(`AudioSeal embed error (${errorData.error}): ${errorData.message}`));
+            reject(new Error(`Perth embed error (${errorData.error}): ${errorData.message}`));
           } catch (e) {
-            reject(new Error(`AudioSeal embed failed (code ${code}): ${stderr || stdout}`));
+            reject(new Error(`Perth embed failed (code ${code}): ${stderr || stdout}`));
           }
           return;
         }
@@ -253,19 +230,17 @@ async function embed(input, messageOrHash, options = {}) {
             outputPath: finalOutputPath,
             watermarkedAudio,
             sdr: result.sdr,
-            payloadHash: payloadBytes,
-            message: Array.from(payloadBytes),
             duration: result.duration,
             processingTimeMs: elapsed,
-            method: 'audioseal',
+            method: 'perth',
           });
         } catch (parseError) {
-          reject(new Error(`Failed to parse AudioSeal output: ${parseError.message}\nOutput: ${stdout}`));
+          reject(new Error(`Failed to parse Perth output: ${parseError.message}\nOutput: ${stdout}`));
         }
       });
       
       proc.on('error', (err) => {
-        reject(new Error(`AudioSeal process error: ${err.message}`));
+        reject(new Error(`Perth process error: ${err.message}`));
       });
     });
   } finally {
@@ -276,7 +251,10 @@ async function embed(input, messageOrHash, options = {}) {
 }
 
 /**
- * Extract watermark from audio using AudioSeal
+ * Extract watermark from audio using Perth
+ * @param {Buffer|string} input - Audio Buffer or file path
+ * @param {Object} options - Extract options
+ * @returns {Promise<Object>}
  */
 async function extract(input, options = {}) {
   const {
@@ -289,7 +267,7 @@ async function extract(input, options = {}) {
   if (Buffer.isBuffer(input)) {
     tempFile = path.join(
       os.tmpdir(),
-      `orbit-wm-ext-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`
+      idEngine.tempAudioFilename('orbit-perth-extract', '.wav')
     );
     fs.writeFileSync(tempFile, input);
     audioPath = tempFile;
@@ -303,18 +281,22 @@ async function extract(input, options = {}) {
   }
   
   try {
+    if (verbose) {
+      console.log(`[Perth] Extracting watermark from ${audioPath}`);
+    }
+    
     return await new Promise((resolve, reject) => {
       const startTime = Date.now();
       
-      const proc = spawn(CONFIG.pythonCommand, [
-        CONFIG.scriptPath,
+      const proc = spawn(PERTH_CONFIG.pythonCommand, [
+        PERTH_CONFIG.scriptPath,
         'extract',
         audioPath,
-        '--sample-rate', String(CONFIG.sampleRate),
+        '--sample-rate', String(PERTH_CONFIG.sampleRate),
       ], {
-        cwd: path.dirname(CONFIG.scriptPath),
-        timeout: CONFIG.extractTimeout,
-        env: CONFIG.env,
+        cwd: path.dirname(PERTH_CONFIG.scriptPath),
+        timeout: PERTH_CONFIG.extractTimeout,
+        env: PERTH_CONFIG.env,
       });
       
       let stdout = '';
@@ -332,44 +314,32 @@ async function extract(input, options = {}) {
         if (code !== 0) {
           try {
             const errorData = JSON.parse(stdout);
-            reject(new Error(`AudioSeal extract error (${errorData.error}): ${errorData.message}`));
+            reject(new Error(`Perth extract error (${errorData.error}): ${errorData.message}`));
           } catch (e) {
-            reject(new Error(`AudioSeal extract failed (code ${code}): ${stderr || stdout}`));
+            reject(new Error(`Perth extract failed (code ${code}): ${stderr || stdout}`));
           }
           return;
         }
         
         try {
           const result = JSON.parse(stdout);
-          let payloadHash = null;
-          let message = null;
-          
-          if (result.payload_hex) {
-            payloadHash = Buffer.from(result.payload_hex, 'hex');
-            message = Array.from(payloadHash);
-          }
-          
-          const detected = !!result.detected && (result.confidence >= CONFIG.confidenceThreshold || result.crc_valid);
+          const detected = !!result.detected && (result.confidence >= PERTH_CONFIG.confidenceThreshold);
           
           resolve({
             success: true,
             detected,
-            payloadHash,
-            message,
             confidence: result.confidence || 0,
-            crcValid: result.crc_valid || false,
             duration: result.duration,
-            slotsDetected: result.slots_detected || [],
             processingTimeMs: elapsed,
-            method: 'audioseal',
+            method: 'perth',
           });
         } catch (parseError) {
-          reject(new Error(`Failed to parse AudioSeal output: ${parseError.message}\nOutput: ${stdout}`));
+          reject(new Error(`Failed to parse Perth output: ${parseError.message}\nOutput: ${stdout}`));
         }
       });
       
       proc.on('error', (err) => {
-        reject(new Error(`AudioSeal process error: ${err.message}`));
+        reject(new Error(`Perth process error: ${err.message}`));
       });
     });
   } finally {
@@ -379,25 +349,9 @@ async function extract(input, options = {}) {
   }
 }
 
-/**
- * Compare extracted message/hash against expected
- */
-function hashMatches(extracted, expected) {
-  if (!extracted || !expected) return false;
-  
-  let extBuf = Buffer.isBuffer(extracted) ? extracted : Buffer.from(extracted);
-  let expBuf = Buffer.isBuffer(expected) ? expected : Buffer.from(expected);
-  
-  const len = Math.min(CONFIG.messageBytes, extBuf.length, expBuf.length);
-  return extBuf.slice(0, len).equals(expBuf.slice(0, len));
-}
-
 module.exports = {
   embed,
   extract,
   checkPythonEnvironment,
-  hashToMessage,
-  messageToHash,
-  hashMatches,
-  config: { ...CONFIG },
+  config: { ...PERTH_CONFIG },
 };

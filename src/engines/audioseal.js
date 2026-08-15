@@ -1,18 +1,22 @@
 /**
- * @ohnrshyp/watermark
+ * ORBIT AudioSeal Neural Watermarking Engine (OrbitSeal)
  * 
- * Standalone AudioSeal (Primary) and Perth (Fallback) Neural Watermarking Connector
+ * High-fidelity neural audio watermarking with Meta FAIR AudioSeal:
+ * - 40-bit (5-byte) Time-Division Slot Multiplexing Protocol (1.0s fixed intervals)
+ * - Full 40-bit BLAKE3 hash capacity with CRC-2 integrity validation
+ * - High SNR / SDR (34dB+) and robust compression resilience
  * 
- * @module @ohnrshyp/watermark
+ * @module engines/audioseal
  */
 
 const { spawn, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const idEngine = require('../utils/id');
 
 /**
- * Resolve python command path by traversing parent directories to find virtual environments.
+ * Resolve python command path for AudioSeal by traversing parent directories
  */
 function resolvePythonCommand() {
   if (process.env.ORBIT_AUDIOSEAL_PYTHON) {
@@ -44,10 +48,9 @@ function resolvePythonCommand() {
   return isWin ? 'python' : 'python3';
 }
 
-const CONFIG = {
-  scriptPath: path.join(__dirname, '../scripts/audioseal_watermark.py'),
-  perthScriptPath: path.join(__dirname, '../scripts/perth_watermark.py'),
-  messageBytes: 5,
+const AUDIOSEAL_CONFIG = {
+  scriptPath: path.join(__dirname, '../../scripts/audioseal_watermark.py'),
+  messageBytes: 5, // 40 bits
   sampleRate: 16000,
   pythonCommand: resolvePythonCommand(),
   embedTimeout: 180000,
@@ -63,52 +66,44 @@ const CONFIG = {
 };
 
 /**
- * Convert Buffer/hash to 5-byte integer array
+ * Convert Buffer/hash to 5-byte BLAKE3 payload format
+ * @param {Buffer} payloadHash 
+ * @returns {Buffer} 5-byte Buffer
  */
-function hashToMessage(payloadHash) {
+function hashToPayload(payloadHash) {
   if (!Buffer.isBuffer(payloadHash)) {
     throw new Error('payloadHash must be a Buffer');
   }
-  const truncated = payloadHash.slice(0, CONFIG.messageBytes);
-  return Array.from(truncated);
-}
-
-/**
- * Convert 5-byte integer array back to Buffer
- */
-function messageToHash(message) {
-  if (!Array.isArray(message) || message.length !== CONFIG.messageBytes) {
-    throw new Error(`Message must be array of ${CONFIG.messageBytes} integers`);
-  }
-  return Buffer.from(message);
+  return payloadHash.slice(0, AUDIOSEAL_CONFIG.messageBytes);
 }
 
 /**
  * Check if Python and AudioSeal are available
+ * @returns {Promise<{available: boolean, message: string, details?: Object}>}
  */
 async function checkPythonEnvironment() {
   return new Promise((resolve) => {
     try {
-      const pythonVersion = execFileSync(CONFIG.pythonCommand, ['--version'], {
+      const pythonVersion = execFileSync(AUDIOSEAL_CONFIG.pythonCommand, ['--version'], {
         encoding: 'utf8',
         timeout: 5000,
       }).trim();
       
-      if (!fs.existsSync(CONFIG.scriptPath)) {
+      if (!fs.existsSync(AUDIOSEAL_CONFIG.scriptPath)) {
         resolve({
           available: false,
-          message: 'AudioSeal script not found',
-          details: { scriptPath: CONFIG.scriptPath }
+          message: 'AudioSeal watermark script not found',
+          details: { scriptPath: AUDIOSEAL_CONFIG.scriptPath }
         });
         return;
       }
       
-      const proc = spawn(CONFIG.pythonCommand, [
-        CONFIG.scriptPath,
+      const proc = spawn(AUDIOSEAL_CONFIG.pythonCommand, [
+        AUDIOSEAL_CONFIG.scriptPath,
         'check'
       ], {
-        cwd: path.dirname(CONFIG.scriptPath),
-        env: CONFIG.env,
+        cwd: path.dirname(AUDIOSEAL_CONFIG.scriptPath),
+        env: AUDIOSEAL_CONFIG.env,
       });
       
       let stdout = '';
@@ -151,7 +146,7 @@ async function checkPythonEnvironment() {
         available: false,
         message: `Python not available: ${error.message}`,
         details: {
-          pythonCommand: CONFIG.pythonCommand,
+          pythonCommand: AUDIOSEAL_CONFIG.pythonCommand,
           install: 'pip install audioseal soundfile librosa blake3'
         }
       });
@@ -160,9 +155,13 @@ async function checkPythonEnvironment() {
 }
 
 /**
- * Embed watermark into audio using AudioSeal
+ * Embed watermark into audio using AudioSeal 40-bit frame multiplexing
+ * @param {Buffer|string} input - Audio Buffer or file path
+ * @param {Buffer} payloadHash - 5-byte (or full) BLAKE3 hash Buffer
+ * @param {Object} options - Embed options
+ * @returns {Promise<Object>}
  */
-async function embed(input, messageOrHash, options = {}) {
+async function embed(input, payloadHash, options = {}) {
   const {
     outputPath = null,
     verbose = process.env.ORBIT_ML_VERBOSE === 'true',
@@ -174,7 +173,7 @@ async function embed(input, messageOrHash, options = {}) {
   if (Buffer.isBuffer(input)) {
     inputTempFile = path.join(
       os.tmpdir(),
-      `orbit-wm-in-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`
+      idEngine.tempAudioFilename('orbit-as-input', '.wav')
     );
     fs.writeFileSync(inputTempFile, input);
     audioPath = inputTempFile;
@@ -187,35 +186,33 @@ async function embed(input, messageOrHash, options = {}) {
     throw new Error('Input must be a file path string or Buffer');
   }
   
-  let payloadBytes;
-  if (Buffer.isBuffer(messageOrHash)) {
-    payloadBytes = messageOrHash.slice(0, CONFIG.messageBytes);
-  } else if (Array.isArray(messageOrHash)) {
-    payloadBytes = Buffer.from(messageOrHash);
-  } else {
-    throw new Error('Payload must be a Buffer or byte array');
-  }
-  
   const finalOutputPath = outputPath || path.join(
     os.tmpdir(),
-    `orbit-wm-out-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`
+    idEngine.tempAudioFilename('orbit-as-output', '.wav')
   );
   
+  const payload5 = hashToPayload(payloadHash);
+  const payloadHex = payload5.toString('hex');
+  
   try {
+    if (verbose) {
+      console.log(`[AudioSeal] Embedding 40-bit watermark (${payloadHex}) into ${audioPath}`);
+    }
+    
     return await new Promise((resolve, reject) => {
       const startTime = Date.now();
       
-      const proc = spawn(CONFIG.pythonCommand, [
-        CONFIG.scriptPath,
+      const proc = spawn(AUDIOSEAL_CONFIG.pythonCommand, [
+        AUDIOSEAL_CONFIG.scriptPath,
         'embed',
         audioPath,
         finalOutputPath,
-        '--payload', payloadBytes.toString('hex'),
-        '--sample-rate', String(CONFIG.sampleRate),
+        '--payload', payloadHex,
+        '--sample-rate', String(AUDIOSEAL_CONFIG.sampleRate),
       ], {
-        cwd: path.dirname(CONFIG.scriptPath),
-        timeout: CONFIG.embedTimeout,
-        env: CONFIG.env,
+        cwd: path.dirname(AUDIOSEAL_CONFIG.scriptPath),
+        timeout: AUDIOSEAL_CONFIG.embedTimeout,
+        env: AUDIOSEAL_CONFIG.env,
       });
       
       let stdout = '';
@@ -253,8 +250,8 @@ async function embed(input, messageOrHash, options = {}) {
             outputPath: finalOutputPath,
             watermarkedAudio,
             sdr: result.sdr,
-            payloadHash: payloadBytes,
-            message: Array.from(payloadBytes),
+            payloadHash: payload5,
+            payloadHex: result.payload_hex,
             duration: result.duration,
             processingTimeMs: elapsed,
             method: 'audioseal',
@@ -277,6 +274,9 @@ async function embed(input, messageOrHash, options = {}) {
 
 /**
  * Extract watermark from audio using AudioSeal
+ * @param {Buffer|string} input - Audio Buffer or file path
+ * @param {Object} options - Extract options
+ * @returns {Promise<Object>}
  */
 async function extract(input, options = {}) {
   const {
@@ -289,7 +289,7 @@ async function extract(input, options = {}) {
   if (Buffer.isBuffer(input)) {
     tempFile = path.join(
       os.tmpdir(),
-      `orbit-wm-ext-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`
+      idEngine.tempAudioFilename('orbit-as-extract', '.wav')
     );
     fs.writeFileSync(tempFile, input);
     audioPath = tempFile;
@@ -303,18 +303,22 @@ async function extract(input, options = {}) {
   }
   
   try {
+    if (verbose) {
+      console.log(`[AudioSeal] Extracting watermark from ${audioPath}`);
+    }
+    
     return await new Promise((resolve, reject) => {
       const startTime = Date.now();
       
-      const proc = spawn(CONFIG.pythonCommand, [
-        CONFIG.scriptPath,
+      const proc = spawn(AUDIOSEAL_CONFIG.pythonCommand, [
+        AUDIOSEAL_CONFIG.scriptPath,
         'extract',
         audioPath,
-        '--sample-rate', String(CONFIG.sampleRate),
+        '--sample-rate', String(AUDIOSEAL_CONFIG.sampleRate),
       ], {
-        cwd: path.dirname(CONFIG.scriptPath),
-        timeout: CONFIG.extractTimeout,
-        env: CONFIG.env,
+        cwd: path.dirname(AUDIOSEAL_CONFIG.scriptPath),
+        timeout: AUDIOSEAL_CONFIG.extractTimeout,
+        env: AUDIOSEAL_CONFIG.env,
       });
       
       let stdout = '';
@@ -342,20 +346,17 @@ async function extract(input, options = {}) {
         try {
           const result = JSON.parse(stdout);
           let payloadHash = null;
-          let message = null;
-          
           if (result.payload_hex) {
             payloadHash = Buffer.from(result.payload_hex, 'hex');
-            message = Array.from(payloadHash);
           }
           
-          const detected = !!result.detected && (result.confidence >= CONFIG.confidenceThreshold || result.crc_valid);
+          const detected = !!result.detected && (result.confidence >= AUDIOSEAL_CONFIG.confidenceThreshold || result.crc_valid);
           
           resolve({
             success: true,
             detected,
             payloadHash,
-            message,
+            payloadHex: result.payload_hex || null,
             confidence: result.confidence || 0,
             crcValid: result.crc_valid || false,
             duration: result.duration,
@@ -380,24 +381,23 @@ async function extract(input, options = {}) {
 }
 
 /**
- * Compare extracted message/hash against expected
+ * Compare extracted hash against expected hash
+ * @param {Buffer} extractedHash 
+ * @param {Buffer} expectedHash 
+ * @returns {boolean}
  */
-function hashMatches(extracted, expected) {
-  if (!extracted || !expected) return false;
-  
-  let extBuf = Buffer.isBuffer(extracted) ? extracted : Buffer.from(extracted);
-  let expBuf = Buffer.isBuffer(expected) ? expected : Buffer.from(expected);
-  
-  const len = Math.min(CONFIG.messageBytes, extBuf.length, expBuf.length);
-  return extBuf.slice(0, len).equals(expBuf.slice(0, len));
+function hashMatches(extractedHash, expectedHash) {
+  if (!extractedHash || !expectedHash) return false;
+  const expectedPrefix = expectedHash.slice(0, AUDIOSEAL_CONFIG.messageBytes);
+  return extractedHash.slice(0, AUDIOSEAL_CONFIG.messageBytes).equals(expectedPrefix);
 }
 
 module.exports = {
   embed,
   extract,
   checkPythonEnvironment,
-  hashToMessage,
-  messageToHash,
+  hashToPayload,
   hashMatches,
-  config: { ...CONFIG },
+  config: { ...AUDIOSEAL_CONFIG },
+  MESSAGE_BYTES: AUDIOSEAL_CONFIG.messageBytes,
 };
