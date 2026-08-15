@@ -97,3 +97,7 @@ sdk/IMPLEMENTATION_SUMMARY.md
 ohnrscript/
 mOhnolith/
 scratch/
+
+# Ohnrscript Phase Validation Results
+phase1_results.json
+phase2_results.json
