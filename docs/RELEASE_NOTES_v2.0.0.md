@@ -112,8 +112,17 @@ All workspace packages across NPM and PyPI are synchronized to `v2.0.0`:
 
 ---
 
-## 🔄 7. Migration Guide (Upgrading from v1.x to v2.0.0)
+## 🛡️ 7. Security, Supply-Chain & OpenSSF Best Practices Passing Status
 
+ORBIT v2.0.0 achieves critical enterprise security and open-source supply-chain verification milestones:
+
+* **OpenSSF Best Practices (Passing Badge):** Officially verified and awarded a passing grade under the Open Source Security Foundation (OpenSSF) Best Practices criteria ([Project #14095](https://www.bestpractices.dev/projects/14095)), meeting rigorous standards for non-repudiable cryptographic signing, automated regression testing, vulnerability reporting, and licensing transparency.
+* **Automated OpenSSF Scorecard & SLSA Level 1:** Integrated weekly automated security auditing (`.github/workflows/scorecard.yml`) to evaluate token permissions, branch protections, and supply-chain provenance compliant with **SLSA Level 1** build specifications.
+* **Continuous Test Coverage (Codecov):** Automated V8 coverage reporting via `c8` and Codecov CI integration across all core engines and SDK modules.
+
+---
+
+## 🔄 8. Migration Guide (Upgrading from v1.x to v2.0.0)
 
 1. **Update Node dependencies:**
    ```bash
