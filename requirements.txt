@@ -6,7 +6,7 @@ resemble-perth>=1.0.1
 blake3>=0.4.1
 librosa>=0.10.0
 soundfile>=0.12.1
-numpy>=1.24.0
+numpy>=2.5.2
 transformers>=4.30.0
 scipy>=1.10.0
 setuptools
