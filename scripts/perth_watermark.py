@@ -26,6 +26,25 @@ os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
 warnings.filterwarnings('ignore')
 
+# Ensure librosa exposes resample for resemble-perth compatibility across all librosa versions
+try:
+    import librosa
+    if not hasattr(librosa, 'resample'):
+        try:
+            from librosa.core import resample as _resample
+            librosa.resample = _resample
+        except Exception:
+            import scipy.signal
+            def _resample_fallback(y, orig_sr, target_sr, **kwargs):
+                if orig_sr == target_sr:
+                    return y
+                num = int(len(y) * target_sr / orig_sr)
+                return scipy.signal.resample(y, num)
+            librosa.resample = _resample_fallback
+except Exception:
+    pass
+
+
 class CaptureOutput:
     """Context manager to capture stdout/stderr buffers to prevent JSON corruption."""
     def __init__(self):

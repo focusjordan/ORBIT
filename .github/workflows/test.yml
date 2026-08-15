@@ -41,7 +41,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Install Chromaprint & FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y libchromaprint-tools ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libchromaprint-tools ffmpeg
       - name: Create test audio fixtures
         run: |
           ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3 -y
@@ -75,7 +75,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Install Chromaprint & FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y libchromaprint-tools ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libchromaprint-tools ffmpeg
       - name: Create test audio fixtures
         run: |
           ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3 -y
@@ -139,7 +139,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Install Chromaprint & FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y libchromaprint-tools ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libchromaprint-tools ffmpeg
       - name: Create test audio fixtures
         run: |
           ffmpeg -f lavfi -i "sine=frequency=440:duration=30" -b:a 192k tests/fixtures/test-audio.mp3 -y
