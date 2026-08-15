@@ -30,6 +30,18 @@ async function runTests() {
     } catch (error) {
       console.log(`   ❌ Failed: ${error.message}\n`);
     }
+
+    console.log('Test 1b: Get detailed audio file info');
+    try {
+      const detailed = AudioUtils.getDetailedAudioInfo(testAudio);
+      console.assert(detailed.duration > 0, 'Detailed duration should be positive');
+      console.assert(detailed.channels >= 1, 'Detailed channels should be >= 1');
+      console.assert(detailed.sampleRate >= 8000, 'Detailed sampleRate should be valid');
+      console.log(`   Detailed: ${detailed.channels} channels, ${detailed.sampleRate}Hz, codec: ${detailed.codec}`);
+      console.log('   ✅ Got detailed audio info\n');
+    } catch (error) {
+      console.log(`   ❌ Failed: ${error.message}\n`);
+    }
   }
   
   // Test 2: Load audio samples from MP3
@@ -89,20 +101,47 @@ async function runTests() {
     console.log(`   ❌ Failed: ${error.message}\n`);
   }
   
-  // Test 4: Load from Buffer
+  // Test 4: Load from Buffer & Decode Helpers
   if (hasFFmpeg && fs.existsSync(testAudio)) {
-    console.log('Test 4: Load from Buffer');
+    console.log('Test 4: Load from Buffer & Convenience Decoders');
     try {
       const buffer = fs.readFileSync(testAudio);
       const audio = await AudioUtils.loadAudioSamples(buffer);
       
       console.assert(audio.samples.length > 0, 'Should have samples');
-      console.log(`   Loaded ${audio.samples.length} samples from Buffer`);
-      console.log('   ✅ Buffer loading works\n');
+      
+      const monoSamples = await AudioUtils.decodeAudioToSamples(buffer);
+      console.assert(monoSamples instanceof Float32Array, 'Mono decode returns Float32Array');
+
+      const stereoObj = await AudioUtils.decodeAudioToSamples(buffer, { preserveStereo: true });
+      console.assert(stereoObj.samples instanceof Float32Array, 'Stereo decode contains samples');
+      console.assert(Array.isArray(stereoObj.channels), 'Stereo decode contains channels');
+
+      console.log('   ✅ Buffer loading & decoding helpers work\n');
     } catch (error) {
       console.log(`   ❌ Failed: ${error.message}\n`);
     }
   }
+
+  // Test 5: Encode Samples to WAV (Mono & Stereo)
+  console.log('Test 5: Encode Samples to WAV');
+  const dummySamples = new Float32Array(44100).fill(0.1);
+  const monoWav = await AudioUtils.encodeSamplesToWav(dummySamples, 44100);
+  console.assert(Buffer.isBuffer(monoWav) && monoWav.length > 44, 'Mono WAV encoded');
+
+  const stereoDuplicated = await AudioUtils.encodeSamplesToWav(dummySamples, 44100, 2);
+  console.assert(Buffer.isBuffer(stereoDuplicated) && stereoDuplicated.length > 44, 'Stereo duplicate WAV encoded');
+
+  const multiChannel = await AudioUtils.encodeSamplesToWav([dummySamples, dummySamples], 44100);
+  console.assert(Buffer.isBuffer(multiChannel) && multiChannel.length > 44, 'Multi-channel WAV encoded');
+
+  try {
+    await AudioUtils.encodeSamplesToWav('invalid-samples');
+    console.assert(false, 'Should throw on invalid samples type');
+  } catch (err) {
+    console.assert(err.message.includes('Samples must be'), 'Correct error for invalid samples');
+  }
+  console.log('   ✅ WAV encoding helpers work\n');
   
   console.log('🧪 Audio utilities tests complete!');
 }

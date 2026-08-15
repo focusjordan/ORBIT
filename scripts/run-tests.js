@@ -87,8 +87,12 @@ const TEST_SUITES = {
   // V1 Unit Tests - No external dependencies (except fpcalc/ffmpeg)
   'v1:unit': [
     { name: 'Crypto Engine', file: 'tests/engines/crypto.test.js' },
+    { name: 'Fingerprint Engine', file: 'tests/engines/fingerprint.test.js' },
     { name: 'Watermark Embed', file: 'tests/engines/watermark-embed.test.js' },
     { name: 'Watermark Extract', file: 'tests/engines/watermark-extract.test.js' },
+    { name: 'Watermark Unified', file: 'tests/engines/watermark-unified.test.js' },
+    { name: 'SDK Unit Tests', file: 'tests/sdk/sdk-unit.test.js' },
+    { name: 'CBOR Engine', file: 'tests/utils/cbor.test.js' },
     { name: 'Audio Utils', file: 'tests/utils/audio.test.js' },
   ],
   
