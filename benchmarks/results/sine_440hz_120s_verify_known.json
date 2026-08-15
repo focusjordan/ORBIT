@@ -1,0 +1,59 @@
+{
+  "verified": true,
+  "fingerprint_hash": "efea9b4d8ca8d296926e942e6126d9e6127f3f0258f76ce4c8168fd24f991556",
+  "fingerprint_match": {
+    "registration_id": "7",
+    "similarity": 1,
+    "matched_at": "2026-02-23T20:30:46.766Z"
+  },
+  "watermark": {
+    "detected": false,
+    "valid": false,
+    "method": null,
+    "confidence": 0,
+    "payload_hash": null,
+    "fallback_attempted": false
+  },
+  "metadata": {
+    "isrc": null,
+    "upc": null,
+    "title": "sine_440hz_120s",
+    "artist": "ORBIT Benchmark",
+    "duration_ms": 120000,
+    "p_line": null,
+    "c_line": null,
+    "primary_genre": "Test",
+    "secondary_genre": null,
+    "language": null,
+    "album_title": null,
+    "track_number": null,
+    "release_date": null,
+    "label": null,
+    "version": null,
+    "parental_advisory": null,
+    "bitrate": null,
+    "sample_rate": 44100,
+    "channels": 1,
+    "format": "wav",
+    "featured_artists": null,
+    "composers": null,
+    "lyricists": null,
+    "writers": null,
+    "producers": null,
+    "remixer": null,
+    "iswc": null,
+    "territories": null,
+    "preview_start_ms": null
+  },
+  "origin": {
+    "platform": "ohnrshyp",
+    "owner_id": "ohnrshyp",
+    "timestamp": "2026-02-23T20:30:38.476Z",
+    "signature_valid": false,
+    "registered_at": "2026-02-23T20:30:46.766Z"
+  },
+  "transfers": [],
+  "duplicate_of": null,
+  "ai_detection": null,
+  "processing_time_ms": 130715
+}

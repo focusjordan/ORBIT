@@ -1,0 +1,48 @@
+{
+  "cluster_parameters": {
+    "cluster_gpus": 32000,
+    "gpus_per_server": 8,
+    "num_servers": 4000,
+    "pue": 1.2,
+    "electricity_cost_kwh": 0.09
+  },
+  "server_bom_savings": {
+    "num_servers": 4000,
+    "baseline_dimms_per_server": 16,
+    "baseline_ram_per_server_gb": 2048,
+    "baseline_cost_per_server_usd": 23200.0,
+    "baseline_cluster_capex_usd": 92800000.0,
+    "ohnr_dimms_per_server": 12,
+    "ohnr_ram_per_server_gb": 768,
+    "ohnr_cost_per_server_usd": 3480.0,
+    "ohnr_cluster_capex_usd": 13920000.0,
+    "net_capex_savings_usd": 78880000.0,
+    "capex_savings_percent": 85.0
+  },
+  "thermodynamic_power_savings": {
+    "baseline_dram_watts_per_server": 216.0,
+    "ohnr_dram_watts_per_server": 84.0,
+    "watts_saved_per_server": 132.0,
+    "cluster_continuous_kw_saved": 633.6,
+    "annual_mwh_saved": 5550.34,
+    "annual_power_cost_savings_usd": 499530.24,
+    "co2_metric_tons_abated_per_year": 2136.88
+  },
+  "semiconductor_wafer_relief": {
+    "gross_dies_per_300mm_wafer": 1195.3,
+    "baseline_total_300mm_wafers_required": 2519.6,
+    "ohnr_total_300mm_wafers_required": 713.9,
+    "net_300mm_wafers_freed": 1805.7,
+    "wafer_capacity_relief_percent": 71.67,
+    "equivalent_consumer_memory_units_freed": 242823
+  },
+  "gpu_training_roi": {
+    "baseline_training_days": 90.0,
+    "accelerated_training_days": 76.5,
+    "training_days_saved": 13.5,
+    "baseline_cluster_run_cost_usd": 221184000.0,
+    "operational_cost_savings_usd": 33177600.0,
+    "savings_percent": 15.0
+  },
+  "total_first_year_financial_benefit_usd": 112557130.24
+}

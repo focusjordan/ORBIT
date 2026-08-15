@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "registration_id": "18",
+  "fingerprint_hash": "b59eb9a4683bae10d2b508980b803210aa1ca15dbb5991159bd1fc6779c8fc1b",
+  "watermark_hash": "e2a04635d3f7b4a8907ad244e4532e20",
+  "watermark_method": "silentcipher",
+  "registered_at": "2026-02-23T20:59:03.735Z",
+  "watermarked_file": "benchmarks/audio/complex_fullmix_120s.orbit.wav",
+  "processing_time_ms": 8720,
+  "ai_detection": null,
+  "catalog_check": null
+}

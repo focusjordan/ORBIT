@@ -1,0 +1,72 @@
+{
+  "analysis": {
+    "genre": [
+      {
+        "label": "electronic",
+        "confidence": 0.12069209665060043
+      },
+      {
+        "label": "hip_hop",
+        "confidence": 0.13256074488162994
+      },
+      {
+        "label": "rock",
+        "confidence": 0.015155303291976452
+      }
+    ],
+    "mood": [
+      {
+        "label": "happy",
+        "confidence": 0.07433868944644928
+      },
+      {
+        "label": "sad",
+        "confidence": 0.10115209221839905
+      },
+      {
+        "label": "energetic",
+        "confidence": 0.2823851406574249
+      }
+    ],
+    "instruments": [
+      {
+        "label": "bass",
+        "confidence": 0.2046421766281128
+      },
+      {
+        "label": "harmonica",
+        "confidence": 0.2090030312538147
+      }
+    ],
+    "vocals": {
+      "present": false,
+      "confidence": 0.4267115890979767,
+      "gender": null,
+      "genderConfidence": null
+    },
+    "bpm": {
+      "value": 0,
+      "confidence": 0
+    },
+    "key": {
+      "value": "A major",
+      "key": "A",
+      "mode": "major",
+      "confidence": 0.8417
+    },
+    "energy": 0.5889,
+    "loudness_db": -21.07,
+    "danceability": 0.2356,
+    "duration": 30
+  },
+  "processing_time_ms": 6531,
+  "extraction_status": {
+    "clap": "success",
+    "audioAnalysis": "success",
+    "embedding": "disabled"
+  },
+  "fingerprint": {
+    "chromaprint_hash": "4a55ed17c1a29496046d47636df7c170f2d98a019ec529abe47f07ffceabb1af",
+    "duration": 30
+  }
+}

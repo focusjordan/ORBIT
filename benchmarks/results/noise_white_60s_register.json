@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "registration_id": "10",
+  "fingerprint_hash": "c63f1a13a31ad0ec13bffd68ddf220d3bf5aac8c185aeeb4253c424bcba727fa",
+  "watermark_hash": "cf9bfe0a645c06cd819e51f8bdf1261b",
+  "watermark_method": "silentcipher",
+  "registered_at": "2026-02-23T20:38:35.907Z",
+  "watermarked_file": "benchmarks/audio/noise_white_60s.orbit.wav",
+  "processing_time_ms": 7533,
+  "ai_detection": null,
+  "catalog_check": null
+}
