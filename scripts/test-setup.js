@@ -15,8 +15,8 @@
 
 require('dotenv').config();
 
-// Force spread spectrum watermarking - SilentCipher requires GPU
-process.env.ORBIT_WATERMARK_METHOD = 'spread';
+// ORBIT Neural Watermarking: AudioSeal (Primary) + Perth (Fallback)
+process.env.ORBIT_WATERMARK_METHOD = process.env.ORBIT_WATERMARK_METHOD || 'auto';
 
 const { Pool } = require('pg');
 const fs = require('fs');

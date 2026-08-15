@@ -111,12 +111,12 @@ if command -v nvidia-smi &> /dev/null; then
     echo "NVIDIA GPU detected:"
     nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
     echo "Installing PyTorch with CUDA support..."
-    pip install torch transformers librosa numpy soundfile silentcipher
+    pip install torch transformers librosa numpy soundfile audioseal resemble-perth blake3
 else
     echo "No GPU detected, installing CPU-only PyTorch..."
     pip install torch --index-url https://download.pytorch.org/whl/cpu
-    pip install transformers librosa numpy soundfile
-    echo -e "${RED}WARNING: SilentCipher requires GPU. Falling back to spread spectrum.${NC}"
+    pip install transformers librosa numpy soundfile audioseal resemble-perth blake3
+    echo -e "${GREEN}AudioSeal & Perth neural watermarking enabled on CPU.${NC}"
 fi
 
 deactivate

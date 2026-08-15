@@ -171,10 +171,17 @@ ORBIT's core engines are completely decoupled and available as standalone, light
 ## 📦 Quick Start
 
 ```bash
-# Clone and install
+# Clone repository
 git clone https://github.com/focusjordan/ORBIT.git
 cd ORBIT
+
+# Install Node.js dependencies
 npm install
+
+# Set up Python ML environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 
 # Set up environment
 cp .env.example .env
@@ -211,8 +218,10 @@ orbit/
 │   ├── config/            # Configuration and database connection
 │   ├── engines/           # Core engines
 │   │   ├── fingerprint.js # Chromaprint + MERT fingerprinting
-│   │   ├── watermark.js   # Spread spectrum + neural watermarking
-│   │   └── crypto.js      # Ed25519 signing, CBOR encoding
+│   │   ├── audioseal.js   # Primary 40-bit neural watermarking
+│   │   ├── perth.js       # Fallback perceptual watermarking
+│   │   ├── watermark-unified.js # Unified watermark traffic controller
+│   │   └── crypto.js      # Ed25519 signing, BLAKE3, CBOR encoding
 │   ├── api/               # REST API layer
 │   │   ├── routes.js      # Route definitions
 │   │   ├── handlers/      # Endpoint implementations
@@ -223,10 +232,11 @@ orbit/
 │   ├── ml/                # Machine learning integrations
 │   │   ├── clap.js        # LAION-CLAP zero-shot classification
 │   │   ├── mert.js        # MERT semantic embeddings
-│   │   └── silentcipher.js # Neural watermarking
+│   │   └── metadata-extractor.js # AI metadata extraction
 │   └── utils/             # Utilities (audio I/O, validation)
 ├── tests/                 # Test suites
-├── scripts/               # CLI tools (migrate, package-all, generate-keypair)
+├── scripts/               # CLI tools (migrate, watermark, test runners)
+├── requirements.txt       # Python ML dependencies
 └── docker-compose.yml     # PostgreSQL + pgvector
 ```
 

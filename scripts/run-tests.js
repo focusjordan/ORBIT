@@ -47,10 +47,8 @@ if (skipMLFlag) {
   process.env.SKIP_ML_TESTS = '1';
 }
 
-// IMPORTANT: Force spread spectrum watermarking for tests
-// SilentCipher neural watermarking requires GPU and crashes on Apple Silicon
-// This is documented in ORBIT_ROADMAP.md and must be set for tests to run properly
-process.env.ORBIT_WATERMARK_METHOD = 'spread';
+// ORBIT Neural Watermarking: AudioSeal (Primary) + Perth (Fallback)
+process.env.ORBIT_WATERMARK_METHOD = process.env.ORBIT_WATERMARK_METHOD || 'auto';
 
 const { spawn } = require('child_process');
 const path = require('path');
