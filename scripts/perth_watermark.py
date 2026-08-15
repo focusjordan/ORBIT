@@ -102,6 +102,10 @@ def check_dependencies():
     except ImportError:
         missing.append('resemble-perth')
     try:
+        import torchaudio
+    except ImportError:
+        missing.append('torchaudio')
+    try:
         import librosa
     except ImportError:
         missing.append('librosa')

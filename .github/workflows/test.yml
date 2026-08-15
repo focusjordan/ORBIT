@@ -73,8 +73,8 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install --extra-index-url https://download.pytorch.org/whl/cpu torch
-          pip install -r requirements.txt
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu torch torchaudio
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
       - name: Install dependencies
         run: npm ci
       - name: Install dependencies (Chromaprint & FFmpeg)
@@ -140,8 +140,8 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install --extra-index-url https://download.pytorch.org/whl/cpu torch
-          pip install -r requirements.txt
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu torch torchaudio
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
       - name: Install dependencies
         run: npm ci
       - name: Install dependencies (Chromaprint & FFmpeg)
