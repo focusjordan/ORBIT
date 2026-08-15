@@ -9,9 +9,10 @@
  * - For debugging, Accept: application/cbor-diagnostic returns human-readable CBOR
  */
 
-const cbor = require('cbor');
+const cborEngine = require('../../utils/cbor');
 const express = require('express');
 const config = require('../../config');
+const idEngine = require('../../utils/id');
 
 const { contentTypes } = config.api;
 
@@ -144,7 +145,7 @@ async function safePayloadParser(req, res, next) {
   
   try {
     if (contentType.includes(contentTypes.cbor)) {
-      req.body = await cbor.decodeFirst(req.body);
+      req.body = cborEngine.decode(req.body);
       req.bodyFormat = 'cbor';
     } else if (contentType.includes(contentTypes.json)) {
       req.body = JSON.parse(req.body.toString('utf8'));
@@ -152,7 +153,7 @@ async function safePayloadParser(req, res, next) {
     } else {
       // Default: try CBOR first, fall back to JSON
       try {
-        req.body = await cbor.decodeFirst(req.body);
+        req.body = cborEngine.decode(req.body);
         req.bodyFormat = 'cbor';
       } catch {
         try {
@@ -202,7 +203,7 @@ function cborResponseHelper(req, res, next) {
       res
         .status(status)
         .set('Content-Type', contentTypes.cbor)
-        .send(cbor.encode(data));
+        .send(cborEngine.encode(data));
     } else {
       // Default to JSON for easier debugging/testing
       res
@@ -249,7 +250,7 @@ function cborResponseHelper(req, res, next) {
     
     // Add request ID for error tracking
     if (isServerError) {
-      response.request_id = `err_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      response.request_id = idEngine.prefixedId('err_');
     }
     
     res.orbit(response, status);

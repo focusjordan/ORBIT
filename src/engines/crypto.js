@@ -4,8 +4,9 @@
  */
 
 const nacl = require('tweetnacl');
-const cbor = require('cbor');
+const cborEngine = require('../utils/cbor');
 const crypto = require('crypto');
+const { blake3 } = require('@noble/hashes/blake3.js');
 
 class OrbitCrypto {
   /**
@@ -45,7 +46,7 @@ class OrbitCrypto {
         }
       }
       
-      return cbor.encode(unsigned);
+      return cborEngine.encode(unsigned);
     } else {
       throw new Error('Data must be Buffer or Object');
     }
@@ -95,7 +96,7 @@ class OrbitCrypto {
    * @returns {Buffer}
    */
   static encode(data) {
-    return cbor.encode(data);
+    return cborEngine.encode(data);
   }
   
   /**
@@ -104,16 +105,17 @@ class OrbitCrypto {
    * @returns {Object}
    */
   static decode(buffer) {
-    return cbor.decode(buffer);
+    return cborEngine.decode(buffer);
   }
   
   /**
-   * SHA-256 hash
-   * @param {Buffer|string} data 
+   * BLAKE3 cryptographic hash
+   * @param {Buffer|Uint8Array|string} data 
    * @returns {Buffer} 32-byte hash
    */
   static hash(data) {
-    return crypto.createHash('sha256').update(data).digest();
+    const input = typeof data === 'string' ? Buffer.from(data) : data;
+    return Buffer.from(blake3(input));
   }
   
   /**
@@ -126,12 +128,12 @@ class OrbitCrypto {
   }
   
   /**
-   * Hash API key for storage
+   * Hash API key for storage using BLAKE3
    * @param {string} apiKey 
-   * @returns {Buffer}
+   * @returns {Buffer} 32-byte hash
    */
   static hashApiKey(apiKey) {
-    return crypto.createHash('sha256').update(apiKey).digest();
+    return this.hash(apiKey);
   }
   
   /**
@@ -143,7 +145,7 @@ class OrbitCrypto {
   }
   
   /**
-   * Create entry hash for ledger chain
+   * Create entry hash for ledger chain using BLAKE3
    * @param {Object} entry - Registration entry
    * @param {Buffer} prevHash - Previous entry hash (null for first entry)
    * @returns {Buffer} 32-byte hash
@@ -151,7 +153,7 @@ class OrbitCrypto {
   static createEntryHash(entry, prevHash = null) {
     const hashInput = Buffer.concat([
       prevHash || Buffer.alloc(32),
-      cbor.encode({
+      cborEngine.encode({
         fingerprint_hash: entry.fingerprint_hash,
         origin_platform: entry.origin_platform,
         origin_timestamp: entry.origin_timestamp,

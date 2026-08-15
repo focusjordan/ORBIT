@@ -43,13 +43,13 @@ function runTests() {
   console.log(`   ✅ CBOR round-trip successful (${encoded.length} bytes)\n`);
   
   // Test 5: Hash function
-  console.log('Test 5: SHA-256 hash');
+  console.log('Test 5: BLAKE3 hash');
   const hash = OrbitCrypto.hash('test data');
   console.assert(hash.length === 32, 'Hash should be 32 bytes');
   
   const hash2 = OrbitCrypto.hash('test data');
   console.assert(hash.equals(hash2), 'Same input should produce same hash');
-  console.log('   ✅ Hash function working\n');
+  console.log('   ✅ BLAKE3 hash function working\n');
   
   // Test 6: API key generation
   console.log('Test 6: API key generation');
