@@ -64,7 +64,24 @@ ORBIT v2.0.0 addresses the hyperscale GPU starvation and Host RAM over-provision
 
 ---
 
-## 📦 4. Ecosystem & Package Synchronization (v2.0.0)
+## 💻 4. Public CLI Release & Developer Experience (`@ohnrshyp/orbit-cli`)
+
+ORBIT v2.0.0 marks the official public release of the standalone `@ohnrshyp/orbit-cli`. Engineered from the ground up for high-throughput automation and AI agent pipelines, the CLI now includes first-class developer ergonomics and systems diagnostics:
+
+* **`orbit doctor` (System Health & Dependency Inspection):**
+  * One-command environment validation across Node.js runtimes, hardware SIMD extensions, FFmpeg codecs, Chromaprint (`fpcalc`), and Python ML environments (including Apple Silicon MPS / NVIDIA CUDA GPU acceleration).
+* **Clang-Style Diagnostics & Actionable Hints:**
+  * Replaced cryptic failure logs with structured, color-coded diagnostic reports featuring **`💡 Hint:`** suggestions and remediation steps.
+* **Smart Ingestion & Interactive Fallbacks:**
+  * `orbit register` now automatically infers metadata from filenames (`Artist - Title.ext`) and ID3 tags, offering interactive prompts in terminal sessions when flags are omitted.
+* **Sensory Audio & Signal Gauges:**
+  * Terminal outputs for `orbit detect` and `orbit verify` now render visual ANSI confidence meters (`[████████░░] 82.4%`) and structured signal breakdowns.
+* **Agent & Automation Invariants:**
+  * Strict `--json` and `--quiet` flags across all 19 commands guarantee clean, machine-parseable data streams for automated ingestion workflows.
+
+---
+
+## 📦 5. Ecosystem & Package Synchronization (v2.0.0)
 
 All workspace packages across NPM and PyPI are synchronized to `v2.0.0`:
 
@@ -85,7 +102,7 @@ All workspace packages across NPM and PyPI are synchronized to `v2.0.0`:
 
 ---
 
-## 🛠️ 5. Environment & Dependency Simplification
+## 🛠️ 6. Environment & Dependency Simplification
 
 * **Unified PyTorch Environment:** Upgraded all ML capabilities to standard `torch>=2.0.0`.
 * **Deprecated Legacy Dual-Venv:** Developers no longer need to manage isolated virtual environments (`.venv-watermark` with `torch<=2.0.0`). The entire system installs seamlessly via:
@@ -95,7 +112,8 @@ All workspace packages across NPM and PyPI are synchronized to `v2.0.0`:
 
 ---
 
-## 🔄 6. Migration Guide (Upgrading from v1.x to v2.0.0)
+## 🔄 7. Migration Guide (Upgrading from v1.x to v2.0.0)
+
 
 1. **Update Node dependencies:**
    ```bash
