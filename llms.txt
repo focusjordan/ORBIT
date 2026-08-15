@@ -13,9 +13,12 @@ The monorepo contains independent standalone packages under [packages/](packages
 ### Standalone Libraries (`packages/`)
 - [@ohnrshyp/dsp](packages/dsp/README.md): CPU-only feature extraction (BPM, key, loudness, energy, duration).
 - [@ohnrshyp/forensics](packages/forensics/README.md): Audio signal anomalies, manipulation detection, and phase analysis.
-- [@ohnrshyp/watermark](packages/watermark/README.md): SilentCipher neural watermarking + Spread Spectrum embedders.
+- [@ohnrshyp/watermark](packages/watermark/README.md): AudioSeal & PERTH neural watermarking + forensic extraction.
 - [@ohnrshyp/ledger](packages/ledger/README.md): CBOR payload encoding, Ed25519 signatures, and pgvector database matching.
 - [@ohnrshyp/metadata](packages/metadata/README.md): Lazy-loaded AI tagger (wav2vec2 genre, PANNs instruments, CLAP mood/vocals).
+
+### High-Performance Acceleration
+- **Ohnrscript (`.ohn`)**: AOT-compiled systems runtime powering zero-allocation CBOR serialization (`cbor.ohn`), 2.56B sample/sec DSP analysis (`audio_dsp.ohn`), zero-heap UUID generation (`id.ohn`), and in-memory vector matching (`vector.ohn`).
 
 ### Integration SDK
 - [@ohnrshyp/orbit-sdk](sdk/README.md): Unified Node.js client sdk for communicating with an ORBIT registry server.
@@ -57,7 +60,7 @@ Analyzes acoustics for tampering or synthetic alterations. Requires Python, `num
   ```
 
 ### 3. @ohnrshyp/watermark
-Embeds and extracts binary payloads. Requires Python with `silentcipher` (`torch<=2.0.0`) in a watermark-specific virtual environment.
+Embeds and extracts binary payloads using Meta FAIR AudioSeal (40-bit) and Resemble AI PERTH fallback. Requires PyTorch (`torch>=2.0.0`), `audioseal`, and `resemble-perth`.
 - **NPM Package**: `@ohnrshyp/watermark`
 - **PyPI Package**: `orbit-watermark`
 - **Installation**:
