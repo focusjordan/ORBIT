@@ -16,7 +16,7 @@ librosa>=0.10.0
 numpy>=1.24.0
 
 # Audio file handling
-soundfile>=0.12.0
+soundfile>=0.14.0
 
 # Neural Watermarking (Session 22)
 # SilentCipher by Sony AI - MIT License (commercially licensable)
