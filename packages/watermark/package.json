@@ -9,8 +9,8 @@
     "url": "https://github.com/focusjordan/ORBIT/issues"
   },
   "name": "@ohnrshyp/watermark",
-  "version": "1.1.2",
-  "description": "High-robustness neural audio watermarking using SilentCipher (Sony AI) & Spread Spectrum fallback",
+  "version": "2.0.0",
+  "description": "High-robustness neural audio watermarking using Meta FAIR AudioSeal & Resemble AI PERTH fallback",
   "main": "src/index.js",
   "scripts": {
     "test": "node test.js"
