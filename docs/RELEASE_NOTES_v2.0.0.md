@@ -102,7 +102,35 @@ All workspace packages across NPM and PyPI are synchronized to `v2.0.0`:
 
 ---
 
-## 🛠️ 6. Environment & Dependency Simplification
+## 📚 6. Comprehensive Architectural Guides & Developer Documentation
+
+ORBIT v2.0.0 ships with a completely restructured and modernized documentation suite in [`docs/`](docs/), tailored to specific stakeholders from indie developers to enterprise rights managers and hyperscale memory architects:
+
+* **[Integrating Ohnrscript into ORBIT (`docs/INTEGRATING_OHNRSCRIPT_INTO_ORBIT.md`)](INTEGRATING_OHNRSCRIPT_INTO_ORBIT.md):**
+  * **Target Audience:** HPC Engineers, AI Infrastructure Leads, Semiconductor Strategy Executives (Samsung, SK Hynix, Micron, TSMC).
+  * **How It Helps:** Provides the complete empirical whitepaper and macroeconomic model detailing the 270x page fault drop, 75% cloud cost reduction, and $78.88M RAM CapEx savings across AI training clusters.
+* **[SDK Quick Start Guide (`docs/SDK_QUICKSTART.md`)](SDK_QUICKSTART.md):**
+  * **Target Audience:** Full-stack developers, music-tech software engineers, platform integrators.
+  * **How It Helps:** A step-by-step developer tutorial showing how to embed watermarks, verify authenticity, and execute B2B rights transfers in under 10 lines of Node.js code.
+* **[Complete Protocol Specification (`docs/ORBIT_SPECIFICATION.md`)](ORBIT_SPECIFICATION.md):**
+  * **Target Audience:** Systems architects, protocol engineers, security auditors.
+  * **How It Helps:** Deep technical dive into the binary formats, RFC 8949 CBOR encoding, Ed25519 cryptographic chains of title, and pgvector schema definitions.
+* **[Content ID & Provenance Guide (`docs/CONTENT_ID_GUIDE.md`)](CONTENT_ID_GUIDE.md):**
+  * **Target Audience:** DSP operators, copyright administrators, rights management teams.
+  * **How It Helps:** Explains how ORBIT shifts the paradigm from reactive post-upload claiming to proactive pre-distribution cryptographic ownership verification.
+* **[Music Delivery & Supply Chain Guide (`docs/MUSIC_DELIVERY_GUIDE.md`)](MUSIC_DELIVERY_GUIDE.md):**
+  * **Target Audience:** Record labels, digital distributors, aggregator operations teams.
+  * **How It Helps:** Streamlines the Artist $\rightarrow$ Distributor $\rightarrow$ DSP delivery pipeline, replacing brittle DDEX XML sidecars with embedded, immutable audio provenance.
+* **[Mohnolith Architecture (`docs/MOHNOLITH_ARCHITECTURE.md`)](MOHNOLITH_ARCHITECTURE.md):**
+  * **Target Audience:** Aerospace, medical, and bare-metal systems developers.
+  * **How It Helps:** Details the zero-trust atomic binary transport (ZTAB) protocol for mathematically bonding metadata to massive non-audio binary payloads in Ring 0.
+* **[Technical FAQ (`docs/TECHNICAL_FAQ.md`)](TECHNICAL_FAQ.md):**
+  * **Target Audience:** Technical evaluators, enterprise decision-makers, CTOs.
+  * **How It Helps:** Clear, concise answers covering SLA latency, scale limits, key security, privacy guarantees, and operational deployment models.
+
+---
+
+## 🛠️ 7. Environment & Dependency Simplification
 
 * **Unified PyTorch Environment:** Upgraded all ML capabilities to standard `torch>=2.0.0`.
 * **Deprecated Legacy Dual-Venv:** Developers no longer need to manage isolated virtual environments (`.venv-watermark` with `torch<=2.0.0`). The entire system installs seamlessly via:
@@ -112,7 +140,7 @@ All workspace packages across NPM and PyPI are synchronized to `v2.0.0`:
 
 ---
 
-## 🛡️ 7. Security, Supply-Chain & OpenSSF Best Practices Passing Status
+## 🛡️ 8. Security, Supply-Chain & OpenSSF Best Practices Passing Status
 
 ORBIT v2.0.0 achieves critical enterprise security and open-source supply-chain verification milestones:
 
@@ -122,7 +150,7 @@ ORBIT v2.0.0 achieves critical enterprise security and open-source supply-chain 
 
 ---
 
-## 🔄 8. Migration Guide (Upgrading from v1.x to v2.0.0)
+## 🔄 9. Migration Guide (Upgrading from v1.x to v2.0.0)
 
 1. **Update Node dependencies:**
    ```bash
