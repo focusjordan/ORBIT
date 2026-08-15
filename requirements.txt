@@ -1,12 +1,12 @@
 # ORBIT Python ML & Watermarking Dependencies
-torch>=2.0.0
-torchaudio>=2.0.0
+torch>=2.13.0
+torchaudio>=2.11.0
 audioseal>=0.2.0
 resemble-perth>=1.0.1
-blake3>=0.4.1
-librosa>=0.10.0
-soundfile>=0.12.1
-numpy>=1.24.0
-transformers>=4.30.0
-scipy>=1.10.0
+blake3>=1.0.9
+librosa>=1.0.0
+soundfile>=0.14.0
+numpy>=2.5.2
+transformers>=5.15.0
+scipy>=1.18.0
 setuptools
