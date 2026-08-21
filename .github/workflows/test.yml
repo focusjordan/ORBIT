@@ -92,7 +92,7 @@ jobs:
           echo "DATABASE_URL=postgres://orbit:orbit@localhost:5432/orbit_test" >> .env
           echo "ORBIT_SECRET_KEY=test-secret-key-for-ci-$(date +%s)" >> .env
       - name: Step 5 - Unit Tests & Coverage
-        run: npx c8 --reporter=lcov --reporter=text npm run test:unit
+        run: npx c8 --reporter=lcov --reporter=text --include='src/engines/**' --include='src/ml/**' --include='src/utils/**' --include='sdk/**' npm run test:unit
         env:
           SKIP_API_TESTS: '1'
       - name: Upload coverage reports to Codecov
