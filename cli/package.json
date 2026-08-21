@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@ohnrshyp/orbit-sdk": "^2.0.1",
-    "commander": "^12.1.0",
-    "chalk": "^4.1.2"
+    "commander": "^15.0.0",
+    "chalk": "^6.0.0"
   }
 }
