@@ -18,6 +18,7 @@ const clap = require('../../ml/clap');
 const OrbitFingerprint = require('../../engines/fingerprint');
 const aiDetection = require('../../ml/ai-detection');
 const catalogCheck = require('../../engines/catalog-check');
+const openaiProvenance = require('../../engines/openai-provenance');
 const idEngine = require('../../utils/id');
 
 const router = express.Router();
@@ -328,7 +329,7 @@ async function analyzeHandler(req, res) {
     }
     
     // Parse include array (default: all)
-    const ALL_INCLUDES = ['genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 'fingerprint', 'embedding', 'ai_detection', 'catalog_check'];
+    const ALL_INCLUDES = ['genre', 'mood', 'bpm', 'key', 'instruments', 'vocals', 'fingerprint', 'embedding', 'ai_detection', 'catalog_check', 'openai_provenance'];
     let includeSet;
     
     if (include && Array.isArray(include)) {
@@ -361,6 +362,7 @@ async function analyzeHandler(req, res) {
     const needsFingerprint = includeSet.has('fingerprint') || includeSet.has('catalog_check');
     const needsAiDetection = includeSet.has('ai_detection');
     const needsCatalogCheck = includeSet.has('catalog_check');
+    const needsOpenAIProvenance = includeSet.has('openai_provenance') || includeSet.has('ai_detection');
     
     // ========================================================================
     // 3. RUN METADATA EXTRACTION
@@ -462,7 +464,28 @@ async function analyzeHandler(req, res) {
     }
     
     // ========================================================================
-    // 4b. AI DETECTION (if requested)
+    // 4b. OPENAI PROVENANCE CHECK (if requested)
+    // ========================================================================
+    
+    let openaiResult = null;
+    
+    if (needsOpenAIProvenance) {
+      try {
+        log('Running OpenAI Content Provenance check (SynthID + C2PA)...');
+        openaiResult = await openaiProvenance.checkOpenAIProvenance(audioBuffer);
+        if (openaiResult.detected) {
+          log(`OpenAI Provenance: DETECTED signal=${openaiResult.signal}, model=${openaiResult.model}`);
+        } else if (openaiResult.checked) {
+          log('OpenAI Provenance: not detected');
+        }
+      } catch (opErr) {
+        log(`OpenAI provenance check failed (non-fatal): ${opErr.message}`);
+        openaiResult = { checked: false, detected: false, error: opErr.message };
+      }
+    }
+
+    // ========================================================================
+    // 4c. AI DETECTION (if requested)
     // ========================================================================
     
     let aiDetectionResult = null;
@@ -474,6 +497,7 @@ async function analyzeHandler(req, res) {
           metadata: req.body.metadata || {},
           analysisResult: metadataResult,
           catalogResult: catalogResult,
+          openaiResult: openaiResult,
           flags: {
             v2Enabled: true,
             shadowMode: false,
@@ -620,6 +644,10 @@ async function analyzeHandler(req, res) {
     if (catalogResult) {
       response.catalog_check = catalogResult;
     }
+
+    if (openaiResult) {
+      response.openai_provenance = openaiResult;
+    }
     
     log(`Analysis complete in ${response.processing_time_ms}ms`);
     
@@ -670,6 +698,7 @@ router.get('/info', (req, res) => {
       signal_analysis: 'BPM/key detection via librosa',
       fingerprinting: 'Chromaprint + CLAP semantic',
       catalog_check: 'AcoustID + ACRCloud + MusicBrainz',
+      provenance: 'OpenAI Content Provenance API (SynthID + C2PA)',
     },
     note: 'V2 endpoints complement v1 endpoints. Registration still uses /orbit/v1/register',
   });

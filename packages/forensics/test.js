@@ -7,6 +7,7 @@ console.log('Testing @ohnrshyp/forensics...');
 assert.ok(forensics.analyze, 'analyze function should be exported');
 assert.ok(forensics.checkPythonEnvironment, 'checkPythonEnvironment function should be exported');
 assert.ok(forensics.calculateAiProbability, 'calculateAiProbability function should be exported');
+assert.ok(forensics.checkOpenAIProvenance, 'checkOpenAIProvenance function should be exported');
 assert.ok(forensics.config, 'config object should be exported');
 
 // Test calculateAiProbability sanity check
@@ -17,4 +18,10 @@ const testResult = forensics.calculateAiProbability({
 assert.strictEqual(typeof testResult, 'number');
 assert.ok(testResult >= 0 && testResult <= 1);
 
-console.log('All @ohnrshyp/forensics sanity checks passed!');
+// Test checkOpenAIProvenance unconfigured sanity check
+(async () => {
+  const provenanceCheck = await forensics.checkOpenAIProvenance(Buffer.from('RIFF....'), { apiKey: null });
+  assert.strictEqual(provenanceCheck.checked, false);
+  assert.strictEqual(provenanceCheck.status, 'unconfigured');
+  console.log('All @ohnrshyp/forensics sanity checks passed!');
+})();

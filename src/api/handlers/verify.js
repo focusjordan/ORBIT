@@ -26,6 +26,7 @@ const OrbitCrypto = require('../../engines/crypto');
 const { UnifiedWatermark } = require('../../engines/watermark-unified');
 const { queries } = require('@ohnrshyp/ledger');
 const config = require('../../config');
+const openaiProvenance = require('../../engines/openai-provenance');
 const idEngine = require('../../utils/id');
 
 // ML modules for v2 enhancements
@@ -569,6 +570,16 @@ async function verifyHandler(req, res) {
     response.provenance.origin = originData;
     response.provenance.chain_integrity = signatureValid ? 'VALID' : 'SIGNATURE_INVALID';
     
+    // Check OpenAI Content Provenance (SynthID / C2PA) if configured
+    if (config.openai?.apiKey && audioBuffer) {
+      try {
+        const openAIResult = await openaiProvenance.checkOpenAIProvenance(audioBuffer);
+        response.provenance.openai = openAIResult;
+      } catch (opErr) {
+        console.warn(`[Verify] OpenAI provenance check failed: ${opErr.message}`);
+      }
+    }
+
     // V1 compatibility
     response.origin = originData;
     

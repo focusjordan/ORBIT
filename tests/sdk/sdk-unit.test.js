@@ -185,7 +185,7 @@ async function runTests() {
 
   try {
     // 6a: CBOR Response handling
-    global.fetch = async (url, opts) => {
+    global.fetch = async (_url, _opts) => {
       const mockResult = { success: true, verified: true, origin_id: 'orig-123', registrations: [], transfers: [] };
       const encoded = cbor.encode(mockResult);
       return {
@@ -225,7 +225,7 @@ async function runTests() {
     console.assert(rotatePairRes.success === true, 'rotateKeypair parsed');
 
     // 6b: Multipart Register Mock
-    global.fetch = async (url, opts) => {
+    global.fetch = async (_url, _opts) => {
       const mockResult = { success: true, registration_id: 42, registered_at: new Date().toISOString() };
       return {
         ok: true,

@@ -93,6 +93,7 @@ const TEST_SUITES = {
     { name: 'SDK Unit Tests', file: 'tests/sdk/sdk-unit.test.js' },
     { name: 'CBOR Engine', file: 'tests/utils/cbor.test.js' },
     { name: 'Audio Utils', file: 'tests/utils/audio.test.js' },
+    { name: 'OpenAI Provenance Engine', file: 'tests/engines/openai-provenance.test.js' },
   ],
   
   // V1 Tests that need Chromaprint (fpcalc)

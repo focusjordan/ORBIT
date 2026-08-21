@@ -1,6 +1,6 @@
 {
   "name": "@ohnrshyp/orbit-sdk",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "ORBIT SDK - Client library for ORBIT audio provenance and metadata transfer protocol",
   "main": "index.js",
   "scripts": {

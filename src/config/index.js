@@ -88,6 +88,20 @@ const config = {
     host: process.env.ACRCLOUD_HOST || 'identify-us-west-2.acrcloud.com',
   },
 
+  // OpenAI Content Provenance settings (SynthID audio watermark & C2PA credentials)
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY || null,
+    baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+    endpoint: process.env.OPENAI_PROVENANCE_ENDPOINT || '/content_provenance_checks',
+    timeoutMs: parseInt(process.env.OPENAI_TIMEOUT_MS, 10) || 10000,
+  },
+
+  // Authentication & Access Control settings (self-hosted / single-tenant options)
+  auth: {
+    enabled: parseBooleanEnv('ORBIT_AUTH_ENABLED', true),
+    apiKey: process.env.ORBIT_API_KEY || null,
+  },
+
   // Logging settings
   logging: {
     level: process.env.LOG_LEVEL || 'debug',
@@ -122,6 +136,10 @@ function validateConfig() {
   // Optional — warn but don't block startup
   if (!config.orbit.privateKey) {
     warnings.push('ORBIT_PRIVATE_KEY not set - this node cannot sign payloads');
+  }
+
+  if (!config.openai.apiKey) {
+    warnings.push('OPENAI_API_KEY not set - OpenAI content provenance checks (SynthID) will be unavailable');
   }
 
   if (!config.acoustid.apiKey) {

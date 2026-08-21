@@ -3,7 +3,7 @@
  * Tests deterministic encoding, decoding, data types, and error handling.
  */
 
-const { encode, decode, CBOREngine } = require('../../src/utils/cbor');
+const { encode, decode } = require('../../src/utils/cbor');
 
 async function runTests() {
   console.log('🧪 Running CBOR Engine Unit Tests\n');

@@ -25,7 +25,6 @@
 const nacl = require('tweetnacl');
 const cbor = require('cbor');
 const FormData = require('form-data');
-const crypto = require('crypto');
 const { blake3 } = require('@noble/hashes/blake3.js');
 
 /**

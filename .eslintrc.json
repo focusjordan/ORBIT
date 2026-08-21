@@ -20,6 +20,8 @@
     "dist/",
     "temp/",
     "models/",
-    ".test-model-cache/"
+    ".test-model-cache/",
+    "ohnrscript/",
+    "scratch/"
   ]
 }

@@ -24,6 +24,7 @@
  */
 
 const crypto = require('crypto');
+const config = require('../../config');
 const OrbitCrypto = require('../../engines/crypto');
 const queries = require('../../ledger/queries');
 
@@ -40,12 +41,40 @@ function hashApiKey(apiKey) {
 /**
  * Platform authentication middleware
  * Verifies Ed25519 signature and API key (two-factor authentication)
+ * Supports self-hosted bypass (ORBIT_AUTH_ENABLED=false) and single-tenant API keys (ORBIT_API_KEY).
  */
 async function platformAuth(req, res, next) {
+  // Self-Hosted Mode 1: Authentication globally disabled for local development
+  if (config.auth?.enabled === false) {
+    req.platform = {
+      id: req.get('X-ORBIT-Platform') || config.orbit.platformId || 'local-node',
+      name: 'Local Self-Hosted Node',
+      tier: 'enterprise',
+      apiKeyValid: true,
+    };
+    return next();
+  }
+
   // Get headers
   const platformId = req.get('X-ORBIT-Platform');
   const signatureHeader = req.get('X-ORBIT-Signature');
   const apiKeyHeader = req.get('X-ORBIT-API-Key');
+  const authHeader = req.get('Authorization');
+
+  // Self-Hosted Mode 2: Direct single-tenant API key matching ORBIT_API_KEY
+  if (config.auth?.apiKey) {
+    const bearerToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+    const providedKey = apiKeyHeader || bearerToken;
+    if (providedKey && providedKey === config.auth.apiKey) {
+      req.platform = {
+        id: platformId || config.orbit.platformId || 'local-node',
+        name: 'Local Self-Hosted Node',
+        tier: 'enterprise',
+        apiKeyValid: true,
+      };
+      return next();
+    }
+  }
   
   // Check for required headers
   if (!platformId) {

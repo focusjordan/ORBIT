@@ -4,7 +4,6 @@ const { Command } = require('commander');
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const chalk = require('chalk');
 const { loadConfig, GLOBAL_CONFIG_PATH, findLocalConfig } = require('../config');
 const out = require('../output');

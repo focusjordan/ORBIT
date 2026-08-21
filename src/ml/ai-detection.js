@@ -28,6 +28,7 @@ const clap = require('./clap');
 const audioAnalysis = require('./audio-analysis');
 const silentcipher = require('./silentcipher');
 const sonics = require('./sonics');
+const openaiProvenance = require('../engines/openai-provenance');
 const runtimeConfig = require('../config');
 
 // ============================================================================
@@ -1096,6 +1097,96 @@ async function checkSonicsDetection(audioInput, options = {}) {
   }
 }
 
+/**
+ * Check for OpenAI Content Provenance signals (SynthID audio watermark & C2PA credentials).
+ *
+ * @param {string|Buffer} audioInput - Audio buffer or file path
+ * @param {Object} options - Options
+ * @param {boolean} [options.verbose] - Log progress
+ * @param {Object} [options.openaiResult] - Pre-computed OpenAI provenance result
+ * @returns {Promise<Object>}
+ */
+async function checkOpenAIProvenanceSignal(audioInput, options = {}) {
+  const { verbose = false, openaiResult = null } = options;
+
+  if (openaiResult) {
+    const flags = [];
+    if (openaiResult.detected) {
+      if (openaiResult.signal === 'c2pa') {
+        flags.push('OPENAI_C2PA_DETECTED');
+      } else {
+        flags.push('OPENAI_SYNTHID_DETECTED');
+      }
+    }
+    return {
+      checked: openaiResult.checked ?? true,
+      detected: !!openaiResult.detected,
+      score: openaiResult.detected ? 1.0 : 0.0,
+      flags,
+      signal: openaiResult.signal || null,
+      model: openaiResult.model || null,
+      details: openaiResult.details || {},
+    };
+  }
+
+  let audioBuffer = null;
+  if (Buffer.isBuffer(audioInput)) {
+    audioBuffer = audioInput;
+  } else if (typeof audioInput === 'string') {
+    try {
+      const fs = require('fs');
+      audioBuffer = fs.readFileSync(audioInput);
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  if (!audioBuffer) {
+    return {
+      checked: false,
+      detected: false,
+      score: 0.0,
+      flags: [],
+      details: { available: false, reason: 'no_audio_buffer' },
+    };
+  }
+
+  try {
+    const result = await openaiProvenance.checkOpenAIProvenance(audioBuffer);
+    const flags = [];
+    if (result.detected) {
+      if (result.signal === 'c2pa') {
+        flags.push('OPENAI_C2PA_DETECTED');
+      } else {
+        flags.push('OPENAI_SYNTHID_DETECTED');
+      }
+    }
+
+    return {
+      checked: result.checked,
+      detected: result.detected,
+      score: result.detected ? 1.0 : 0.0,
+      flags,
+      signal: result.signal || null,
+      model: result.model || null,
+      details: result.details || {},
+      error: result.error || null,
+      processing_time_ms: result.processing_time_ms || 0,
+    };
+  } catch (err) {
+    if (verbose) {
+      console.log(`   OpenAI provenance check failed: ${err.message}`);
+    }
+    return {
+      checked: false,
+      detected: false,
+      score: 0.0,
+      flags: ['OPENAI_CHECK_ERROR'],
+      details: { available: false, error: err.message },
+    };
+  }
+}
+
 // ============================================================================
 // COMBINED DETECTION
 // ============================================================================
@@ -1111,6 +1202,7 @@ async function checkSonicsDetection(audioInput, options = {}) {
  * @param {Object} options - Detection options
  * @param {Object} options.metadata - Track metadata (title, artist, isrc, etc.)
  * @param {Object} options.analysisResult - Pre-computed audio analysis (optional)
+ * @param {Object} options.openaiResult - Pre-computed OpenAI provenance result (optional)
  * @param {boolean} options.verbose - Log progress
  * @returns {Promise<Object>} AI detection result with score and signals
  * 
@@ -1127,6 +1219,7 @@ async function detectAI(audioInput, options = {}) {
   const {
     metadata = {},
     catalogResult = null,
+    openaiResult = null,
     verbose = process.env.ORBIT_ML_VERBOSE === 'true',
     flags: flagOverrides = {},
   } = options;
@@ -1243,9 +1336,13 @@ async function detectAI(audioInput, options = {}) {
 
       const watermarkFlags = floorInputs.watermarkFlags || [];
       const sonicsFlags = floorInputs.sonicsFlags || [];
+      const openaiFlags = floorInputs.openaiFlags || [];
 
+      // Definitive 1.0 floor: OpenAI SynthID or C2PA provenance signal detected
+      if (openaiFlags.includes('OPENAI_SYNTHID_DETECTED') || openaiFlags.includes('OPENAI_C2PA_DETECTED')) {
+        scoreFloor = 1.0;
       // Definitive: file metadata literally declares AI origin
-      if (metaFlags.includes('AI_COMMENT_TAG') || metaFlags.includes('AI_SELF_DECLARED') || metaFlags.includes('AI_ENCODER_SIGNATURE')) {
+      } else if (metaFlags.includes('AI_COMMENT_TAG') || metaFlags.includes('AI_SELF_DECLARED') || metaFlags.includes('AI_ENCODER_SIGNATURE')) {
         scoreFloor = 0.90;
       } else if (sonicsFlags.includes('SONICS_HIGH_CONFIDENCE_SYNTHETIC')) {
         scoreFloor = 0.75;
@@ -1349,12 +1446,15 @@ async function detectAI(audioInput, options = {}) {
       ? await checkSonicsDetection(audioInput, { verbose: false })
       : null;
 
+    const openaiSignal = await checkOpenAIProvenanceSignal(audioInput, { verbose, openaiResult });
+
     result.signals = {
       semantic: semanticSignal,
       anomalies: anomalySignal,
       metadata: metadataSignal,
       catalog: catalogSignal,
       sonics: sonicsSignal,
+      openai: openaiSignal,
     };
 
     const aggregate = aggregateScores(
@@ -1371,6 +1471,7 @@ async function detectAI(audioInput, options = {}) {
         metaFlags: metadataSignal.flags || [],
         anomalyFlags: anomalySignal.flags || [],
         sonicsFlags: sonicsSignal?.flags || [],
+        openaiFlags: openaiSignal?.flags || [],
       },
       activeThresholds
     );
@@ -1390,6 +1491,7 @@ async function detectAI(audioInput, options = {}) {
         score_floor_applied: aggregate.score_floor_applied,
         prompt_set: semanticSignal.prompt_set || 'v1',
         sonics: sonicsSignal || null,
+        openai: openaiSignal || null,
       },
       per_signal_contributions: {
         semantic: Math.round((semanticSignal.aiScore || 0) * aggregate.weights_used.semantic * 1000) / 1000,
@@ -1482,6 +1584,9 @@ function getAllFlags(detectionResult) {
   if (detectionResult.signals?.sonics?.flags) {
     flags.push(...detectionResult.signals.sonics.flags);
   }
+  if (detectionResult.signals?.openai?.flags) {
+    flags.push(...detectionResult.signals.openai.flags);
+  }
   
   return [...new Set(flags)];
 }
@@ -1501,6 +1606,7 @@ module.exports = {
   checkCatalogProvenance,
   checkWatermarkPresence,
   checkSonicsDetection,
+  checkOpenAIProvenanceSignal,
   scanTextForAIIndicators,
   
   // Utility functions

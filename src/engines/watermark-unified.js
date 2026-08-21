@@ -14,7 +14,6 @@
  * @module engines/watermark-unified
  */
 
-const fs = require('fs');
 const audioseal = require('./audioseal');
 const perth = require('./perth');
 
@@ -373,7 +372,7 @@ class UnifiedWatermark {
    * @param {string} method 
    * @returns {boolean}
    */
-  static hashMatches(extractedHash, expectedHash, method = 'audioseal') {
+  static hashMatches(extractedHash, expectedHash, _method = 'audioseal') {
     if (!extractedHash || !expectedHash) return false;
     return audioseal.hashMatches(extractedHash, expectedHash);
   }

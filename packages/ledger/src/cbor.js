@@ -14,7 +14,6 @@ let arena = new Uint8Array(INITIAL_CAPACITY);
 let arenaDataView = new DataView(arena.buffer);
 let offset = 0;
 
-const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder('utf-8');
 
 function ensureCapacity(needed) {

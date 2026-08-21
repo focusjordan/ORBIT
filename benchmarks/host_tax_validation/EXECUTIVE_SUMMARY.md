@@ -1,7 +1,7 @@
 # Empirical Research Whitepaper: The AI "Host Tax" & Semiconductor Relief Thesis
 ## Systems Architecture Analysis: Ohnrscript Data-Oriented Design (DOD) Runtime vs. Standard PyTorch & Industry Workarounds
 
-**Author:** Principal Systems Architect & High-Performance Computing (HPC) Engineering Group  
+**Author:** Jordan Kugler
 **Target Audience:** Hyperscale Infrastructure Leads, HPC Memory Architects, Semiconductor Strategy Executives (Samsung, SK Hynix, Micron, TSMC)  
 **Date:** August 2026  
 **Status:** Empirically Validated across Linux & Hardware Accelerators (Metal/MPS/CUDA)  

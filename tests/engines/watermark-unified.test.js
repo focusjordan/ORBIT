@@ -21,8 +21,7 @@ const {
   getWatermarkMethod, 
   checkAudioSealAvailable,
   checkPerthAvailable,
-  checkWatermarkAvailable,
-  resetAvailabilityCache 
+  checkWatermarkAvailable
 } = require('../../src/engines/watermark-unified');
 
 const TEST_AUDIO_RHYTHM_PATH = path.join(__dirname, '../fixtures/test-audio-rhythm.wav');

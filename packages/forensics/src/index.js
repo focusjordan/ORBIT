@@ -268,9 +268,133 @@ function calculateAiProbability(results) {
   return trueFlags / validFlags;
 }
 
+/**
+ * Check audio bytes for OpenAI Content Provenance signals (SynthID / C2PA).
+ * Allows standalone consumers of @ohnrshyp/forensics to query the OpenAI Content Provenance API.
+ *
+ * @param {Buffer} audioBuffer - Raw audio file bytes (wav, mp3, etc.)
+ * @param {Object} [options] - Options (apiKey, baseUrl, endpoint, timeoutMs, filename)
+ * @returns {Promise<Object>} Normalized provenance result
+ */
+async function checkOpenAIProvenance(audioBuffer, options = {}) {
+  const apiKey = options.apiKey || process.env.OPENAI_API_KEY;
+  const baseUrl = options.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+  const endpoint = options.endpoint || process.env.OPENAI_PROVENANCE_ENDPOINT || '/content_provenance_checks';
+  const timeoutMs = options.timeoutMs || parseInt(process.env.OPENAI_TIMEOUT_MS, 10) || 10000;
+  const filename = options.filename || 'sample.wav';
+
+  if (!apiKey) {
+    return {
+      checked: false,
+      detected: false,
+      status: 'unconfigured',
+      error: 'OPENAI_API_KEY not configured',
+      processing_time_ms: 0,
+    };
+  }
+
+  if (!audioBuffer || !Buffer.isBuffer(audioBuffer) || audioBuffer.length === 0) {
+    return {
+      checked: false,
+      detected: false,
+      status: 'invalid_input',
+      error: 'No audio buffer provided or audio buffer is empty',
+      processing_time_ms: 0,
+    };
+  }
+
+  const startTime = Date.now();
+
+  try {
+    let form;
+    let headers = {
+      Authorization: `Bearer ${apiKey}`,
+    };
+    let body;
+
+    // Use native FormData/Blob if available in Node.js 18+, or fallback to form-data package
+    if (typeof globalThis.FormData !== 'undefined' && typeof globalThis.Blob !== 'undefined') {
+      form = new globalThis.FormData();
+      const blob = new globalThis.Blob([audioBuffer], { type: 'audio/wav' });
+      form.append('file', blob, filename);
+      body = form;
+    } else {
+      const FormDataPkg = require('form-data');
+      const formPkg = new FormDataPkg();
+      formPkg.append('file', audioBuffer, { filename, contentType: 'audio/wav' });
+      headers = { ...formPkg.getHeaders(), ...headers };
+      body = formPkg.getBuffer();
+    }
+
+    const url = `${baseUrl.replace(/\/$/, '')}/${endpoint.replace(/^\//, '')}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => '');
+      let errorMsg = `OpenAI returned HTTP ${res.status}`;
+      try {
+        const parsed = JSON.parse(errorText);
+        if (parsed.error?.message) {
+          errorMsg = `OpenAI error: ${parsed.error.message}`;
+        }
+      } catch {
+        if (errorText) errorMsg += ` - ${errorText.slice(0, 100)}`;
+      }
+      throw new Error(errorMsg);
+    }
+
+    const resBody = await res.json();
+    const resultStatus = resBody.status || (resBody.detected ? 'detected' : 'not_detected');
+    const isDetected = resultStatus === 'detected' || resBody.detected === true;
+
+    let signalType = null;
+    if (isDetected) {
+      if (resBody.signals && Array.isArray(resBody.signals) && resBody.signals.length > 0) {
+        signalType = resBody.signals[0].type || resBody.signals[0];
+      } else if (resBody.provenance?.type) {
+        signalType = resBody.provenance.type;
+      } else if (resBody.signal) {
+        signalType = resBody.signal;
+      } else {
+        signalType = 'synthid';
+      }
+    }
+
+    return {
+      checked: true,
+      detected: isDetected,
+      status: isDetected ? 'detected' : 'not_detected',
+      signal: signalType,
+      confidence: resBody.confidence !== undefined ? resBody.confidence : (isDetected ? 1.0 : 0.0),
+      model: resBody.model || resBody.metadata?.model || null,
+      created_at: resBody.created_at || resBody.createdAt || null,
+      details: {
+        signals: resBody.signals || [],
+        metadata: resBody.metadata || resBody.provenance || null,
+        raw_status: resBody.status || null,
+      },
+      processing_time_ms: Date.now() - startTime,
+    };
+  } catch (err) {
+    return {
+      checked: false,
+      detected: false,
+      status: 'error',
+      error: err.message,
+      processing_time_ms: Date.now() - startTime,
+    };
+  }
+}
+
 module.exports = {
   analyze,
   checkPythonEnvironment,
   config: { ...FORENSICS_CONFIG },
-  calculateAiProbability
+  calculateAiProbability,
+  checkOpenAIProvenance,
 };
