@@ -19,6 +19,9 @@
   ],
   "author": "Ohnrshyp",
   "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=18.0.0"
   },

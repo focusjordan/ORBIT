@@ -20,11 +20,14 @@
   ],
   "author": "Ohnrshyp",
   "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@ohnrshyp/orbit-sdk": "file:../sdk",
+    "@ohnrshyp/orbit-sdk": "^2.0.1",
     "commander": "^12.1.0",
     "chalk": "^4.1.2"
   }
