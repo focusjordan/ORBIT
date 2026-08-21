@@ -1,6 +1,30 @@
 # @ohnrshyp/watermark
 
-**Robust neural audio watermarking using SilentCipher.**
+<p align="center">
+  <a href="https://github.com/focusjordan/ORBIT/actions/workflows/test.yml">
+    <img src="https://github.com/focusjordan/ORBIT/actions/workflows/test.yml/badge.svg" alt="CI Status" />
+  </a>
+  <a href="https://www.bestpractices.dev/projects/14095">
+    <img src="https://www.bestpractices.dev/projects/14095/badge" alt="OpenSSF Best Practices" />
+  </a>
+  <a href="https://api.scorecard.dev/projects/github.com/focusjordan/ORBIT">
+    <img src="https://api.scorecard.dev/projects/github.com/focusjordan/ORBIT/badge" alt="OpenSSF Scorecard" />
+  </a>
+  <a href="https://slsa.dev">
+    <img src="https://img.shields.io/badge/SLSA-Level%201-blue.svg?style=flat-square" alt="SLSA Level 1" />
+  </a>
+  <a href="https://codecov.io/gh/focusjordan/ORBIT">
+    <img src="https://codecov.io/gh/focusjordan/ORBIT/branch/main/graph/badge.svg" alt="Codecov" />
+  </a>
+  <a href="https://www.npmjs.com/package/@ohnrshyp/watermark">
+    <img src="https://img.shields.io/npm/v/@ohnrshyp/watermark.svg?style=flat-square" alt="npm version" />
+  </a>
+  <a href="https://github.com/focusjordan/ORBIT/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square" alt="License" />
+  </a>
+</p>
+
+**Robust neural audio watermarking using Meta FAIR AudioSeal & Resemble AI PERTH.**
 
 This module implements digital steganographic audio watermarking. Based on Sony AI's SilentCipher, it encodes imperceptible digital payloads directly within audio waveforms. These neural watermarks are highly robust and survive lossy compression (MP3, AAC, Opus, M4A), frequency downsampling, time-stretching, and format conversions with over 99% extraction accuracy.
 

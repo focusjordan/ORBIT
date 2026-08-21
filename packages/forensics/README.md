@@ -1,13 +1,38 @@
 # @ohnrshyp/forensics
 
-**High-fidelity audio signal forensics and tampering detection library.**
+<p align="center">
+  <a href="https://github.com/focusjordan/ORBIT/actions/workflows/test.yml">
+    <img src="https://github.com/focusjordan/ORBIT/actions/workflows/test.yml/badge.svg" alt="CI Status" />
+  </a>
+  <a href="https://www.bestpractices.dev/projects/14095">
+    <img src="https://www.bestpractices.dev/projects/14095/badge" alt="OpenSSF Best Practices" />
+  </a>
+  <a href="https://api.scorecard.dev/projects/github.com/focusjordan/ORBIT">
+    <img src="https://api.scorecard.dev/projects/github.com/focusjordan/ORBIT/badge" alt="OpenSSF Scorecard" />
+  </a>
+  <a href="https://slsa.dev">
+    <img src="https://img.shields.io/badge/SLSA-Level%201-blue.svg?style=flat-square" alt="SLSA Level 1" />
+  </a>
+  <a href="https://codecov.io/gh/focusjordan/ORBIT">
+    <img src="https://codecov.io/gh/focusjordan/ORBIT/branch/main/graph/badge.svg" alt="Codecov" />
+  </a>
+  <a href="https://www.npmjs.com/package/@ohnrshyp/forensics">
+    <img src="https://img.shields.io/npm/v/@ohnrshyp/forensics.svg?style=flat-square" alt="npm version" />
+  </a>
+  <a href="https://github.com/focusjordan/ORBIT/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square" alt="License" />
+  </a>
+</p>
 
-This module runs a deep, signal-level acoustic forensics suite to detect structural manipulations, lossy audio transcoding, synthetic phase alignments, and periodic upsampling artifacts common in AI-generated audio (such as neural vocoders and synthesis generators).
+**High-fidelity audio signal forensics, tampering detection, and content provenance library.**
+
+This module runs a deep, signal-level acoustic forensics suite to detect structural manipulations, lossy audio transcoding, synthetic phase alignments, and periodic upsampling artifacts common in AI-generated audio. It also provides a zero-dependency client connector for the **OpenAI Content Provenance API** (SynthID and C2PA credentials).
 
 ---
 
 ## 🚀 Key Forensic Diagnostics
 
+* 🛡️ **OpenAI Content Provenance (SynthID + C2PA)**: Checks audio files directly against OpenAI's Content Provenance service to detect imperceptible SynthID watermarks and C2PA manifest provenance signals.
 * 📐 **Phase Entropy (Instantaneous Group Delay)**: Estimates the Shannon phase entropy of the signal to catch artificial vocoding, pitch correction (autotune), or synthetic phase shifts.
 * 📉 **Spectral Cutoff Check**: Detects brick-wall frequency rolloff cutoffs (e.g. at 16kHz or 20kHz) indicating low-bitrate MP3/AAC compression transcodes or training-data restrictions.
 * 🧩 **Upsampling/Checkerboard Artifact Detector**: Captures periodic cepstral peak ratios associated with checkerboard spectral upsampling artifacts left behind by generative networks.
@@ -111,6 +136,34 @@ Performs deep spectral forensics checks.
   }
   ```
 
+### `checkOpenAIProvenance(audioBuffer, [options])`
+Queries OpenAI's Content Provenance API to detect imperceptible SynthID audio watermarks or C2PA manifest provenance signals. Runs natively in Node.js with zero Python dependencies.
+
+* **Parameters**:
+  * `audioBuffer` (`Buffer`): Raw binary audio file buffer.
+  * `options` (`Object`, optional):
+    * `apiKey` (`string`): OpenAI API key (defaults to `process.env.OPENAI_API_KEY`).
+    * `baseUrl` (`string`): API base URL (defaults to `https://api.openai.com/v1`).
+    * `timeoutMs` (`number`): Network timeout in milliseconds (defaults to `10000`).
+    * `filename` (`string`): File upload name (defaults to `'sample.wav'`).
+
+* **Returns**: `Promise<Object>`:
+  ```json
+  {
+    "checked": true,
+    "detected": true,
+    "status": "detected",
+    "signal": "synthid",
+    "confidence": 1.0,
+    "model": "tts-1-hd",
+    "created_at": 1724200000,
+    "details": {
+      "signals": [{ "type": "synthid", "confidence": 0.98 }]
+    },
+    "processing_time_ms": 340
+  }
+  ```
+
 ---
 
 ## 📊 Diagnostic Interpretation Matrix
@@ -119,6 +172,7 @@ Combine these metrics to diagnose the structural state of your audio:
 
 | Diagnostic Metric | Pristine Master | Lossy Transcode (MP3/AAC) | AI-Generated (Vocoder/Synthesis) |
 |---|---|---|---|
+| **OpenAI Provenance (`detected`)** | `false` | `false` | `true` (SynthID / C2PA watermark) |
 | **Phase Entropy (`normalized_entropy`)** | High ($\ge 0.75$) | Moderate ($0.65 - 0.75$) | Low ($< 0.55$) |
 | **Spectral Cutoff (`has_16k_cutoff`)** | `false` | `true` (if transcode is $< 192$ kbps) | `true` (if trained on MP3 datasets) |
 | **Checkerboard Artifacts (`has_artifacts`)**| `false` | `false` | `true` (periodic cepstral peak) |
@@ -129,7 +183,7 @@ Combine these metrics to diagnose the structural state of your audio:
 
 ## 💻 Code Examples
 
-### Analyzing audio for AI generation or compression anomalies
+### 1. Analyzing audio for AI generation or compression anomalies
 ```javascript
 const forensics = require('@ohnrshyp/forensics');
 const fs = require('fs');
@@ -163,6 +217,31 @@ async function verifyAudio() {
 }
 
 verifyAudio();
+```
+
+### 2. Checking OpenAI Content Provenance (SynthID / C2PA)
+```javascript
+const forensics = require('@ohnrshyp/forensics');
+const fs = require('fs');
+
+async function checkOpenAI() {
+  const audioBuffer = fs.readFileSync('voice-sample.wav');
+
+  const provenance = await forensics.checkOpenAIProvenance(audioBuffer, {
+    apiKey: process.env.OPENAI_API_KEY
+  });
+
+  if (provenance.detected) {
+    console.log(`🤖 OpenAI Provenance Detected! Signal: ${provenance.signal}, Model: ${provenance.model}`);
+    console.log(`   Confidence: ${(provenance.confidence * 100).toFixed(1)}%`);
+  } else if (provenance.checked) {
+    console.log('✅ No OpenAI SynthID or C2PA watermarks detected.');
+  } else {
+    console.log(`ℹ️ Check skipped / unconfigured: ${provenance.status}`);
+  }
+}
+
+checkOpenAI();
 ```
 
 ---

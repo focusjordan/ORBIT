@@ -1,5 +1,29 @@
 # @ohnrshyp/ledger
 
+<p align="center">
+  <a href="https://github.com/focusjordan/ORBIT/actions/workflows/test.yml">
+    <img src="https://github.com/focusjordan/ORBIT/actions/workflows/test.yml/badge.svg" alt="CI Status" />
+  </a>
+  <a href="https://www.bestpractices.dev/projects/14095">
+    <img src="https://www.bestpractices.dev/projects/14095/badge" alt="OpenSSF Best Practices" />
+  </a>
+  <a href="https://api.scorecard.dev/projects/github.com/focusjordan/ORBIT">
+    <img src="https://api.scorecard.dev/projects/github.com/focusjordan/ORBIT/badge" alt="OpenSSF Scorecard" />
+  </a>
+  <a href="https://slsa.dev">
+    <img src="https://img.shields.io/badge/SLSA-Level%201-blue.svg?style=flat-square" alt="SLSA Level 1" />
+  </a>
+  <a href="https://codecov.io/gh/focusjordan/ORBIT">
+    <img src="https://codecov.io/gh/focusjordan/ORBIT/branch/main/graph/badge.svg" alt="Codecov" />
+  </a>
+  <a href="https://www.npmjs.com/package/@ohnrshyp/ledger">
+    <img src="https://img.shields.io/npm/v/@ohnrshyp/ledger.svg?style=flat-square" alt="npm version" />
+  </a>
+  <a href="https://github.com/focusjordan/ORBIT/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square" alt="License" />
+  </a>
+</p>
+
 **ORBIT Standalone Ledger, Cryptography, and Database Query Package.**
 
 This library implements the cryptographic verification, binary serialization (CBOR), and PostgreSQL database integration layer for the append-only ORBIT provenance ledger. It manages platform identity validation, chain-of-custody tracking, and similarity vector queries.

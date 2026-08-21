@@ -1,4 +1,28 @@
-# ORBIT SDK
+# @ohnrshyp/orbit-sdk
+
+<p align="center">
+  <a href="https://github.com/focusjordan/ORBIT/actions/workflows/test.yml">
+    <img src="https://github.com/focusjordan/ORBIT/actions/workflows/test.yml/badge.svg" alt="CI Status" />
+  </a>
+  <a href="https://www.bestpractices.dev/projects/14095">
+    <img src="https://www.bestpractices.dev/projects/14095/badge" alt="OpenSSF Best Practices" />
+  </a>
+  <a href="https://api.scorecard.dev/projects/github.com/focusjordan/ORBIT">
+    <img src="https://api.scorecard.dev/projects/github.com/focusjordan/ORBIT/badge" alt="OpenSSF Scorecard" />
+  </a>
+  <a href="https://slsa.dev">
+    <img src="https://img.shields.io/badge/SLSA-Level%201-blue.svg?style=flat-square" alt="SLSA Level 1" />
+  </a>
+  <a href="https://codecov.io/gh/focusjordan/ORBIT">
+    <img src="https://codecov.io/gh/focusjordan/ORBIT/branch/main/graph/badge.svg" alt="Codecov" />
+  </a>
+  <a href="https://www.npmjs.com/package/@ohnrshyp/orbit-sdk">
+    <img src="https://img.shields.io/npm/v/@ohnrshyp/orbit-sdk.svg?style=flat-square" alt="npm version" />
+  </a>
+  <a href="https://github.com/focusjordan/ORBIT/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square" alt="License" />
+  </a>
+</p>
 
 Welcome to the official JavaScript/Node.js SDK for **ORBIT**! 👋
 
