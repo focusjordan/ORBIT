@@ -19,8 +19,8 @@
   <a href="docs/INTEGRATING_OHNRSCRIPT_INTO_ORBIT.md">
     <img src="https://img.shields.io/badge/Runtime-Ohnrscript%20DOD-ff6600.svg?style=flat-square" alt="Powered by Ohnrscript" />
   </a>
-  <a href="docs/RELEASE_NOTES_v2.0.0.md">
-    <img src="https://img.shields.io/badge/version-v2.0.0-blue.svg?style=flat-square" alt="Version 2.0.0" />
+  <a href="https://github.com/focusjordan/ORBIT/releases">
+    <img src="https://img.shields.io/badge/version-v2.0.1-blue.svg?style=flat-square" alt="Version 2.0.1" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square" alt="License" />
