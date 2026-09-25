@@ -13,9 +13,6 @@
   <a href="https://slsa.dev">
     <img src="https://img.shields.io/badge/SLSA-Level%201-blue.svg?style=flat-square" alt="SLSA Level 1" />
   </a>
-  <a href="docs/INTEGRATING_OHNRSCRIPT_INTO_ORBIT.md">
-    <img src="https://img.shields.io/badge/Runtime-Ohnrscript%20DOD-ff6600.svg?style=flat-square" alt="Powered by Ohnrscript" />
-  </a>
   <a href="https://github.com/focusjordan/ORBIT/releases">
     <img src="https://img.shields.io/badge/version-v2.0.1-blue.svg?style=flat-square" alt="Version 2.0.1" />
   </a>
