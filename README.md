@@ -104,18 +104,6 @@ ORBIT is a protocol combining **audio steganography**, **cryptographic signing**
 
 ---
 
-## ⚡ Ohnrscript High-Performance Acceleration
-
-ORBIT's core computational hot paths are powered by **Ohnrscript** (`.ohn`), an Ahead-Of-Time (AOT) compiled systems language designed around strict **Data-Oriented Design (DOD)**:
-
-* **Zero-Allocation CBOR (`src/utils/cbor.ohn`):** 208,000 tx/sec with a 91x reduction in memory overhead (370MB down to 4MB), enabling **1 server to do the work of 4.3 servers** (75% cloud cost reduction).
-* **Single-Pass Audio DSP (`src/utils/audio_dsp.ohn`):** Analyzes **2.56 Billion audio samples/sec** (16+ hours of uncompressed audio per second on a single core) via ARM NEON (`fmla.4s`) and AVX-512 vectorization.
-* **Zero-Heap UUIDs (`src/utils/id.ohn`):** Generates **8.45 Million raw UUIDs/sec** with zero temporary string allocations.
-* **Vector Similarity Matching (`src/utils/vector.ohn`):** Performs **1.23 Million vector comparisons/sec** for in-memory CLAP/MERT embedding searches.
-* **Eliminating the AI "Host Tax":** Reduces Linux minor page faults by **270.6x** and steady-state GPU ingestion latency by **132x**, eliminating GPU data starvation.
-
----
-
 ## 📦 Standalone Libraries (Open-Core Workspace)
 
 ORBIT's core engines are completely decoupled and available as standalone, lightweight packages on NPM and PyPI:
