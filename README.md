@@ -22,6 +22,9 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square" alt="License" />
   </a>
+    <a href="https://codecov.io/gh/focusjordan/ORBIT">
+    <img src="https://codecov.io/gh/focusjordan/ORBIT/branch/main/graph/badge.svg" alt="Codecov" />
+  </a>
 </p>
 
 **Origin-Based Identity & Rights Transfer Protocol**
